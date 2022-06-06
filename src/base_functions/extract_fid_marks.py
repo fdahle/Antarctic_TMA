@@ -518,7 +518,7 @@ if __name__ == "__main__":
     import load_image_from_file as liff
     import connect_to_db as ctd
 
-    path_folder_images = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/aerial/TMA/downloaded"
+    path_folder_images = "<Your path to an imagefolder>"
 
     ids = giff.get_ids_from_folder(path_folder_images, 10)
 

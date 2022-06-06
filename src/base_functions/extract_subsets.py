@@ -22,7 +22,7 @@ INPUT:
     - verbose (Boolean, False): If true, the status of the operations are printed
 OUTPUT:
     - coords (Dict): dict with 4 entries ("n", "e", "s", "w"), each filled with a list of four coordinates
-        x_left, x_right, y_top, y_bottom
+        x_left, x_right, y_top, y_bottom. If no entry could be found, the particular entry is 'None'
 """
 
 """

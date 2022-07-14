@@ -1,3 +1,4 @@
+import copy
 import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -7,21 +8,24 @@ import cv2
 import create_cmap as cm
 import get_good_squares as ggs
 
-"""
-This function can be used to display multiple images in one figure with some additional settings
-Input:
-- list_of_images: A list of images that should be displayed (usually a np-array)
-- list_of types: A list of strings specifiying the type of the images (changes how an image is displayed).
-        Possible values are ["auto", "color", "gray", "segmented", "prob"]. If the value 'auto'
-        is selected, the program tries to determine the type itself
-- title: Optional title for the figure
-- subtitles: Optional subtitles per image (again a list)
-- bboxe: Optional boxes on the image (again a list)
-- lines: Optional lines for the images (again a list)
-"""
 
 def display_multiple_images(list_of_images, list_of_types=None, title=None, subtitles=None, bboxes=None, lines=None):
-
+    
+    """
+    This function can be used to display multiple images in one figure with some additional settings
+    Args:
+    - list_of_images: A list of images that should be displayed (usually a np-array)
+    - list_of types: A list of strings specifiying the type of the images (changes how an image is displayed).
+            Possible values are ["auto", "color", "gray", "segmented", "prob"]. If the value 'auto'
+            is selected, the program tries to determine the type itself
+    - title: Optional title for the figure
+    - subtitles: Optional subtitles per image (again a list)
+    - bboxes: Optional boxes on the image (again a list)
+    - lines: Optional lines for the images (again a list)
+    Returns:
+        
+    """
+    
     assert isinstance(list_of_images, list), "Please enter the input data as a list"
     assert len(list_of_images) >= 1
 
@@ -31,6 +35,10 @@ def display_multiple_images(list_of_images, list_of_types=None, title=None, subt
         assert len(list_of_images) == len(subtitles)
     if bboxes is not None:
         assert len(list_of_images) == len(bboxes)
+
+    # deepcopy
+    for i, elem in enumerate(list_of_images):
+        list_of_images[i] = copy.deepcopy(elem)
 
     def get_img_type(input_img):
 
@@ -61,8 +69,6 @@ def display_multiple_images(list_of_images, list_of_types=None, title=None, subt
                 _img_type = "undefined"
         else:
             _img_type = "undefined"
-
-        print(_img_type)
 
         return _img_type
 
@@ -146,8 +152,6 @@ def display_multiple_images(list_of_images, list_of_types=None, title=None, subt
                                                  linewidth=1, edgecolor='r', facecolor='none')
                         axarr[y, x].add_patch(rect)
 
-
-            # if the figure contains only one row of images, everything must be shown different
             else:
                 if img_type == "gray":
                     axarr[x].imshow(img, cmap="gray", interpolation=None, vmin=0, vmax=255)

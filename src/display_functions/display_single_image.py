@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -8,21 +10,31 @@ import cv2
 
 import create_cmap as cm
 
-"""
-This function can be used to display a single image with some additional settings
-Input:
-- input_img: The image that should be display (usually a np-array)
-- img_type: A string specifiying the type of the image (changes how an image is displayed).
-        Possible values are ["auto", "color", "gray", "segmented", "prob"]. If the value 'auto'
-        is selected, the program tries to determine the type itself
-- title: Optional title for the image
-- bbox: Optional box(es) on the image
-- line: Optional line(s) on the image
-- point: Optional point(s) on the image
-"""
-
 
 def display_single_image(input_img, img_type="auto", title=None, bbox=None, line=None, point=None):
+
+    """
+    This function can be used to display a single image with some additional settings
+    Args:
+    - input_img: The image that should be display (usually a np-array)
+    - img_type: A string specifiying the type of the image (changes how an image is displayed).
+            Possible values are ["auto", "color", "gray", "segmented", "prob"]. If the value 'auto'
+            is selected, the program tries to determine the type itself
+    - title: Optional title for the image
+    - bbox: Optional box(es) on the image
+    - line: Optional line(s) on the image
+    - point: Optional point(s) on the image
+    Returns:
+        
+    """
+
+
+    try:
+        _ = input_img.shape
+    except (Exception,):
+        raise ValueError("The input image is not a valid image")
+
+    input_img = copy.deepcopy(input_img)
 
     types = ["auto", "color", "gray", "segmented", "prob"]
     if img_type not in types:
@@ -35,19 +47,22 @@ def display_single_image(input_img, img_type="auto", title=None, bbox=None, line
     # points must be added before the image is plotted
     if point is not None:
 
-        # remove None Values
-        point = [i for i in point if i]
+        print(point)
 
-        # point must always be in list
+        # remove None Values
+        point = [i for i in point if i != None]
+
         if isinstance(point[0], list) is False:
             point = [point]
-
         for elem in point:
             cv2.circle(input_img, (elem[0], elem[1]), 7, (255, 0, 0), 3)
 
     # lines must be added before the image is plotted
     if line is not None:
-        cv2.line(input_img, (line[0], line[1]), (line[2], line[3]), (255, 255, 0), 2)
+        if isinstance(line, list) is False:
+            line = [line]
+        for elem in line:
+            cv2.line(input_img, (elem[0], elem[1]), (elem[2], elem[3]), (255, 255, 0), 2)
 
     # try to find the right image type
     if img_type == "auto":
@@ -94,11 +109,15 @@ def display_single_image(input_img, img_type="auto", title=None, bbox=None, line
             bbox = [bbox]
 
         for elem in bbox:
+
+            if elem is None or elem[0] is None:
+                continue
+
             rect = patches.Rectangle((elem[0], elem[2]), elem[1] - elem[0], elem[3] - elem[2],
                                      linewidth=1, edgecolor='r', facecolor='none')
             ax.add_patch(rect)
 
     if title is not None:
-        fig.title(title)
+        fig.suptitle(title)
 
     plt.show()

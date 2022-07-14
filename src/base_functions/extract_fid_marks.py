@@ -6,32 +6,33 @@ import numpy as np
 import display_single_image as dsi
 import display_multiple_images as dmi
 
-"""
-extract_fid_marks(img, subset_data, catch):
-This function extracts eight diffent fiducial points from images based on subsets. It is based on different methods
-from computer vision (e.g line extraction). Note that the fid point extraction is not always successful.
-INPUT:
-    img (np-array): The image in which we want to extract fiducial points.
-    subset_data(Dict): A dict that contains the exact position of the subsets for the image.
-    catch (Boolean, True): If true and somethings is going wrong, the operation will continue and not crash.
-        In this case None is returned
-OUTPUT:
-    fid_points (Dict): A dict with the x and y positions for each fid point. The return values are for every point
-    a list with the x and y value which describes the pixel position of this point based on the top left. If no point could be
-    found the value 'None' is returned for both values.
-    Example: {'n': [2400, 3], 'ne': [5000, 4], 'e': None, 'se':[5000, 2500], ...}
-"""
-
-
 
 def extract_fid_marks(img, subset_data, catch=True):
 
-    debug_show_steps = False
-    debug_show_lines = False
-    debug_show_fid_subsets = False
-    debug_show_subset_points = False  # show one point in the subset
-    debug_show_corner_lines = False
-    debug_show_fid_points = False  # show all points in the big image
+    """
+    extract_fid_marks(img, subset_data, catch):
+    This function extracts eight diffent fiducial points from images based on subsets. It is based on different methods
+    from computer vision (e.g line extraction). Note that the fid point extraction is not always successful.
+    Args:
+        img (np-array): The image in which we want to extract fiducial points.
+        subset_data(Dict): A dict that contains the exact position of the subsets for the image.
+        catch (Boolean, True): If true and somethings is going wrong, the operation will continue and not crash.
+            In this case None is returned
+    Returns:
+        fid_points (Dict): A dict with the x and y positions for each fid point. The return values are for every point
+        a list with the x and y value which describes the pixel position of this point based on the top left. If no point could be
+        found the value 'None' is returned for both values.
+        Example: {'n': [2400, 3], 'ne': [5000, 4], 'e': None, 'se':[5000, 2500], ...}
+    """
+
+    debug_directions = ["n", "e", "s", "w"]
+    debug_show_steps = True
+    debug_show_all_lines = True
+    debug_show_lines = True
+    debug_show_fid_subsets = True
+    debug_show_subset_points = True  # show one point in the subset
+    debug_show_corner_lines = True
+    debug_show_fid_points = True  # show all points in the big image
 
     # default params for line extraction
     rho = 1  # distance resolution in pixels of the Hough grid
@@ -39,6 +40,9 @@ def extract_fid_marks(img, subset_data, catch=True):
     min_line_length = 25  # minimum number of pixels making up a line
     max_line_gap = 25  # maximum gap in pixels between connectable line segments
     theta = np.pi / 4  # the denominator tells in which steps are looked for lines (180 = 1 degree)
+
+    tweak_vals = [-20, 30, 10]  # to tweak the values to even more the outer part
+    subset_percentage = .25  # how much of the subset are we using to get the point
 
     # catch empty subsets
     if subset_data.shape[0] == 0:
@@ -91,7 +95,7 @@ def extract_fid_marks(img, subset_data, catch=True):
         # apply canny edge detection
         subset_canny_edge = cv2.Canny(subset_binarized, 100, 100)
 
-        if debug_show_steps:
+        if debug_show_steps and direction in debug_directions:
             dmi.display_multiple_images([subset, subset_blurred, subset_binarized, subset_canny_edge])
 
         """the following part is to extract lines from the images"""
@@ -127,6 +131,9 @@ def extract_fid_marks(img, subset_data, catch=True):
                 if slope == 0:
                     correct_lines.append(line)
 
+        if debug_show_all_lines and direction in debug_directions:
+            dsi.display_single_image(subset, line=correct_lines)
+
         # the line most closes to the middle is most probably the correct line
         mid_line = None  # the currently best line to the middle
         min_distance = 2000000  # the distance to the middle (at the beginning set to a high value)
@@ -144,13 +151,14 @@ def extract_fid_marks(img, subset_data, catch=True):
             # check distance
             if distance < min_distance:
                 mid_line = line
+                min_distance = distance
 
         # no line was found -> skip
         if mid_line is None:
             continue
 
-        if debug_show_lines:
-            dsi.display_single_image(subset, line=mid_line)
+        if debug_show_lines and direction in debug_directions:
+            dsi.display_single_image(subset, line=mid_line, title="middle line")
 
         """having the lines, it is possible to extract the fid points itself"""
 
@@ -169,9 +177,6 @@ def extract_fid_marks(img, subset_data, catch=True):
         elif direction in ["e", "w"]:
             min_y_sm = min_y + avg_line_y - extra_search_width
             max_y_sm = min_y + avg_line_y + extra_search_width
-
-        tweak_vals = [-10, 30, 10]  # to tweak the values to even more the outer part
-        subset_percentage = .25  # how much of the subset are we using to get the point
 
         for tweak_val in range(tweak_vals[0], tweak_vals[1], tweak_vals[2]):
 
@@ -227,7 +232,7 @@ def extract_fid_marks(img, subset_data, catch=True):
             # get this smallest subset in which we think the point is
             fid_subset = img[min_y_sm:max_y_sm, min_x_sm:max_x_sm]  # noqa
 
-            if debug_show_fid_subsets:
+            if debug_show_fid_subsets and direction in debug_directions:
                 dmi.display_multiple_images([subset, fid_subset], list_of_types=["gray", "gray"])
 
             # blur this subset
@@ -299,7 +304,7 @@ def extract_fid_marks(img, subset_data, catch=True):
             if mid_point is None:
                 continue
 
-            if debug_show_subset_points:
+            if debug_show_subset_points and direction in debug_directions:
                 dsi.display_single_image(fid_subset, point=mid_point)
 
             mid_point[0] = mid_point[0] + min_x_sm
@@ -467,7 +472,7 @@ def extract_fid_marks(img, subset_data, catch=True):
 
             mid_lines[sub_direction] = mid_line
 
-        if debug_show_corner_lines:
+        if debug_show_corner_lines and direction in debug_directions:
             dmi.display_multiple_images([subsets[direction1], subsets[direction2]],
                                         lines=list(mid_lines.values()))
 
@@ -506,30 +511,11 @@ def extract_fid_marks(img, subset_data, catch=True):
 
         fid_points[direction] = [px, py]
 
+    if len(fid_points) == 0:
+        raise ValueError("Something went wrong: Nothing could be found")
+
     if debug_show_fid_points:
         dsi.display_single_image(img, point=list(fid_points.values()))
 
     return fid_points
 
-
-if __name__ == "__main__":
-
-    import get_ids_from_folder as giff
-    import load_image_from_file as liff
-    import connect_to_db as ctd
-
-    path_folder_images = "<Your path to an imagefolder>"
-
-    ids = giff.get_ids_from_folder(path_folder_images, 10)
-
-    for img_id in ids:
-        image = liff.load_image_from_file(img_id)
-
-        sql_string = "SELECT * FROM images_properties WHERE image_id='" + img_id + "'"
-        data = ctd.get_data_from_db(sql_string)
-
-        fid_marks = extract_fid_marks(image, data)
-
-        print(fid_marks)
-
-        break

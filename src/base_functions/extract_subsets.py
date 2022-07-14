@@ -6,40 +6,31 @@ import connect_to_db as ctd
 import display_multiple_images as dmi
 import display_single_image as dsi
 
-"""
-extract_subsets(image, image_id, detector_path, crop_factor, catch, verbose):
-This function extracts the subsets that are required to find the fid points in the images.
-These subsets are found using a machine learning approach (with the library dlib). In order to speed up the process,
-before applying the machine learning approach, the image will be initially cropped
-INPUT:
-    - image (np-array): The image where subsets should be extracted
-    - image_id (String, None): If supplied can be used to show as a title in the debugging-figures
-    - detector_path (String, None): The path where the detector are located. If parameter is 'None' the default
-        path is used
-    - crop_factor (Float, 0.1): How much of the image will be used for the initial crop
-    - catch (Boolean, True): If true and somethings is going wrong, the operation will continue and not crash.
-        In this case None is returned
-    - verbose (Boolean, False): If true, the status of the operations are printed
-OUTPUT:
-    - coords (Dict): dict with 4 entries ("n", "e", "s", "w"), each filled with a list of four coordinates
-        x_left, x_right, y_top, y_bottom. If no entry could be found, the particular entry is 'None'
-"""
-
-"""
-train_subset_extractor(num_images):
-This function trains the detector for the subsets and saves it to the folder. From the database a certain amount of
-random example images is loaded together with the subset coordinates for the training
-INPUT:
-    - num_images (int, 250): With how many examples should be trained
-    - model_name(str, "model_"): What is the name of the model (with "n", "e", "s", "w" at the end attached)
-    - model_path(str, None): Where should the model be stored. If none the default path is used
-OUTPUT:
-    None
-"""
-
 path_detection_models = "<Please enter the detector path>"
 
-def extract_subsets(image, image_id=None, detector_path=None, crop_factor=0.1, catch=True, verbose=False):
+def extract_subsets(image, image_id=None, detector_path=None, model_name=None, fid_type=None,
+                    crop_factor=0.1, catch=True, verbose=False):
+
+    """
+    extract_subsets(image, image_id, detector_path, crop_factor, catch, verbose):
+    This function extracts the subsets that are required to find the fid points in the images.
+    These subsets are found using a machine learning approach (with the library dlib). In order to speed up the process,
+    before applying the machine learning approach, the image will be initially cropped
+    Args:
+        - image (np-array): The image where subsets should be extracted
+        - image_id (String, None): If supplied can be used to show as a title in the debugging-figures
+        - detector_path (String, None): The path where the detector are located. If parameter is 'None' the default
+            path is used
+        - mode_name (String, None): The name of the model. If parameter is 'None', the default model is used
+        - fid_type (Number, None): The id of the fid type that should be extracted
+        - crop_factor (Float, 0.1): How much of the image will be used for the initial crop
+        - catch (Boolean, True): If true and something is going wrong, the operation will continue and not crash.
+            In this case None is returned
+        - verbose (Boolean, False): If true, the status of the operations are printed
+    Returns:
+        - coords (Dict): dict with 4 entries ("N", "E", "S", "W"), each filled with a list of four coordinates
+            x_left, x_right, y_top, y_bottom
+    """
 
     # debug_params
     debug_show_crops = False  # the initial crops
@@ -49,6 +40,12 @@ def extract_subsets(image, image_id=None, detector_path=None, crop_factor=0.1, c
     # set path to folder where the models for the detection of fid_subsets are
     if detector_path is None:
         detector_path = path_detection_models
+        
+    if model_name is None:
+        model_name = "detector"
+
+    if fid_type is None:
+        fid_type = 1
 
     # get size params of the image
     height, width = image.shape
@@ -61,26 +58,26 @@ def extract_subsets(image, image_id=None, detector_path=None, crop_factor=0.1, c
 
     # create subset_dict (in a subset we will look for the fid points)
     subsets_big = {
-        "n": image[0:crop_height, mid_x - crop_width:mid_x + crop_width],
-        "e": image[mid_y - crop_height:mid_y + crop_height, width - crop_width:width],
-        "s": image[height - crop_height:height, mid_x - crop_width:mid_x + crop_width],
-        "w": image[mid_y - crop_height:mid_y + crop_height, 0:crop_width]
+        "N": image[0:crop_height, mid_x - crop_width:mid_x + crop_width],
+        "E": image[mid_y - crop_height:mid_y + crop_height, width - crop_width:width],
+        "S": image[height - crop_height:height, mid_x - crop_width:mid_x + crop_width],
+        "W": image[mid_y - crop_height:mid_y + crop_height, 0:crop_width]
     }
 
     if debug_show_crops:
-        dmi.display_multiple_images(list(subsets_big.values()), title=image_id, subtitles=["n", "e", "s", "w"])
+        dmi.display_multiple_images(list(subsets_big.values()), title=image_id, subtitles=["N", "E", "S", "W"])
 
     # load the detection models
     models = {
-        "n": dlib.simple_object_detector(detector_path + "/subset_n_new.svm"),
-        "e": dlib.simple_object_detector(detector_path + "/subset_e_new.svm"),
-        "s": dlib.simple_object_detector(detector_path + "/subset_s_new.svm"),
-        "w": dlib.simple_object_detector(detector_path + "/subset_w_new.svm")
+        "N": dlib.simple_object_detector(detector_path + "/n_detector_" + str(fid_type) + ".svm"),
+        "E": dlib.simple_object_detector(detector_path + "/e_detector_" + str(fid_type) + ".svm"),
+        "S": dlib.simple_object_detector(detector_path + "/s_detector_" + str(fid_type) + ".svm"),
+        "W": dlib.simple_object_detector(detector_path + "/w_detector_" + str(fid_type) + ".svm"),
     }
 
     # detect and save the coords of the subset that was found by the dlib-detector
     coords = {}
-    for key in ["n", "e", "s", "w"]:
+    for key in ["N", "E", "S", "W"]:
 
         orig_subset = copy.deepcopy(subsets_big[key])
         subset = copy.deepcopy(subsets_big[key])
@@ -133,29 +130,29 @@ def extract_subsets(image, image_id=None, detector_path=None, crop_factor=0.1, c
             coords[key] = [x_left, x_right, y_top, y_bottom]
 
     if debug_show_subsets_crop:
-        dmi.display_multiple_images(list(subsets_big.values()), title=image_id, subtitles=["n", "e", "s", "w"],
+        dmi.display_multiple_images(list(subsets_big.values()), title=image_id, subtitles=["N", "E", "S", "W"],
                                     bboxes=list(coords.values()))
 
     # translate the coordinates back from crop coordinates to the image coordinates
-    for key in ["n", "e", "s", "w"]:
+    for key in ["N", "E", "S", "W"]:
 
         if coords[key] is None:
             continue
 
-        if key == "n":
+        if key == "N":
             coords[key][0] = coords[key][0] + mid_x - crop_width  # x_left
             coords[key][1] = coords[key][1] + mid_x - crop_width  # x_right
-        elif key == "e":
+        elif key == "E":
             coords[key][0] = coords[key][0] + width - crop_width  # x_left
             coords[key][1] = coords[key][1] + width - crop_width  # x_right
             coords[key][2] = coords[key][2] + mid_y - crop_height  # y_top
             coords[key][3] = coords[key][3] + mid_y - crop_height  # y_bottom
-        elif key == "s":
+        elif key == "S":
             coords[key][0] = coords[key][0] + mid_x - crop_width  # x_left
             coords[key][1] = coords[key][1] + mid_x - crop_width  # x_right
             coords[key][2] = coords[key][2] + height - crop_height  # y_top
             coords[key][3] = coords[key][3] + height - crop_height  # y_bottom
-        elif key == "w":
+        elif key == "W":
             coords[key][2] = coords[key][2] + mid_y - crop_height  # y_top
             coords[key][3] = coords[key][3] + mid_y - crop_height  # y_bottom
 
@@ -167,10 +164,22 @@ def extract_subsets(image, image_id=None, detector_path=None, crop_factor=0.1, c
 
 def train_subset_extractor(num_images=250, model_name="model", model_path=None):
 
+    """
+    train_subset_extractor(num_images):
+    This function trains the detector for the subsets and saves it to the folder. From the database a certain amount of
+    random example images is loaded together with the subset coordinates for the training
+    Args:
+        - num_images (int, 250): With how many examples should be trained
+        - model_name(str, "model_"): What is the name of the model (with "N", "E", "S", "W" at the end attached)
+        - model_path(str, None): Where should the model be stored. If none the default path is used
+    Returns:
+        None
+    """
+
     directions = ["n", "s", "e", "w"]
 
     if model_path is None:
-        model_path = path_detection_models
+        model_path = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/data/machine_learning/subsets"
 
     for direction in directions:
 
@@ -191,7 +200,6 @@ def train_subset_extractor(num_images=250, model_name="model", model_path=None):
 
             print(f"Load {row['image_id']}")
 
-            # we cannot load all images (too many), so stop after a certain point
             if index == num_images:
                 break
 
@@ -203,11 +211,12 @@ def train_subset_extractor(num_images=250, model_name="model", model_path=None):
             max_x = int(row[f"subset_{direction}_x"] + row["subset_width"])
 
             if min_y < 0:
+                print("WARNING")
                 min_y = 0
             if min_x < 0:
+                print("WARNING")
                 min_x = 0
 
-            # we only need a small amount of the image
             subset_factor = 0.1
 
             # get size params of the image
@@ -261,15 +270,8 @@ def train_subset_extractor(num_images=250, model_name="model", model_path=None):
         options.num_threads = 10
         options.be_verbose = True
 
-        # the actual training
         detector = dlib.train_simple_object_detector(crops, boxes, options)
-
-        # save the model
         file_name = model_path + "/" + model_name + "_" + direction + ".svm"
+
         detector.save(file_name)
 
-
-if __name__ == "__main__":
-
-    # training of a model
-    train_fid_mark_extractor()

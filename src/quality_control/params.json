@@ -1,0 +1,7 @@
+{
+  "path_folder_base": "/data_1/ATM/data_1/aerial/TMA",
+  "check_basic_folders": ["downloaded", "masked", "segmented"],
+  "check_basic_tables": ["images", "images_extracted", "images_fid_points", "images_segmentation"],
+  "check_tables_tables": ["images", "images_extracted", "images_fid_points", "images_segmentation"]
+
+}

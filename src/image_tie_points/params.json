@@ -1,0 +1,8 @@
+{
+  "path_file_no_tie_points": "/data_1/ATM/data_1/workflows/no_tie_points.csv",
+  "path_folder_masked": "/data_1/ATM/data_1/aerial/TMA/masked",
+  "path_folder_segmented": "/data_1/ATM/data_1/aerial/TMA/segmented",
+  "path_folder_segmentation_models": "",
+  "find_overlapping_images_jump": 2,
+  "find_overlapping_images_mode": "id"
+}

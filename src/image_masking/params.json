@@ -1,0 +1,7 @@
+{
+  "path_folder_mask": "/data_1/ATM/data_1/aerial/TMA/masked",
+  "path_folder_segmented": "/data_1/ATM/data_1/aerial/TMA/segmented",
+  "mask_border_buffer_val": 25,
+  "mask_segmented_mask_values": [4, 5, 6, 7],
+  "mask_segmented_smooth_val": 25
+}

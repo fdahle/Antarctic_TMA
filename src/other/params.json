@@ -1,0 +1,8 @@
+{
+    "path_folder_gee": "/data_1/ATM/data_1/satellite/sentinel_2",
+    "path_folder_gee_keys": "/home/fdahle/Desktop/keys",
+    "path_folder_rema": "/data_1/ATM/data_1/DEM/REMA/mosaic/",
+    "url_ugc_rema_data_2": "https://data.pgc.umn.edu/elev/dem/setsm/REMA/mosaic/v2.0/2m/",
+    "url_ugc_rema_data_10": "https://data.pgc.umn.edu/elev/dem/setsm/REMA/mosaic/v2.0/10m/",
+    "url_ugc_rema_data_32": "https://data.pgc.umn.edu/elev/dem/setsm/REMA/mosaic/v2.0/32m/"
+}

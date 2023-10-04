@@ -1,0 +1,14 @@
+{
+    "path_file_flag": "/data_1/ATM/data_1/databases/sqlite/flag.txt",
+    "path_file_sql_lite": "/data_1/ATM/data_1/databases/sqlite/sqlite.db",
+    "path_folder_base": "/data_1/ATM/data_1/aerial/TMA/",
+    "path_folder_downloaded": "/data_1/ATM/data_1/aerial/TMA/downloaded/",
+    "path_folder_failed_ids": "/data_1/ATM/data_1/workflows",
+    "psql_database": "antarctica2",
+    "psql_host": "127.0.0.1",
+    "psql_password": "password",
+    "psql_port": "5432",
+    "psql_user": "admin",
+    "remove_borders_edge": 700,
+    "remove_borders_extra_edge": 0
+}

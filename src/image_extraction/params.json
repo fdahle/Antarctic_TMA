@@ -1,0 +1,22 @@
+{
+    "path_file_dlib_clock_detectors": "/data_1/ATM/data_1/machine_learning/dlib/altimeter/detector.svm",
+    "path_folder_altimeter_templates": "/data_1/ATM/data/machine_learning/altimeter/templates",
+    "path_file_paddle_conda": "/home/fdahle/miniconda3/bin/conda/paddle_env",
+    "path_file_paddle_python": "/home/fdahle/Desktop/ATM/code_23/image_extraction/extract_text_paddle.py",
+    "complexity_highscore": 2500,
+    "extract_altimeter_min_binary_threshold": 150,
+    "extract_altimeter_matching_conf_val": 20000000,
+    "extract_height_min_th": 150,
+    "extract_height_max_th": 255,
+    "extract_image_parameters_max_height": 30000,
+    "extract_image_parameters_min_height": 10000,
+    "extract_text_binarize_img": true,
+    "extract_text_method": "paddle",
+    "extract_text_min_area": 1000,
+    "extract_text_min_conf": 60,
+    "extract_text_nr_small_subsets": 4,
+    "extract_text_padding_x": 50,
+    "extract_text_padding_y": 200,
+    "extract_text_subset_height": 1500,
+    "extract_text_subset_overlap": 200
+}

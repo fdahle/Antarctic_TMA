@@ -1,0 +1,20 @@
+{
+  "path_file_no_tie_points": "/data_1/ATM/data_1/workflows/no_tie_point_matches.csv",
+  "path_folder_segmented": "/data_1/ATM/data_1/aerial/TMA/segmented",
+  "path_folder_segmentation_model": "/data_1/ATM/data_1/machine_learning/semantic_segmentation",
+  "get_image_rotation_sky_sky_id": 6,
+  "get_image_rotation_sky_subset_height": 200,
+  "improve_segmented_image_improvement_methods": ["remove_sky", "fill_unknown", "remove_clusters_in_sky", "enlarge_sky",
+    "remove_small_patches", "remove_sky_ground", "check_logical_patches"],
+  "improve_segmented_image_resize_image": true,
+  "improve_segmented_image_resize_size_x": 2000,
+  "improve_segmented_image_resize_size_y": 2000,
+  "segment_image_apply_threshold": false,
+  "segment_image_bool_normalize": false,
+  "segment_image_min_threshold": 0.9,
+  "segment_image_new_size_x": 1200,
+  "segment_image_new_size_y": 1200,
+  "segment_image_num_layers": 1,
+  "segment_image_num_output_layers": 6,
+  "segment_image_resize_images": true
+}

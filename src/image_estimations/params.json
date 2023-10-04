@@ -1,0 +1,8 @@
+{
+  "cam_id_min_nr_images": 3,
+  "cam_id_min_difference": 3,
+  "focal_length_min_nr_images": 3,
+  "focal_length_min_difference": 3,
+  "lens_cone_min_nr_images": 3,
+  "lens_cone_min_difference": 3
+}

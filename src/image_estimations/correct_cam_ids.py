@@ -1,14 +1,24 @@
 import json
 import os
-
 from tqdm import tqdm
 
 import image_estimations.update_table_images_estimated as utie
-
 import base.connect_to_db as ctd
 
 
 def correct_cam_ids(min_difference=None, catch=True, verbose=False, pbar=None):
+    """
+    correct_cam_ids(min_difference, catch, verbose, pbar):
+
+    Args:
+        min_difference:
+        catch:
+        verbose:
+        pbar:
+
+    Returns:
+
+    """
 
     # load the json to get default values
     json_folder = os.path.dirname(os.path.realpath(__file__))

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import random
 
 from matplotlib.patches import ConnectionPatch
 from tqdm import trange
@@ -11,7 +12,13 @@ def display_tiepoints(input_images, points,
                       confidences=None, filter_indices=None,
                       titles=None,
                       show_points=True, title=None,
+                      reduce_points=False, num_points=1000,
                       save_path=None, verbose=False):
+
+    if reduce_points and len(points) > num_points:
+        _points = random.sample(points, num_points)
+    else:
+        _points = points
 
     # create a color between red and green based on a value between 0 and 1
     def pseudocolor(col_val, min_val, max_val, col_type):
@@ -44,16 +51,16 @@ def display_tiepoints(input_images, points,
 
     # if we don't want to filter we are creating a filter array in which we show everything
     if filter_indices is None:
-        filter_indices = [1] * len(points)
+        filter_indices = [1] * len(_points)
 
-    iterable = range(len(points))
+    iterable = range(len(_points))
     if verbose:
-        iterable = trange(len(points))
+        iterable = trange(len(_points))
 
     for i in iterable:
 
         # get the point row and confidence value
-        point = points[i]
+        point = _points[i]
         if confidences is not None:
             conf = confidences[i]
         filtered = filter_indices[i]

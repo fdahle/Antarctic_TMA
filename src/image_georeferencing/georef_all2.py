@@ -7,6 +7,7 @@ import pandas as pd
 import shapely.wkt
 import shutil
 import time
+import warnings
 
 from datetime import datetime
 from shapely.geometry import Point, LineString
@@ -24,14 +25,16 @@ import image_georeferencing.georef_calc as gc
 import image_georeferencing.sub.buffer_footprint as bf
 import image_georeferencing.sub.calc_camera_position as ccp
 import image_georeferencing.sub.calc_footprint_approx as cfa
-import image_georeferencing.sub.check_georef_image as cgi
-import image_georeferencing.sub.derive_image_position as dip
+import image_georeferencing.sub.check_georef_validity as cgv
+import image_georeferencing.sub.check_georef_position as cgp
+import image_georeferencing.sub.derive_new as dn
 
 # enable/disable certain parts of georef_all
 step_calc_approx_footprint = False
-step_georef_with_satellite_basic = True
-step_georef_with_satellite_estimated = True
-step_georef_with_image = True
+step_georef_with_satellite_basic = False
+step_georef_with_satellite_extreme = False
+step_georef_with_satellite_estimated = False
+step_georef_with_image = False
 step_georef_with_calc = True
 
 # overwriting settings
@@ -39,49 +42,64 @@ overwrite_approx_footprint = False
 overwrite_satellite_footprint = False
 overwrite_satellite_est_footprint = False
 overwrite_image_footprint = False
-overwrite_calc_footprint = False
+overwrite_calc_footprint = True
 
-retry_too_few_tps_sat = False  # should we retry images that had too few tps before? (for sat loop)
-retry_too_few_tps_sat_est = False  # should we retry images that had too few tps before? (for sat est loop)
-retry_too_few_tps_img = False  # should we retry images that had too few tps before? (for img loop)
-retry_too_few_tps_calc = False  # should we retry images that had too few tps before? (for calc loop)
-retry_failed_sat = False  # should we retry images that failed before? (for sat loop)
-retry_failed_sat_est = False  # should we retry images that failed before? (for sat est loop)
-retry_failed_img = False  # should we retry images that failed before? (for img loop)
-retry_failed_calc = False  # should we retry images that failed before? (for calc loop)
-retry_invalid_sat = False  # should we retry images that were invalid before (for sat loop)
-retry_invalid_sat_est = False  # should we retry images that were invalid before (for sat loop)
-retry_invalid_img = False  # # should we retry images that were invalid before (for img loop)
-retry_invalid_calc = False  # should we retry images that were invalid before (for calc loop)
-retry_no_neighbours_img = False
-retry_not_enough_images_sat_est = False
-retry_not_enough_images_calc = False
+retry_too_few_tps_sat = True  # should we retry images that had too few tps before? (for sat loop)
+retry_too_few_tps_sat_est = True  # should we retry images that had too few tps before? (for sat est loop)
+retry_too_few_tps_img = True  # should we retry images that had too few tps before? (for img loop)
+retry_too_few_tps_calc = True  # should we retry images that had too few tps before? (for calc loop)
+retry_failed_sat = True  # should we retry images that failed before? (for sat loop)
+retry_failed_sat_est = True  # should we retry images that failed before? (for sat est loop)
+retry_failed_img = True  # should we retry images that failed before? (for img loop)
+retry_failed_calc = True  # should we retry images that failed before? (for calc loop)
+retry_invalid_sat = True  # should we retry images that were invalid before (for sat loop)
+retry_invalid_sat_est = True  # should we retry images that were invalid before (for sat loop)
+retry_invalid_img = True  # # should we retry images that were invalid before (for img loop)
+retry_invalid_calc = True  # should we retry images that were invalid before (for calc loop)
+retry_no_neighbours_img = True
+retry_not_enough_images_sat_est = True
+retry_not_enough_images_calc = True
+retry_wrong_overlap_sat_est = True
+retry_wrong_overlap_calc = True
+
+# georef sat settings
+location_max_order = 3
+location_max_order_extreme = 7
 
 # some other settings
 use_avg_values_approx = True  # can we use avera values for footprint approx
 approx_buffer_val = 2000  # how many meters should the approx approx_footprint be buffered in each direction
 min_complexity = 0.05
+min_tps = 20
 _catch = True
 catch_approx_footprint = True
-_verbose = True
+_verbose = False
 
 # debug print settings
 debug_print = False  # some extra messages
 debug_print_all = False  # if true, we print everything on a new line
 
-# debug id settings
-debug_ids = None
-debug_starting_id = None
+# debug_poly_bounds = [-2158625, 711901, -2146253, 720153]
+# debug_poly = shapely.Polygon([(debug_poly_bounds[0], debug_poly_bounds[1]),
+#                              (debug_poly_bounds[0], debug_poly_bounds[3]),
+#                              (debug_poly_bounds[2], debug_poly_bounds[3]),
+#                              (debug_poly_bounds[2], debug_poly_bounds[1])])
+
+# special debug settings
+debug_ids = None  # ["CA184432V0144"] # only georef images with this id; default: None
+debug_flight_paths = [1804] # [1962]  # only georef images from this flight path; default: None
+debug_starting_counter = None  # start with georef images from the start of this counter; default: None
+debug_order = True  # If true, sort images based on their image_id before geo-referencing; default: True
+debug_input_polygons = None  # [debug_poly] # If true, we skip everything except georef_with_satellite_estimated;
 
 
-# debug_ids = ["CA182332V0023", "CA182332V0025"]
-# debug_ids = ["CA184632V0332"]
-# debug_ids = ["CA184632V0332"]
+# the input polygons are used as approx footprints; default: None
+
 
 def georef_all2(catch=True, verbose=False):
-    # get all vertical images and their data from the database
-    sql_string_images = f"SELECT * FROM images WHERE image_id LIKE '%V%'"
-    data_images = ctd.get_data_from_db(sql_string_images, catch=False, verbose=verbose)
+    global step_georef_with_image, step_calc_approx_footprint, \
+        step_georef_with_satellite_basic, step_georef_with_satellite_extreme, \
+        step_georef_with_satellite_estimated, step_georef_with_calc
 
     if debug_ids is None:
         filter_string = f"image_id LIKE '%V%'"
@@ -89,29 +107,57 @@ def georef_all2(catch=True, verbose=False):
         formatted_list = "(" + ", ".join(["'{}'".format(item) for item in debug_ids]) + ")"  # noqa
         filter_string = f"image_id in {formatted_list}"
 
+    # special circumstances
+    if debug_input_polygons is not None:
+        step_calc_approx_footprint = False  # noqa
+        step_georef_with_satellite_basic = False  # noqa
+        step_georef_with_satellite_extreme = False  # noqa
+        step_georef_with_satellite_estimated = True  # noqa
+        step_georef_with_image = False  # noqa
+        step_georef_with_calc = False  # noqa
+
+    # check validity of debug params
+    if debug_ids is not None and debug_input_polygons is not None:
+        assert len(debug_ids) == len(debug_input_polygons)
+
+    # get all vertical images and their data from the database
+    sql_string_images = f"SELECT * FROM images WHERE {filter_string}"
+    data_images = ctd.get_data_from_db(sql_string_images, catch=False, verbose=verbose)
+
     sql_string_extracted = "SELECT image_id, height, focal_length, complexity, " \
                            "ST_AsText(footprint_approx) AS footprint_approx, " \
                            "ST_AsText(position_approx) AS photocenter_approx, " \
-                           "ST_AsText(footprint_exact) AS footprint_exact, " \
+                           "ST_AsText(footprint_exact) AS a, " \
                            "ST_AsText(position_exact) AS photocenter, " \
                            "footprint_type AS footprint_type " \
                            f"FROM images_extracted WHERE {filter_string}"
     data_extracted = ctd.get_data_from_db(sql_string_extracted, catch=False, verbose=verbose)
 
-    sql_georef = "SELECT * FROM images_georef"
+    sql_georef = f"SELECT * FROM images_georef WHERE {filter_string}"
     data_georef = ctd.get_data_from_db(sql_georef, catch=False, verbose=verbose)
 
     # merge the data from all tables
     data = pd.merge(data_images, data_extracted, on='image_id')
-    data = pd.merge(data, data_georef, on='image_id')
+    data = pd.merge(data, data_georef, how='left', on='image_id')
 
     # make complexity column right
     data = data.drop(columns=['complexity_y'])
     data['complexity'] = data['complexity_x']
     data = data.drop(columns=['complexity_x'])
 
+    # replace Nan with Null
+    data.replace({np.nan: None}, inplace=True)
+
+    if debug_order:
+        data = data.sort_values(by='image_id')
+
     # save all image ids in a list
     image_ids = data['image_id'].values.tolist()
+
+    # filter based on flight paths
+    if debug_flight_paths is not None:
+        prefixes = ["CA" + str(value) for value in debug_flight_paths]
+        image_ids = [os.path.splitext(f)[0] for f in image_ids if any(f.startswith(prefix) for prefix in prefixes)]
 
     # lists just for displaying reasons
     lists = {
@@ -124,7 +170,8 @@ def georef_all2(catch=True, verbose=False):
         "too_few_tps": [],
         "complexity": [],
         "no_neighbours": [],
-        "not_enough_images": []
+        "not_enough_images": [],
+        "wrong_overlap": []
     }
 
     # the global base path
@@ -291,7 +338,10 @@ def georef_all2(catch=True, verbose=False):
 
                     # save approx approx_footprint
                     if not os.path.exists(_path_dict["approx_shape_footprints"]):
-                        footprint_gdf.to_file(_path_dict["approx_shape_footprints"])
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('always', category=UserWarning,
+                                                    message='You are attempting to write an empty DataFrame to file.*')
+                            footprint_gdf.to_file(_path_dict["approx_shape_footprints"])
                     else:
                         # Read the existing shapefile
                         existing_gdf = gpd.read_file(_path_dict["approx_shape_footprints"])
@@ -307,11 +357,17 @@ def georef_all2(catch=True, verbose=False):
                             existing_gdf = pd.concat([existing_gdf, footprint_gdf], ignore_index=True)
 
                         # Save the updated GeoDataFrame to the shapefile
-                        existing_gdf.to_file(_path_dict["approx_shape_footprints"])
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('always', category=UserWarning,
+                                                    message='You are attempting to write an empty DataFrame to file.*')
+                            existing_gdf.to_file(_path_dict["approx_shape_footprints"])
 
                     # save approx photocenter
                     if not os.path.exists(_path_dict["approx_shape_photocenter"]):
-                        photocenter_gdf.to_file(_path_dict["approx_shape_photocenter"])
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('always', category=UserWarning,
+                                                    message='You are attempting to write an empty DataFrame to file.*')
+                            photocenter_gdf.to_file(_path_dict["approx_shape_photocenter"])
                     else:
                         # Read the existing shapefile
                         existing_gdf = gpd.read_file(_path_dict["approx_shape_photocenter"])
@@ -325,8 +381,11 @@ def georef_all2(catch=True, verbose=False):
                             # Append the new photocenter to the existing GeoDataFrame
                             existing_gdf = pd.concat([existing_gdf, photocenter_gdf], ignore_index=True)
 
-                        # Save the updated GeoDataFrame to the shapefile
-                        existing_gdf.to_file(_path_dict["approx_shape_photocenter"])
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings('always', category=UserWarning,
+                                                    message='You are attempting to write an empty DataFrame to file.*')
+                            # Save the updated GeoDataFrame to the shapefile
+                            existing_gdf.to_file(_path_dict["approx_shape_photocenter"])
 
                     # save both approx_footprint and photocenter in db
                     sql_string = f"UPDATE images_extracted SET " \
@@ -356,6 +415,11 @@ def georef_all2(catch=True, verbose=False):
     data = data.dropna(subset=['footprint_approx'])
     image_ids = data['image_id'].values.tolist()
 
+    # filter based on flight paths
+    if debug_flight_paths is not None:
+        prefixes = ["CA" + str(value) for value in debug_flight_paths]
+        image_ids = [os.path.splitext(f)[0] for f in image_ids if any(f.startswith(prefix) for prefix in prefixes)]
+
     # georef sat (basic)
     if step_georef_with_satellite_basic:
         tqdm.write("Geo-reference with satellite images:")
@@ -369,7 +433,7 @@ def georef_all2(catch=True, verbose=False):
 
             # check for possible debug counters
             counter = counter + 1
-            if debug_starting_id is not None and counter < debug_starting_id:  # noqa
+            if debug_starting_counter is not None and counter < debug_starting_counter:  # noqa
                 continue
 
             # start taking time
@@ -401,7 +465,8 @@ def georef_all2(catch=True, verbose=False):
                 p.print_v("Start checking")
 
             # check if we need to work with image id
-            if overwrite_satellite_footprint is False and row['method'] == "sat":
+            if overwrite_satellite_footprint is False and \
+                    row['method'] == "sat" and row["status_sat"] == "georeferenced":
                 p.print_v(f"{image_id} is already geo-referenced",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat'].append(image_id) if image_id not in lists['georef_sat'] else None
@@ -484,6 +549,8 @@ def georef_all2(catch=True, verbose=False):
             # now it's time georeference the image
             georef_sat_tuple = gs.georef_sat(image_id, _path_dict["temp_fld"],
                                              footprint_buffered, azimuth,
+                                             location_max_order=location_max_order,
+                                             min_tps_final=min_tps,
                                              catch=catch, verbose=False, pbar=pbar)
 
             footprint_exact = georef_sat_tuple[0]
@@ -536,6 +603,199 @@ def georef_all2(catch=True, verbose=False):
             _update_georef_sql(image_id, "sat", calc_time, row['complexity'], tps=nr_tps, status=status,
                                residuals=residuals, transform=transform)
 
+        # filter for outliers
+        nr_outliers = 0
+        tqdm.write("Filter for outliers at satellite images:")
+        sleep(0.1)  # Introduce a small delay
+        for image_id in (pbar := tqdm(image_ids)):
+
+            if debug_print_all:
+                pbar = None
+
+            # get row from the pandas
+            row = data[data['image_id'] == image_id].iloc[0]
+
+            # create deep copy from path dict to not change values
+            _path_dict = copy.deepcopy(path_dict)
+            _path_dict = {key: value.replace('$image_id$', image_id) for key, value in _path_dict.items()}
+
+            # we only need to check if the status is georeferenced
+            if row["status_sat"] != "georeferenced":
+                p.print_v(f"no check required for {image_id}", verbose=verbose, pbar=pbar)
+                continue
+
+            # check if image at the good position
+            good_position = cgp.check_georef_position(image_id)
+
+            # if image is good -> nothing to do
+            if good_position:
+                p.print_v(f"{image_id} is valid", color="green", verbose=verbose, pbar=pbar)
+                continue
+
+            nr_outliers += 1
+
+            status = "invalid:position"
+            data, lists, status = _put_image_id_right(image_id, "sat", _path_dict, data, lists,
+                                                      None, None, None, None, None,
+                                                      status, catch, verbose, pbar)
+
+            _update_georef_sql(image_id, "sat", status=status)
+
+        p.print_v(f"{nr_outliers} of {len(image_ids)} are outliers", verbose=verbose)
+
+    # georef sat (extreme)
+    if step_georef_with_satellite_extreme:
+
+        # get unique list of flight paths from the image_ids
+        flight_paths = [_id[2:6] for _id in image_ids]
+        flight_paths = list(set(flight_paths))
+
+        # iterate all flight paths
+        for flight_path in (pbar := tqdm(flight_paths)):
+
+            # get images where no image of the complete flight path was geo-referenced
+            sql_string_fl = "SELECT flight_path, georeferenced_count, total_count FROM " \
+                            "(SELECT SUBSTRING(image_id, 3, 4) AS flight_path, CASE WHEN " \
+                            "status_sat='georeferenced' THEN 1 ELSE 0 END AS georef_flag, " \
+                            "SUM(CASE WHEN status_sat='georeferenced' THEN 1 ELSE 0 END) " \
+                            "OVER(PARTITION BY SUBSTRING(image_id, 3, 4)) AS georeferenced_count, " \
+                            "COUNT(*) OVER(PARTITION BY SUBSTRING(image_id, 3, 4)) AS total_count " \
+                            f"FROM images_georef) AS subquery WHERE flight_path = '{flight_path}' " \
+                            f"LIMIT 1;"
+            data_fl = ctd.get_data_from_db(sql_string_fl, catch=False).iloc[0]
+
+            # this means there is a flight path outside the research area -> continue
+            if data_fl['total_count'] < 4:
+                continue
+
+            # this means enough picture are georeferenced -> continue
+            if data_fl['georeferenced_count'] > 1:
+                continue
+
+            # get the images from this flight-path
+            sql_string_fl_id = "SELECT image_id, status_sat, status_sat_est, complexity FROM images_georef " \
+                               f"WHERE SUBSTRING(image_id, 3, 4)='{flight_path}'"
+            data_fl_id = ctd.get_data_from_db(sql_string_fl_id, catch=False)
+
+            # order by complexity and have the highest first
+            data_fl_id = data_fl_id.sort_values(by='complexity', ascending=False)
+            ids_fl_id = data_fl_id['image_id'].tolist()
+
+            # how many are already georeferenced ?
+            georef_sat_counter = 0
+
+            # iterate all images in flight path
+            for image_id_fl_id in ids_fl_id:
+
+                # start taking time
+                start = time.time()
+
+                # get the necessary information from the real dataframe
+                row_fl_id = data.loc[data['image_id'] == image_id_fl_id].iloc[0]
+
+                # we don't need to geo-reference successful images again
+                if row_fl_id['status_sat'] == "georeferenced" or \
+                        row_fl_id['status_sat_est'] == "georeferenced":
+                    georef_sat_counter += 1
+                    continue
+
+                # check for complexity
+                if row_fl_id["complexity"] <= min_complexity:
+                    continue
+
+                if row_fl_id['status_sat'].startswith('failed'):
+                    continue
+
+                # create deep copy from path dict to not change values
+                _path_dict = copy.deepcopy(path_dict)
+                _path_dict = {key: value.replace('$image_id$', image_id_fl_id) for key, value in _path_dict.items()}
+
+                # get the required data from sql for geo-referencing
+                footprint_approx = shapely.wkt.loads(row_fl_id['footprint_approx'])
+                photocenter_approx = shapely.wkt.loads(row_fl_id['photocenter_approx'])
+
+                # get position of photocenter and azimuth
+                approx_x, approx_y = photocenter_approx.x, photocenter_approx.y
+                azimuth = row_fl_id['azimuth']
+
+                # buffer the approx approx_footprint
+                footprint_buffered = bf.buffer_footprint(footprint_approx, buffer_val=approx_buffer_val,
+                                                         catch=True, verbose=False)
+
+                # skip image if we have no approx footprint
+                if footprint_buffered is None:
+                    continue
+
+                # the actual geo-referencing
+                georef_sat_tuple = gs.georef_sat(image_id_fl_id, _path_dict["temp_fld"],
+                                                 footprint_buffered, azimuth,
+                                                 location_max_order=location_max_order_extreme,
+                                                 min_tps_final=min_tps,
+                                                 catch=catch, verbose=True, pbar=pbar)
+
+                # get the values from geo-referencing
+                footprint_exact = georef_sat_tuple[0]
+                transform = georef_sat_tuple[1]
+                status = georef_sat_tuple[2]
+                residuals = georef_sat_tuple[3]
+                nr_tps = georef_sat_tuple[4]
+
+                if debug_print:
+                    p.print_v("footprint_exact:", footprint_exact)
+                    p.print_v("transform:", transform)
+                    p.print_v("status:", status)
+
+                # if we have an approx_footprint (being right or invalid),
+                # we can calculate a photocenter and error vector
+                if footprint_exact is not None:
+
+                    # calculate exact x and y of photocenter
+                    exact_x, exact_y = ccp.calc_camera_position(footprint_exact)
+
+                    # create a shapely point that we can save in a db
+                    photocenter_exact = Point(exact_x, exact_y)
+
+                    # create error vector
+                    error_vector_exact = LineString([(exact_x, exact_y), (approx_x, approx_y)])
+
+                    dx = exact_x - approx_x
+                    dy = exact_y - approx_y
+
+                # init variables even if we don't have a geo-referenced image
+                else:
+                    photocenter_exact = None
+                    error_vector_exact = None
+                    dx = None
+                    dy = None
+
+                # remove from all other folders
+                data, lists = _clean_image_id(image_id_fl_id, _path_dict, data, lists, ["sat", "img", "calc"])
+
+                # add to the right folder
+                data, lists, status = _put_image_id_right(image_id_fl_id, "sat", _path_dict, data, lists,
+                                                          footprint_exact, photocenter_exact,
+                                                          error_vector_exact, dx, dy,
+                                                          status, catch, verbose, pbar)
+
+                # remove from temp folder
+                data, lists = _clean_image_id(image_id_fl_id, _path_dict, data, lists, ["temp"])
+
+                # how long did we need for the image?
+                end = time.time()
+                calc_time = end - start
+
+                # update as well in sql
+                _update_georef_sql(image_id_fl_id, "sat", calc_time, row_fl_id['complexity'], tps=nr_tps, status=status,
+                                   residuals=residuals, transform=transform)
+
+                # increase the counter
+                if status == "georeferenced":
+                    georef_sat_counter += 1
+
+                # if we have 3 images, we can deduct the rest (is quicker)
+                if georef_sat_counter == 3:
+                    break
+
     # georef sat (estimated)
     if step_georef_with_satellite_estimated:
         tqdm.write("Geo-reference with satellite images and estimated positions:")
@@ -545,7 +805,7 @@ def georef_all2(catch=True, verbose=False):
         for image_id in (pbar := tqdm(image_ids)):
 
             counter = counter + 1
-            if debug_starting_id is not None and counter < debug_starting_id:  # noqa
+            if debug_starting_counter is not None and counter < debug_starting_counter:  # noqa
                 continue
 
             if debug_print_all:
@@ -562,10 +822,11 @@ def georef_all2(catch=True, verbose=False):
             len_too_few_tps = len(lists["too_few_tps"])
             len_complexity = len(lists["complexity"])
             len_not_enough = len(lists["not_enough_images"])
+            len_wrong_overlap = len(lists["wrong_overlap"])
 
             p.print_v(f"Work on {image_id}: {len_georef_sat}/{len_georef_sat_est}/{len_georef_img}/{len_georef_calc} "
                       f"georeferenced, {len_failed} failed, {len_not_enough} not enough images, "
-                      f"{len_invalid} invalid, {len_too_few_tps} too few_tps, "
+                      f"{len_wrong_overlap} wrong overlap, {len_invalid} invalid, {len_too_few_tps} too few_tps, "
                       f"{len_complexity} too simple", pbar=pbar)
 
             # create deep copy from path dict to not change values
@@ -578,13 +839,14 @@ def georef_all2(catch=True, verbose=False):
             if debug_print:
                 p.print_v("Start checking")
 
-            if row['method'] == "sat":
+            if row['method'] == "sat" and row['status_sat'] == 'georeferenced':
                 p.print_v(f"{image_id} is already geo-referenced (satellite)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat'].append(image_id) if image_id not in lists['georef_sat'] else None
                 continue
 
-            if overwrite_satellite_est_footprint is False and row['method'] == "sat_est":
+            if overwrite_satellite_est_footprint is False and \
+                    row['method'] == "sat_est" and row['status_sat_est'] == "georeferenced":
                 p.print_v(f"{image_id} is already geo-referenced (satellite estimation)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat_est'].append(image_id) if image_id not in lists['georef_sat_est'] else None
@@ -622,6 +884,14 @@ def georef_all2(catch=True, verbose=False):
                 lists['not_enough_images'].append(image_id) if image_id not in lists['not_enough_images'] else None
                 continue
 
+            # Check if the image had wrong overlap previously
+            if retry_wrong_overlap_sat_est is False and \
+                    row['status_sat_est'] is not None and row['status_sat_est'].startswith('wrong_overlap'):
+                p.print_v(f"{image_id} had previously a wrong overlap",
+                          color="red", verbose=verbose, pbar=pbar)
+                lists['wrong_overlap'].append(image_id) if image_id not in lists['wrong_overlap'] else None
+                continue
+
             # Check if the image had too few tps
             if retry_too_few_tps_sat_est is False and \
                     row['status_sat_est'] is not None and row['status_sat_est'].startswith('too_few_tps'):
@@ -635,7 +905,7 @@ def georef_all2(catch=True, verbose=False):
 
             # Check if the image is in the invalid fld
             if retry_invalid_sat is False and \
-                    row['status_sat_est'] is not None and row['status_sat'].startswith('invalid'):
+                    row['status_sat_est'] is not None and row['status_sat_est'].startswith('invalid'):
                 p.print_v(f"{image_id} was previously invalid",
                           color="red", verbose=verbose, pbar=pbar)
                 lists['invalid'].append(image_id) if image_id not in lists['invalid'] else None
@@ -650,11 +920,21 @@ def georef_all2(catch=True, verbose=False):
             azimuth = row['azimuth']
 
             # estimate a footprint for the image based on already geo-referenced images
-            footprint_estimated = dip.derive_image_position(image_id, min_nr_of_images=2,
-                                                            catch=True)
+            point_estimated, footprint_estimated = dn.derive_new(image_id, min_nr_of_images=2, catch=True)
 
-            # check if we got a footprint
-            if footprint_estimated[0] == "not_enough_images":
+            # if we enter manual polygons, we always can estimate
+            if debug_input_polygons is not None:
+                # get the index of the input id
+                dbg_idx = debug_ids.index(image_id)
+
+                # set the polygon
+                footprint_estimated = debug_input_polygons[dbg_idx]
+
+                # create centroid
+                point_estimated = footprint_estimated.centroid
+
+            # not enough images for estimating
+            if point_estimated == "not_enough_images":
                 lists['not_enough_images'].append(image_id) if \
                     image_id not in lists['not_enough_images'] else None
 
@@ -672,11 +952,35 @@ def georef_all2(catch=True, verbose=False):
                 dx = None
                 dy = None
 
+            # wrong overlap for estimating
+            elif point_estimated == "wrong_overlap":
+                lists['wrong_overlap'].append(image_id) if \
+                    image_id not in lists['wrong_overlap'] else None
+
+                p.print_v(f"No footprint could be estimated for {image_id}",
+                          color="red", verbose=verbose, pbar=pbar)
+
+                # create dummy values
+                footprint_exact = None
+                transform = None
+                status = "wrong_overlap"
+                residuals = None
+                nr_tps = None
+                photocenter_exact = None
+                error_vector_exact = None
+                dx = None
+                dy = None
+
+            # yeah, we have enough images in the flight path
             else:
+
+                # get bounding box of the footprint
+                footprint_estimated = footprint_estimated.envelope
 
                 # now it's time georeference the image with the estimated image
                 georef_sat_tuple = gs.georef_sat(image_id, _path_dict["temp_fld"],
-                                                 footprint_estimated[1], azimuth,
+                                                 footprint_estimated, azimuth,
+                                                 min_tps_final=min_tps,
                                                  locate_image=False,
                                                  catch=catch, verbose=False, pbar=pbar)
 
@@ -736,7 +1040,7 @@ def georef_all2(catch=True, verbose=False):
         for image_id in (pbar := tqdm(image_ids)):
 
             counter = counter + 1
-            if debug_starting_id is not None and counter < debug_starting_id:  # noqa
+            if debug_starting_counter is not None and counter < debug_starting_counter:  # noqa
                 continue
 
             if debug_print_all:
@@ -769,7 +1073,7 @@ def georef_all2(catch=True, verbose=False):
                 p.print_v("Start checking")
 
             # check if we need to work with image id
-            if row['footprint_exact'] is not None and (row['method'] == "sat"):
+            if row['method'] == "sat" and row['status_sat'] == 'georeferenced':
                 p.print_v(f"{image_id} is already geo-referenced (sat)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat'].append(image_id) if image_id not in lists['georef_sat'] else None
@@ -778,7 +1082,7 @@ def georef_all2(catch=True, verbose=False):
             if debug_print:
                 p.print_v("georef (sat) passed")
 
-            if row['footprint_exact'] is not None and (row['method'] == "sat_est"):
+            if row['method'] == "sat_est" and row['status_sat_est'] == 'georeferenced':
                 p.print_v(f"{image_id} is already geo-referenced (satellite_est)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat_est'].append(image_id) if image_id not in lists['georef_sat_est'] else None
@@ -787,13 +1091,13 @@ def georef_all2(catch=True, verbose=False):
             if debug_print:
                 p.print_v("georef (sat_est) passed")
 
-            if row['footprint_exact'] is not None and row['method'] == "image":
-                if overwrite_image_footprint is False:
-                    p.print_v(f"{image_id} is already geo-referenced (img)",
-                              color="green", verbose=verbose, pbar=pbar)
-                    lists['georef_img'].append(image_id) if image_id not in lists['georef_img'] else None
-                    # end = time.time()  no need to save time here
-                    continue
+            if overwrite_image_footprint is False and \
+                    row['method'] == "img" and row['status_img'] == "georeferenced":
+                p.print_v(f"{image_id} is already geo-referenced (img)",
+                          color="green", verbose=verbose, pbar=pbar)
+                lists['georef_img'].append(image_id) if image_id not in lists['georef_img'] else None
+                # end = time.time()  no need to save time here
+                continue
 
             if debug_print:
                 p.print_v("georef (img) passed")
@@ -909,7 +1213,7 @@ def georef_all2(catch=True, verbose=False):
         for image_id in (pbar := tqdm(image_ids)):
 
             counter = counter + 1
-            if debug_starting_id is not None and counter < debug_starting_id:  # noqa
+            if debug_starting_counter is not None and counter < debug_starting_counter:  # noqa
                 continue
 
             if debug_print_all:
@@ -926,12 +1230,13 @@ def georef_all2(catch=True, verbose=False):
             len_too_few_tps = len(lists["too_few_tps"])
             len_complexity = len(lists["complexity"])
             len_not_enough_images = len(lists["not_enough_images"])
+            len_wrong_overlap = len(lists["wrong_overlap"])
 
             p.print_v(f"Work on {image_id}: {len_georef_sat}/{len_georef_sat_est}/{len_georef_img}/{len_georef_calc} "
                       f"georeferenced, {len_failed} failed, "
                       f"{len_invalid} invalid, {len_too_few_tps} too few_tps, "
                       f"{len_complexity} too simple, "
-                      f"{len_not_enough_images} not enough images",
+                      f"{len_not_enough_images} not enough images, {len_wrong_overlap} wrong overlap",
                       pbar=pbar)
 
             # create deep copy from path dict to not change values
@@ -945,7 +1250,7 @@ def georef_all2(catch=True, verbose=False):
                 p.print_v("Start checking")
 
             # check if we need to work with image id
-            if row['footprint_exact'] is not None and (row['method'] == "sat"):
+            if row['method'] == "sat" and row['status_sat'] == 'georeferenced':
                 p.print_v(f"{image_id} is already geo-referenced (sat)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat'].append(image_id) if image_id not in lists['georef_sat'] else None
@@ -954,7 +1259,7 @@ def georef_all2(catch=True, verbose=False):
             if debug_print:
                 p.print_v("georef (sat) passed")
 
-            if row['footprint_exact'] is not None and (row['method'] == "sat_est"):
+            if row['method'] == "sat_est" and row['status_sat_est'] == 'georeferenced':
                 p.print_v(f"{image_id} is already geo-referenced (satellite_est)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_sat_est'].append(image_id) if image_id not in lists['georef_sat_est'] else None
@@ -963,7 +1268,7 @@ def georef_all2(catch=True, verbose=False):
             if debug_print:
                 p.print_v("georef (sat_est) passed")
 
-            if row['footprint_exact'] is not None and row['method'] == "image":
+            if row['method'] == "img" and row['status_img'] == 'georeferenced':
                 p.print_v(f"{image_id} is already geo-referenced (img)",
                           color="green", verbose=verbose, pbar=pbar)
                 lists['georef_img'].append(image_id) if image_id not in lists['georef_img'] else None
@@ -972,15 +1277,27 @@ def georef_all2(catch=True, verbose=False):
             if debug_print:
                 p.print_v("georef (img) passed")
 
-            if row['footprint_exact'] is not None and row['method'] == "calc":
-                if overwrite_calc_footprint is False:
-                    p.print_v(f"{image_id} is already geo-referenced (calc)",
-                              color="green", verbose=verbose, pbar=pbar)
-                    lists['georef_calc'].append(image_id) if image_id not in lists['georef_calc'] else None
-                    continue
+            if overwrite_calc_footprint is False and \
+                    row['method'] == "calc" and row['status_calc'] == "georeferenced":
+                p.print_v(f"{image_id} is already geo-referenced (calc)",
+                          color="green", verbose=verbose, pbar=pbar)
+                lists['georef_calc'].append(image_id) if image_id not in lists['georef_calc'] else None
+                continue
 
             if debug_print:
                 p.print_v("georef passed")
+
+            # remove from the overview shape
+            ms.modify_shape(_path_dict[f"calc_shape_footprints"], image_id, "delete")
+            ms.modify_shape(_path_dict[f"calc_shape_photocenters"], image_id, "delete")
+            ms.modify_shape(_path_dict[f"calc_shape_error_vectors"], image_id, "delete")
+
+            # remove tiff
+            os.remove(_path_dict["calc_tiff"]) if os.path.exists(_path_dict["calc_tiff"]) else None
+
+            # update in sql
+            #sql_string = "UPDATE images_georef SET status_calc=NULL, tps_calc=NULL, method=NULL, tp"
+            #ctd.edit_data_in_db(sql_string)
 
             # Check if the image did fail previously
             if retry_failed_calc is False and \
@@ -1015,6 +1332,15 @@ def georef_all2(catch=True, verbose=False):
                 # end = time.time()  no need to save time here
                 continue
 
+            # check if the image had previously wrong overlap
+            if retry_wrong_overlap_calc is False and \
+                    row['status_calc'] is not None and row['status_calc'].startswith('wrong_overlap'):
+                p.print_v(f"{image_id} had wrong overlap",
+                          color="red", verbose=verbose, pbar=pbar)
+                lists['wrong_overlap'].append(image_id) if image_id not in lists['wrong_overlap'] else None
+                # end = time.time()  no need to save time here
+                continue
+
             if debug_print:
                 p.print_v("not enough images passed")
 
@@ -1025,6 +1351,7 @@ def georef_all2(catch=True, verbose=False):
             # georeference the image by calculation
             georef_calc_tuple = gc.georef_calc(image_id, _path_dict["temp_fld"],
                                                catch=catch, verbose=False, pbar=pbar)
+
 
             footprint_calc = georef_calc_tuple[0]
             transform = georef_calc_tuple[1]
@@ -1076,6 +1403,7 @@ def georef_all2(catch=True, verbose=False):
 def _put_image_id_right(image_id, georef_type, _path_dict, data, lists,
                         footprint, photocenter, error_vector, dx, dy,
                         status, catch, verbose, pbar):
+
     # get the path to the temp files
     path_tmp_tiff = _path_dict["temp_fld"] + "/" + image_id + ".tif"
     path_tmp_tps_img = _path_dict["temp_fld"] + "/" + image_id + "_points.png"
@@ -1088,8 +1416,8 @@ def _put_image_id_right(image_id, georef_type, _path_dict, data, lists,
             raise ValueError(f"There is no image at '{path_tmp_tiff}'. Is 'debug_save' True?")
 
         # let's check if the image is valid
-        image_is_valid, invalid_reason = cgi.check_georef_image(path_tmp_tiff, return_reason=True,
-                                                                catch=catch, verbose=verbose, pbar=pbar)
+        image_is_valid, invalid_reason = cgv.check_georef_validity(path_tmp_tiff, return_reason=True,
+                                                                   catch=catch, verbose=verbose, pbar=pbar)
 
         # unfortunately image is not valid -> change status to invalid
         if image_is_valid is False:
@@ -1177,13 +1505,34 @@ def _put_image_id_right(image_id, georef_type, _path_dict, data, lists,
         os.rename(path_tmp_tiff, _path_dict[f"{georef_type}_tiff_invalid"]) if \
             os.path.exists(path_tmp_tiff) else None
 
+        # special stuff must be done for invalid position
+        if status == "invalid:position":
+            # get footprint from valid overview and remove it there
+            footprint = ms.modify_shape(_path_dict[f"{georef_type}_shape_footprints"],
+                                        image_id, "get")
+            photocenter = ms.modify_shape(_path_dict[f"{georef_type}_shape_photocenters"],
+                                          image_id, "get")
+            error_vector = ms.modify_shape(_path_dict[f"{georef_type}_shape_error_vectors"],
+                                           image_id, "get")
+
         # update the footprints, photocenters and error vectors
-        ms.modify_shape(_path_dict[f"{georef_type}_shape_footprints_invalid"],
-                        image_id, "add", footprint)
-        ms.modify_shape(_path_dict[f"{georef_type}_shape_photocenters_invalid"],
-                        image_id, "add", photocenter)
-        ms.modify_shape(_path_dict[f"{georef_type}_shape_error_vectors_invalid"],
-                        image_id, "add", error_vector)
+        if footprint is not None:
+            ms.modify_shape(_path_dict[f"{georef_type}_shape_footprints_invalid"],
+                            image_id, "add", footprint)
+        if photocenter is not None:
+            ms.modify_shape(_path_dict[f"{georef_type}_shape_photocenters_invalid"],
+                            image_id, "add", photocenter)
+        if error_vector is not None:
+            ms.modify_shape(_path_dict[f"{georef_type}_shape_error_vectors_invalid"],
+                            image_id, "add", error_vector)
+
+        if status == "invalid:position":
+            ms.modify_shape(_path_dict[f"{georef_type}_shape_footprints"],
+                            image_id, "delete")
+            ms.modify_shape(_path_dict[f"{georef_type}_shape_photocenters"],
+                            image_id, "delete")
+            ms.modify_shape(_path_dict[f"{georef_type}_shape_error_vectors"],
+                            image_id, "delete")
 
         # copy the tie points images and shapes to the right folder
         os.rename(path_tmp_tps_img, _path_dict[f"{georef_type}_tie_points_img_invalid"]) if \
@@ -1217,19 +1566,27 @@ def _put_image_id_right(image_id, georef_type, _path_dict, data, lists,
         lists["not_enough_images"].append(image_id) if image_id not in lists["not_enough_images"] else None
         p.print_v(f"{image_id} has non enough geo-referenced images on the flight-path!", color="red",
                   verbose=verbose, pbar=pbar)
+    elif status == "wrong_overlap":
+
+        lists["wrong_overlap"].append(image_id) if image_id not in lists["wrong_overlap"] else None
+        p.print_v(f"{image_id} has wrong overlap on the flight-path!", color="red",
+                  verbose=verbose, pbar=pbar)
 
     return data, lists, status
 
 
-def _update_georef_sql(image_id, method, calc_time, complexity,
+def _update_georef_sql(image_id, method, calc_time=None, complexity=None,
                        tps=None, status=None, residuals=None, transform=None):
-
     # this will contain the columns we update
     update_dict = {
-        'calc_time': calc_time,
         'timestamp': str(datetime.now()),
-        'complexity': complexity
     }
+
+    if calc_time is not None:
+        update_dict['calc_time'] = calc_time
+
+    if complexity is not None:
+        update_dict['complexity'] = complexity
 
     if status == "georeferenced" or status.startswith("invalid"):
         update_dict['method'] = method
@@ -1256,23 +1613,33 @@ def _update_georef_sql(image_id, method, calc_time, complexity,
         update_dict['t7'] = transform[7]
         update_dict['t8'] = transform[8]
 
-    def format_value(key, value):
-        """Formats the value for SQL based on its type."""
+    if method == "sat" and status == "georeferenced":
+        update_dict['tps_sat_est'] = 'NULL'
+        update_dict['status_sat_est'] = 'NULL'
+
+    if (method == "sat" or method == "sat_est") and status == "georeferenced":
+        update_dict['tps_img'] = 'NULL'
+        update_dict['status_img'] = 'NULL'
+
+    if (method == "sat" or method == "sat_est" or method == "img") and status == "georeferenced":
+        update_dict['tps_calc'] = 'NULL'
+        update_dict['status_calc'] = 'NULL'
+
+    def format_value(key, value, context="update"):
+        """Formats the value for SQL based on its type and context (update/insert)."""
         if isinstance(value, (int, float)):
-            return f"{key}={value}"
-        elif isinstance(value, str):
-            return f"{key}='{value}'"
+            return f"{value}" if context == "insert" else f"{key}={value}"
+        elif isinstance(value, str) and value != 'NULL':
+            return f"'{value}'" if context == "insert" else f"{key}='{value}'"
+        elif value == 'NULL':
+            return "NULL" if context == "insert" else f"{key}=NULL"
         else:
-            # Handle other data types if necessary (e.g., dates)
-            # For this example, we'll just convert to string
-            return f"{key}='{str(value)}'"
+            return f"'{str(value)}'" if context == "insert" else f"{key}='{str(value)}'"
 
     # Columns and their values for the insert
     columns = ", ".join(update_dict.keys())
-    values = ", ".join([f"'{value}'" if isinstance(value, str) else str(value) for value in update_dict.values()])
-
-    # Columns and their values for the update
-    update_columns = ", ".join([format_value(key, value) for key, value in update_dict.items()])
+    values = ", ".join([format_value(None, value, context="insert") for value in update_dict.values()])
+    update_columns = ", ".join([format_value(key, value, context="update") for key, value in update_dict.items()])
 
     sql_string = f"""
         INSERT INTO images_georef (image_id, {columns})
@@ -1280,9 +1647,11 @@ def _update_georef_sql(image_id, method, calc_time, complexity,
         ON CONFLICT (image_id) 
         DO UPDATE SET {update_columns};
     """
-    if status.startswith("too_few_tps") or status.startswith("not_enough_images") or \
+
+    if status.startswith("too_few_tps") or \
+            status.startswith("not_enough_images") or status.startswith("wrong_overlap") or \
             status.startswith("georeferenced") or status.startswith("invalid") or \
-            status.startswith("failed"):
+            status.startswith("failed") or status.startswith("no_neighbours"):
         ctd.edit_data_in_db(sql_string, add_timestamp=False)
     else:
         print(sql_string)
@@ -1313,61 +1682,9 @@ def _clean_image_id(image_id, _path_dict, data, lists, to_delete):
         lists["complexity"].remove(image_id)
         lists["no_neighbours"].remove(image_id)
         lists["not_enough_images"].remove(image_id)
+        lists["wrong_overlap"].remove(image_id)
     except ValueError:
         pass
-
-    # delete the tiffs
-    if "sat" in to_delete:
-        os.remove(_path_dict["sat_tiff"]) if os.path.exists(_path_dict["sat_tiff"]) else None
-        os.remove(_path_dict["sat_tiff_invalid"]) if os.path.exists(_path_dict["sat_tiff_invalid"]) else None
-    if "img" in to_delete:
-        os.remove(_path_dict["calc_tiff"]) if os.path.exists(_path_dict["calc_tiff"]) else None
-        os.remove(_path_dict["calc_tiff_invalid"]) if os.path.exists(_path_dict["calc_tiff_invalid"]) else None
-    if "calc" in to_delete:
-        os.remove(_path_dict["img_tiff"]) if os.path.exists(_path_dict["img_tiff"]) else None
-        os.remove(_path_dict["img_tiff_invalid"]) if os.path.exists(_path_dict["img_tiff_invalid"]) else None
-
-    # remove from the overview shape files
-    if "sat" in to_delete:
-        ms.modify_shape(_path_dict["sat_shape_error_vectors"], image_id=image_id, modus="delete")
-        ms.modify_shape(_path_dict["sat_shape_footprints"], image_id=image_id, modus="delete")
-        ms.modify_shape(_path_dict["sat_shape_photocenters"], image_id=image_id, modus="delete")
-    if "img" in to_delete:
-        ms.modify_shape(_path_dict["img_shape_error_vectors"], image_id=image_id, modus="delete")
-        ms.modify_shape(_path_dict["img_shape_footprints"], image_id=image_id, modus="delete")
-        ms.modify_shape(_path_dict["img_shape_photocenters"], image_id=image_id, modus="delete")
-    if "calc" in to_delete:
-        ms.modify_shape(_path_dict["calc_shape_error_vectors"], image_id=image_id, modus="delete")
-        ms.modify_shape(_path_dict["calc_shape_footprints"], image_id=image_id, modus="delete")
-        ms.modify_shape(_path_dict["calc_shape_photocenters"], image_id=image_id, modus="delete")
-
-    ms.modify_shape(_path_dict["sat_shape_error_vectors_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["sat_shape_footprints_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["sat_shape_photocenters_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["img_shape_error_vectors_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["img_shape_footprints_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["img_shape_photocenters_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["calc_shape_error_vectors_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["calc_shape_footprints_invalid"], image_id=image_id, modus="delete")
-    ms.modify_shape(_path_dict["calc_shape_photocenters_invalid"], image_id=image_id, modus="delete")
-
-    # remove the tie-point shapes
-    if "sat" in to_delete:
-        ms.modify_shape(_path_dict[f"sat_tie_points_shape"], image_id=None, modus="hard_delete")
-    if "img" in to_delete:
-        ms.modify_shape(_path_dict[f"img_tie_points_shape"], image_id=None, modus="hard_delete")
-    ms.modify_shape(_path_dict[f"sat_tie_points_shape_invalid"], image_id=None, modus="hard_delete")
-    ms.modify_shape(_path_dict[f"sat_tie_points_shape_too_few_tps"], image_id=None, modus="hard_delete")
-    ms.modify_shape(_path_dict[f"img_tie_points_shape_invalid"], image_id=None, modus="hard_delete")
-    ms.modify_shape(_path_dict[f"img_tie_points_shape_too_few_tps"], image_id=None, modus="hard_delete")
-
-    # remove the tie-point images
-    if "sat" in to_delete:
-        os.remove(_path_dict["sat_tie_points_img"]) if os.path.exists(_path_dict["sat_tie_points_img"]) else None
-    os.remove(_path_dict["sat_tie_points_img_invalid"]) if os.path.exists(
-        _path_dict["sat_tie_points_img_invalid"]) else None
-    os.remove(_path_dict["sat_tie_points_img_too_few_tps"]) if os.path.exists(
-        _path_dict["sat_tie_points_img_too_few_tps"]) else None
 
     sql_string = "UPDATE images_extracted SET footprint_exact = NULL, " \
                  "position_exact = NULL, position_error_vector = NULL, footprint_type = NULL " \

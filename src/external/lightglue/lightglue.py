@@ -17,8 +17,10 @@ if FlashCrossAttention or hasattr(F, 'scaled_dot_product_attention'):
 else:
     FLASH_AVAILABLE = False
 
-torch.backends.cudnn.deterministic = True
+FlashCrossAttention = None
+FLASH_AVAILABLE = False
 
+torch.backends.cudnn.deterministic = True
 
 @torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
 def normalize_keypoints(
@@ -79,11 +81,12 @@ class Attention(nn.Module):
     def __init__(self, allow_flash: bool) -> None:
         super().__init__()
         if allow_flash and not FLASH_AVAILABLE:
-            warnings.warn(
-                'FlashAttention is not available. For optimal speed, '
-                'consider installing torch >= 2.0 or flash-attn.',
-                stacklevel=2,
-            )
+            pass
+            #warnings.warn(
+            #    'FlashAttention is not available. For optimal speed, '
+            #    'consider installing torch >= 2.0 or flash-attn.',
+            #    stacklevel=2,
+            #)
         self.enable_flash = allow_flash and FLASH_AVAILABLE
         if allow_flash and FlashCrossAttention:
             self.flash_ = FlashCrossAttention()

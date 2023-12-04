@@ -787,7 +787,7 @@ def georef2(image_ids, overwrite=False, catch=True, verbose=False):
                 if debug_final_check:
 
                     # check if the image would work
-                    good_image = cgi.check_georef_image(path_georef_tiffs + "/" + image_id + ".tif")
+                    good_image = cgi.check_georef_validity(path_georef_tiffs + "/" + image_id + ".tif")
 
                     # remove potential leftovers from the folders and shapefiles
                     if good_image is False:

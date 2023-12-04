@@ -505,7 +505,7 @@ def georef_img(image_ids, catch=True, verbose=False):
         # should we check the images after geo-referencing?
         if debug_final_check:
 
-            good_image = cgi.check_georef_image(path_georef_tiffs + "/" + image_id + ".tif")
+            good_image = cgi.check_georef_validity(path_georef_tiffs + "/" + image_id + ".tif")
 
             # remove image from the folders
             if good_image is False:

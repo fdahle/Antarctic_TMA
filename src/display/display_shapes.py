@@ -8,7 +8,7 @@ from shapely.geometry.base import BaseGeometry
 
 def display_shapes(shape_files: object, edge_color: object = 'black',
                    subtitles: object = None, colors: object = None, alphas: object = None,
-                   title: object = None, save_path=None) -> object:
+                   text_size: object= 10, title: object = None, save_path=None) -> object:
     """
     Display shapes from GeoDataFrames, GeoSeries, or lists containing WKT strings or Shapely geometries.
 
@@ -40,7 +40,9 @@ def display_shapes(shape_files: object, edge_color: object = 'black',
 
             if subtitles is not None:
                 centroid = geom.geometry.centroid
-                plt.annotate(subtitles[i], (centroid.x, centroid.y), textcoords="offset points", xytext=(0, 10), ha='center')
+                plt.annotate(subtitles[i], (centroid.x, centroid.y),
+                             textcoords="offset points", xytext=(0, 10),
+                             ha='center', fontsize=text_size)
 
         elif isinstance(elem, BaseGeometry):
             geom = gpd.GeoSeries([elem])
@@ -52,7 +54,8 @@ def display_shapes(shape_files: object, edge_color: object = 'black',
 
             if subtitles is not None:
                 centroid = geom.geometry.centroid
-                plt.annotate(subtitles[i], (centroid.x, centroid.y), textcoords="offset points", xytext=(0, 10), ha='center')
+                plt.annotate(subtitles[i], (centroid.x, centroid.y), textcoords="offset points",
+                             xytext=(0, 10), ha='center', fontsize=text_size)
 
         elif isinstance(elem, list):
             # Iterate through the list of geometries
@@ -69,7 +72,9 @@ def display_shapes(shape_files: object, edge_color: object = 'black',
                 if subtitles is not None:
                     if subtitles[i] is not None:
                         centroid = geom.geometry.centroid
-                        plt.annotate(subtitles[i][j], (centroid.x, centroid.y), textcoords="offset points", xytext=(0, 10), ha='center')
+                        plt.annotate(subtitles[i][j], (centroid.x, centroid.y),
+                                     textcoords="offset points", xytext=(0, 10),
+                                     ha='center', fontsize=text_size)
 
         elif isinstance(elem, (gpd.GeoDataFrame, gpd.GeoSeries, pd.Series)):
 
@@ -86,14 +91,20 @@ def display_shapes(shape_files: object, edge_color: object = 'black',
 
                 if subtitles is not None:
                     centroid = geom.geometry.centroid
-                    plt.annotate(subtitles[i][j], (centroid.x, centroid.y), textcoords="offset points", xytext=(0, 10), ha='center')
+                    plt.annotate(subtitles[i][j], (centroid.x, centroid.y),
+                                 textcoords="offset points", xytext=(0, 10),
+                                 ha='center', fontsize=text_size)
 
         else:
             raise ValueError(f"{type(elem)} is still unsupported")
 
     # Set x and y axis labels
-    ax.set_xlabel('Longitude')
-    ax.set_ylabel('Latitude')
+    ax.set_xlabel('Longitude', fontsize=text_size)
+    ax.set_ylabel('Latitude', fontsize=text_size)
+
+    # update text size for labels
+    ax.tick_params(axis='both', which='major', labelsize=text_size)
+
     # Set the aspect ratio of x and y axes to be equal
     #ax.set_aspect('equal')
 

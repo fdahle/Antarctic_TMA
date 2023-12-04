@@ -6,7 +6,7 @@ import display.display_images as di
 import display.display_shapes as ds
 
 import image_georeferencing.sub.apply_gcps as ag
-import image_georeferencing.sub.derive_image_position as dip
+import image_georeferencing.sub.derive_new as dn
 
 import base.load_image_from_file as liff
 import base.remove_borders as rb
@@ -48,11 +48,15 @@ def georef_calc(image_id, path_fld, image=None, footprint=None, azimuth=None,
     path_tiff = path_fld + "/" + image_id + ".tif"
 
     if footprint is None:
-        point , footprint, _ = dip.derive_image_position(image_id, polygon_mode="exact",
-                                                    return_line=True, verbose=True, pbar=pbar)
+        point, footprint = dn.derive_new(image_id, mode="both", min_nr_of_images=2,
+                                         polynomial_order=1,
+                                         verbose=verbose, pbar=pbar)
 
-        if point is "not_enough":
+        if point == "not_enough_images":
             return_tuple = (None, None, "not_enough_images", None, None)
+            return return_tuple
+        elif point == "wrong_overlap":
+            return_tuple = (None, None, "wrong_overlap", None, None)
             return return_tuple
 
     if azimuth is None:
@@ -75,6 +79,9 @@ def georef_calc(image_id, path_fld, image=None, footprint=None, azimuth=None,
 
     # get corners from footprint
     tps_abs = np.asarray(list(footprint.exterior.coords)[:-1])  # excluding the repeated last point
+
+    if tps_abs.shape[0] != 4:
+        return None, None, None, None, None
 
     def sort_corners(coords, inverse=False):
 

@@ -135,7 +135,7 @@ def get_data_from_db(sql_string, db_type="PSQL", catch=True, verbose=False, pbar
 
     assert db_type in ["PSQL", "ACCESS", "FILES"], "The specified database is incorrect"
 
-    # p.print_v(f"Execute {sql_string} at {db_type}", verbose, pbar=pbar)
+    p.print_v(f"Execute {sql_string} at {db_type}", verbose, pbar=pbar)
 
     # get the connection
     conn, cursor = __build_connection(db_type)

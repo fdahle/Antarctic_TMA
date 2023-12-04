@@ -57,10 +57,12 @@ def find_overlapping_images(image_id, mode=None, jump=None,
         elif mode == "approx_footprint":
             raise NotImplementedError
         else:
-            raise ValueError
+            p.print_v("Please specify a valid mode", color="red")
+            exit()
 
         # remove the image itself from the list
         valid_ids.remove(image_id)
+
     except (Exception,) as e:
         if catch:
             p.print_v(f"Failed: find_overlapping_images ({image_id})", verbose, pbar=pbar)

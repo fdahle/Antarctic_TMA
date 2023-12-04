@@ -80,7 +80,6 @@ def rotate_image(image, angle, expand=True, start_angle=0,
             corners = [(0, 0), (image.shape[1], 0), (0, image.shape[0]), (image.shape[1], image.shape[0])]
             corners_rotated = []
             for corner in corners:
-
                 test_x, test_y = transform_pixel_coordinates(corner, rot_angle, image, img)
                 corners_rotated.append((test_x, test_y))
 
@@ -98,14 +97,16 @@ def rotate_image(image, angle, expand=True, start_angle=0,
     else:
         return img
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     image_id = "CA182632V0127"
 
     import load_image_from_file as liff
+
     _img = liff.load_image_from_file(image_id)
 
     import connect_to_db as ctd
+
     sql_string = f"SELECT * FROM images WHERE image_id='{image_id}'"
     data = ctd.get_data_from_db(sql_string)
     data = data.iloc[0]
@@ -115,6 +116,5 @@ if __name__ == "__main__":
     _img = rotate_image(_img, azimuth)
 
     import display.display_images as di
+
     di.display_images(_img)
-
-

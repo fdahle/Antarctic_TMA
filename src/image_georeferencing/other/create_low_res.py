@@ -12,6 +12,8 @@ import image_georeferencing.georef_calc as gc
 
 overwrite = True
 
+types = ["sat", "sat_est", "img", "calc"]
+
 def create_low_res():
 
     fld = "/data_1/ATM/data_1/playground/georef4/low_res/images"

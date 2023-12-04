@@ -182,8 +182,6 @@ def georef_img(image_id, path_fld, path_georef_tiffs,
             prev_image, prev_transform = liff.load_image_from_file(prev_path,
                                                                    driver="rasterio", return_transform=True,
                                                                    catch=catch)
-            print(prev_image.shape)
-            print(prev_transform)
             if enhance_image:
                 prev_image = eh.enhance_image(prev_image, scale=(enhancement_min, enhancement_max))
 
@@ -252,6 +250,7 @@ def georef_img(image_id, path_fld, path_georef_tiffs,
 
     # the image must be rotated as well
     image = ri.rotate_image(image_no_borders, data['azimuth'], catch=catch, verbose=False, pbar=pbar)
+    #image = image_no_borders
 
     prev_masks = []
     next_masks = []
@@ -442,15 +441,17 @@ def georef_img(image_id, path_fld, path_georef_tiffs,
                                          titles=[image_id, prev_ids[i]],
                                          title=f"{prev_tps.shape[0]} filtered tps found", verbose=False)
 
-            # apply transformation to the tie-points of the prev image, so that these tps are absolute
-            absolute_points = np.array([prev_transforms[i] * tuple(point) for point in prev_tps[:, 2:4]])
-            prev_tps[:,2:4] = absolute_points
 
-            # save prev tps to all tps
-            all_tps = np.concatenate((all_tps, prev_tps), axis=0)
+            if prev_tps.shape[0] > 0:
+                # apply transformation to the tie-points of the prev image, so that these tps are absolute
+                absolute_points = np.array([prev_transforms[i] * tuple(point) for point in prev_tps[:, 2:4]])
+                prev_tps[:,2:4] = absolute_points
 
-            # save prev conf to all conf
-            all_conf = np.concatenate((all_conf, prev_conf))  # noqa
+                # save prev tps to all tps
+                all_tps = np.concatenate((all_tps, prev_tps), axis=0)
+
+                # save prev conf to all conf
+                all_conf = np.concatenate((all_conf, prev_conf))  # noqa
 
     # look for tie points between image and next image
     for i, next_footprint in enumerate(next_footprints_exact):
@@ -489,16 +490,16 @@ def georef_img(image_id, path_fld, path_georef_tiffs,
                     dt.display_tiepoints([image, next_images[i]], points=next_tps, confidences=next_conf,
                                          titles=[image_id, next_ids[i]],
                                          title=f"{next_tps.shape[0]} filtered tps found", verbose=False)
+            if next_tps.shape[0] > 0:
+                # apply transformation to the tie-points of the next image, so that these tps are absolute
+                absolute_points = np.array([next_transforms[i] * tuple(point) for point in next_tps[:, 2:4]])
+                next_tps[:,2:4] = absolute_points
 
-            # apply transformation to the tie-points of the next image, so that these tps are absolute
-            absolute_points = np.array([next_transforms[i] * tuple(point) for point in next_tps[:, 2:4]])
-            next_tps[:,2:4] = absolute_points
+                # save next tps to all tps
+                all_tps = np.concatenate((all_tps, next_tps), axis=0)
 
-            # save next tps to all tps
-            all_tps = np.concatenate((all_tps, next_tps), axis=0)
-
-            # save next conf to all conf
-            all_conf = np.concatenate((all_conf, next_conf))  # noqa
+                # save next conf to all conf
+                all_conf = np.concatenate((all_conf, next_conf))  # noqa
 
     # filter all tps again
     if filter_tps and all_tps.shape[0] > 0:
@@ -528,8 +529,6 @@ def georef_img(image_id, path_fld, path_georef_tiffs,
                                              conf=all_conf,
                                              return_error=True, save_image=debug_save,
                                              catch=catch)
-
-        print(residuals)
 
         # check if the transform worked
         if transform is None:

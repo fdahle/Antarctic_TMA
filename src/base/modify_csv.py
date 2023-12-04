@@ -2,13 +2,13 @@ import csv
 import os
 
 
-def modify_csv(file_path, id, modus, data=None, overwrite=False):
+def modify_csv(file_path, image_id, modus, data=None, overwrite=False):
     """
     Modify CSV file to add or delete an image_id and associated data.
 
     Parameters:
     - file_path (str): path to the CSV file
-    - id (str): the image_id to be added or deleted
+    - image_id (str): the image_id to be added or deleted
     - modus (str): either 'add' or 'delete' for the operation
     - data (dict): additional data associated with the image_id
     """
@@ -18,7 +18,7 @@ def modify_csv(file_path, id, modus, data=None, overwrite=False):
         data = {}
 
     rows = []
-    existing_columns = set(["id"])
+    existing_columns = {"id"}
 
     # Check if the file exists
     if os.path.exists(file_path):
@@ -29,18 +29,18 @@ def modify_csv(file_path, id, modus, data=None, overwrite=False):
                 existing_columns.update(row.keys())
 
     if modus == "check":
-        return any(row["id"] == id for row in rows)
+        return any(row["id"] == image_id for row in rows)
 
     elif modus == 'add':
-        # If id is already present and overwrite is True, update the data
-        if any(row["id"] == id for row in rows) and overwrite:
+        # If image_id is already present and overwrite is True, update the data
+        if any(row["id"] == image_id for row in rows) and overwrite:
             for row in rows:
-                if row["id"] == id:
+                if row["id"] == image_id:
                     for key, value in data.items():
                         row[key] = value
-        # If id is not already present, add it with associated data
-        elif not any(row["id"] == id for row in rows):
-            new_row = {"id": id}
+        # If image_id is not already present, add it with associated data
+        elif not any(row["id"] == image_id for row in rows):
+            new_row = {"id": image_id}
             for key, value in data.items():
                 new_row[key] = value
             rows.append(new_row)
@@ -54,8 +54,8 @@ def modify_csv(file_path, id, modus, data=None, overwrite=False):
                     row.setdefault(col, None)
 
     elif modus == "delete":
-        # Delete the row with the specified id
-        rows = [row for row in rows if row["id"] != id]
+        # Delete the row with the specified image_id
+        rows = [row for row in rows if row["id"] != image_id]
 
         # Remove columns that have null values for all rows
         columns_to_remove = set()
@@ -86,6 +86,6 @@ if __name__ == "__main__":
     print(path_failed_csv_no_tie_points)
 
     # Test the function
-    #a = modify_csv(path_failed_csv_no_tie_points, "CA23414", "add", data={'tie_points': 23})  # For adding an image_id
-    a = modify_csv(path_failed_csv_no_tie_points, "13434", "delete", data={'tie_podints': 43})
+    # a = modify_csv(path_failed_csv_no_tie_points, "CA23414", "add", data={'tie_points': 23})  # For adding an image_id
+    a = modify_csv(path_failed_csv_no_tie_points, "13434", "delete", data={'tie_points': 43})
     print(a)

@@ -26,7 +26,7 @@ def update_table_images_tie_points(image_id_1, image_id_2, data,
               verbose=verbose, pbar=pbar)
 
     # get the values from our data
-    extraction_method = "SuperGlue"
+    extraction_method = "LightGlue"
     x1 = data["tie_points"][:, 0]
     y1 = data["tie_points"][:, 1]
     x2 = data["tie_points"][:, 2]

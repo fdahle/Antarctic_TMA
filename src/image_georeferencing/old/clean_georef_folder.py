@@ -100,7 +100,7 @@ def clean_georef_folder(image_id=None, test_valid=True, test_invalid=True, mode=
 
         # first just check if the image itself is valid
         try:
-            validity_image = cgi.check_georef_image(path_tiff_valid, verbose=verbose)
+            validity_image = cgi.check_georef_validity(path_tiff_valid, verbose=verbose)
         except (Exception,):
             validity_image = False
 
@@ -201,7 +201,7 @@ def clean_georef_folder(image_id=None, test_valid=True, test_invalid=True, mode=
 
         # first just check if the image itself is valid
         try:
-            validity_image = cgi.check_georef_image(path_tiff_invalid, verbose=verbose)
+            validity_image = cgi.check_georef_validity(path_tiff_invalid, verbose=verbose)
         except (Exception,):
             validity_image = False
 

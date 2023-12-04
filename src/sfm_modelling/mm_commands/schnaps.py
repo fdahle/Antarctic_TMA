@@ -6,7 +6,7 @@ import json
 
 from tqdm import tqdm
 
-debug_print = False
+debug_print = True
 debug_print_errors = True
 
 """
@@ -132,12 +132,19 @@ def schnaps(project_folder, m_args,
 
             # get stats
             if stdout_line.startswith(" Picture"):
+
                 splits = stdout_line.split(" ")
                 img_name = splits[2][:-1].split(".")[0]
-                stats["images"][img_name]["files"] = splits[4]
-                stats["images"][img_name]["couples"] = splits[8]
-                if print_output is False:
+
+                # ignore no homol files
+                if ("No homol file") in stdout_line:
+                    print(f"NO HOMOL FOR {img_name}")
                     continue
+                else:
+                    stats["images"][img_name]["files"] = splits[4]
+                    stats["images"][img_name]["couples"] = splits[8]
+                    if print_output is False:
+                        continue
 
             # get stats part II
             if stdout_line.startswith(" -"):
@@ -168,7 +175,8 @@ def schnaps(project_folder, m_args,
                 continue
 
             # end in case of error
-            if stdout_line.startswith("Bye  (press enter)"):
+            if stdout_line.startswith("Bye  (press enter)") or \
+                    "An undefined error has happened" in stdout_line:
 
                 print(ValueError(error_msg))
 

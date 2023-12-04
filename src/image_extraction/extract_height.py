@@ -158,11 +158,11 @@ def extract_height(image, image_id,
         return img_sharpened
 
     # enhance the circle
-    #circle_enhanced = enhance_circle(altimeter_subset, circle)
+    # circle_enhanced = enhance_circle(altimeter_subset, circle)
 
     # show the enhanced circle if wished
-    #if debug_show_circle_enhanced:
-    #    di.display_images([altimeter_subset, circle_enhanced], title="circle enhanced")
+    # if debug_show_circle_enhanced:
+    #     di.display_images([altimeter_subset, circle_enhanced], title="circle enhanced")
 
     # function to find lines in the circle
     def find_lines(_circle_enhanced, _min_th, _max_th):
@@ -630,12 +630,3 @@ def extract_height(image, image_id,
 
     return height
 
-if __name__ == "__main__":
-    import base.load_image_from_file as liff
-
-    #img = liff.load_image_from_file("CA174332V0210", catch=False)
-    #img = liff.load_image_from_file("CA180532V0022", catch=False)
-    img = liff.load_image_from_file("CA180532V0023", catch=False)
-    img = liff.load_image_from_file("CA180532V0024", catch=False)
-
-    extract_height(img)

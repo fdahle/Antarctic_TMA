@@ -19,6 +19,7 @@ def estimate_focal_length(image_id, min_number_of_images=None,
         image_id (String): The image-image_id of the image, for which we are estimating fid marks
         min_number_of_images (int): The minimum number of images from the same flight that
             must have fid marks
+        min_difference(int): How much must the most common focal length be there more than the next common
         catch (Boolean): If true, we catch every error that is happening and return instead None
         verbose (Boolean): If true, we print information that is happening during execution of the
             function

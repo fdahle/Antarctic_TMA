@@ -1128,6 +1128,5 @@ if __name__ == "__main__":
 
     points, conf = find_tie_points(img1, img2,
                                    mask_1=mask1, mask_2=mask2,
-                                   matching_method="SuperGlue",
                                    extra_matching=True,
                                    catch=False, verbose=True)

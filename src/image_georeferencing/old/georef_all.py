@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 import image_georeferencing.old.georef_img as gi
 import image_georeferencing.old.georef_sat as gs
-import image_georeferencing.sub.derive_image_position as dip
+import image_georeferencing.sub.deleted.derive_image_position as dip
 
 import base.connect_to_db as ctd
 import base.print_v as p

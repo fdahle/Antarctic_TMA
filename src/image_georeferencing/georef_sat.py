@@ -2,6 +2,7 @@ import copy
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import shapely
 
 import base.connect_to_db as ctd
 import base.load_image_from_file as liff
@@ -33,7 +34,14 @@ debug_show_filtered_tie_points = False
 debug_show_final_tie_points = False
 
 # some other debug params
-debug_save = True
+debug_save = True  # should the georeferenced image be saved?
+
+# some output params
+#debug_output_located_polygons_img =  "/data_1/ATM/data_1/playground/georef4/test"  # if this is a path to valid folder, the located images are saved
+#debug_output_located_polygons_shp =  "/data_1/ATM/data_1/playground/georef4/test"
+
+debug_output_located_polygons_img = None
+debug_output_located_polygons_shp = None
 
 
 def georef_sat(image_id, path_fld,
@@ -293,6 +301,9 @@ def georef_sat(image_id, path_fld,
             dt.display_tiepoints([sat, image_enhanced], tps, conf, verbose=False,
                                  title=f"Tie-points for {image_id} ({tps.shape[0]})")
 
+        if debug_output_located_polygons_shp is not None:
+            output_located_polygon_lst = []
+
         # should we locate the image in the vicinity?
         if locate_image and tps.shape[0] < min_tps_final:
 
@@ -352,6 +363,14 @@ def georef_sat(image_id, path_fld,
                     sat_bounds_combi[1] = sat_bounds_combi[1] + combination[1]
                     sat_bounds_combi[3] = sat_bounds_combi[3] + combination[1]
 
+                    if debug_output_located_polygons_shp is not None:
+                        # create polygon from bounds
+                        out_poly = shapely.Polygon([(sat_bounds_combi[0], sat_bounds_combi[1]),
+                                                      (sat_bounds_combi[0], sat_bounds_combi[3]),
+                                                      (sat_bounds_combi[2], sat_bounds_combi[3]),
+                                                      (sat_bounds_combi[2], sat_bounds_combi[1])])
+                        output_located_polygon_lst.append(out_poly)
+
                     # get the satellite image
                     sat_combi, sat_transform_combi, lst_sat_images = lsd.load_satellite_data(sat_bounds_combi,
                                                                                              return_transform=True,
@@ -385,6 +404,13 @@ def georef_sat(image_id, path_fld,
                         p.print_v(f"{nr_points_combi} tie-points ({avg_conf_combi}) found at {combination}",
                                   verbose=verbose, pbar=pbar)
 
+                        if debug_output_located_polygons_img is not None and tps_combi is not None:
+                            comb_string = "_".join(map(str, combination))
+                            save_path = debug_output_located_polygons_img + "/" + image_id + "_" + str(order) + "_" + comb_string
+                            dt.display_tiepoints([sat_combi, image_enhanced], tps_combi, conf_combi, verbose=False,
+                                                 title=f"Located Tie-points for {image_id} ({tps_combi.shape[0]})",
+                                                 save_path=save_path)
+
                         # check if we have the best combination
                         if nr_points_combi > best_nr_of_points or \
                                 (nr_points_combi == best_nr_of_points and
@@ -400,13 +426,15 @@ def georef_sat(image_id, path_fld,
                             best_sat_transform = copy.deepcopy(sat_transform_combi)
                             best_sat_bounds = copy.deepcopy(sat_bounds_combi)
 
-                        if best_nr_of_points > min_tps_final:
+                        # if we found many tie-points we can stop early
+                        if best_nr_of_points > min_tps_final * 25:
                             p.print_v(f"{best_nr_of_points} found in an combination -> "
                                       f"stop searching this combination!",
                                       verbose=verbose, pbar=pbar)
                             break
 
-                if best_nr_of_points > min_tps_final:
+                # if we found many tie-points we can stop early
+                if best_nr_of_points > min_tps_final * 25:
                     break
 
             # extract best values
@@ -422,7 +450,15 @@ def georef_sat(image_id, path_fld,
 
             if best_tps.shape[0] > 0 and debug_show_located_tie_points:
                 dt.display_tiepoints([sat, image_enhanced], best_tps, best_conf, verbose=False,
-                                     title=f"Tie-points for {image_id} ({best_tps.shape[0]})")
+                                     title=f"Located Tie-points for {image_id} ({best_tps.shape[0]})")
+
+        # if wished, save polygons as shp file
+        if debug_output_located_polygons_shp is not None:
+            # Convert the list to a GeoDataFrame
+            gdf = gpd.GeoDataFrame({'geometry': output_located_polygon_lst})
+
+            # Save the GeoDataFrame to a shapefile
+            gdf.to_file(debug_output_located_polygons_shp + "/" + image_id + "_located_polygons.shp")
 
         # check number of tps if continuing is worth it
         if tps.shape[0] < min_tps_running:
@@ -711,8 +747,8 @@ if __name__ == "__main__":
 
             print(_path_fld + "/" + _image_id + ".tif", os.path.isfile(_path_fld + "/" + _image_id + ".tif"))
 
-            image_is_valid, invalid_reason = cgi.check_georef_image(_path_fld + "/" + _image_id + ".tif",
-                                                                    return_reason=True,
-                                                                    catch=True, verbose=True)
+            image_is_valid, invalid_reason = cgi.check_georef_validity(_path_fld + "/" + _image_id + ".tif",
+                                                                       return_reason=True,
+                                                                       catch=True, verbose=True)
 
             print(image_is_valid, invalid_reason)

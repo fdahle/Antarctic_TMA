@@ -3,14 +3,11 @@ import math
 import numpy as np
 import shapely
 
-import base.connect_to_db as ctd
 import base.load_image_from_file as liff
 import base.remove_borders as rb
 
-import image_georeferencing.sub.derive_image_position as dip
+import image_georeferencing.sub.deleted.derive_image_position as dip
 import image_georeferencing.sub.apply_gcps as ag
-
-import display.display_shapes as ds
 
 #use four corners of the polygon as gcps?
 

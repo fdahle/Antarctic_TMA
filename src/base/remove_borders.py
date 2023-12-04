@@ -27,7 +27,8 @@ def remove_borders(input_img, image_id=None,
 
     Args:
         input_img (np-array): The raw image from where the edges should be cut off
-        image_id (String, None): The image image_id of the input_img. Required if edges should be cut off based on fid points.
+        image_id (String, None): The image image_id of the input_img. Required if edges should be cut off
+            based on fid points.
         cut_method (String, "default"): specifies the cut method, can be ["default", "database", "auto"]
         edge (int, None): The edge used when cutting via 'default'.
         extra_edge (int, None): Something you want to remove something extra on top of the calculated border
@@ -197,7 +198,6 @@ def remove_borders(input_img, image_id=None,
         y_bottom = int(bottom - extra_edge)
 
         bounds = [x_left, x_right, y_top, y_bottom]
-
         try:
             img = img[y_top:y_bottom, x_left:x_right]
         except (Exception,):

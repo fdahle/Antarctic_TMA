@@ -11,8 +11,8 @@ import warnings
 import base.print_v as p
 import base.resize_image as ri
 
-import unet_segmentation.u_net as u_net
-import unet_segmentation.u_net_small as u_net_small
+import unet_segmentation.old.unet.u_net as u_net
+import unet_segmentation.old.unet.u_net_small as u_net_small
 
 
 def segment_image(input_img, image_id=None,

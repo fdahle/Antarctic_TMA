@@ -14,7 +14,6 @@ def load_image_from_file(image_id, image_path=None, image_type="tif",
                          driver="rasterio",
                          return_transform=False,
                          catch=True, verbose=False, pbar=None):
-
     """
     load_image_from_file(image_id, image_type, image_path, catch, verbose):
     This function loads an image from a specified path and returns it as a numpy array.
@@ -23,6 +22,7 @@ def load_image_from_file(image_id, image_path=None, image_type="tif",
         image_path (String, None): The path where the image is located. If this is None, the
             default aerial image path is used.
         image_type (String, "tif"): The type of image that should be loaded.
+        driver (String, "rasterio"): Which package should be used for loading the images ("rasterio" or "gdal")
         return_transform (Boolean, False): If yes, the transform of the image is returned next to the image
         catch (Boolean, True): If true and something is going wrong, the operation will continue and not crash.
             In this case None is returned
@@ -38,6 +38,9 @@ def load_image_from_file(image_id, image_path=None, image_type="tif",
     json_folder = os.path.dirname(os.path.realpath(__file__))
     with open(json_folder + "/params.json") as j_file:
         json_data = json.load(j_file)
+
+    # already init variable
+    transform = None
 
     # ignore warnings of files not being geo-referenced
     warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
@@ -98,11 +101,11 @@ def load_image_from_file(image_id, image_path=None, image_type="tif",
             if return_transform:
                 gdal_transform = ds.GetGeoTransform()
                 transform = Affine(gdal_transform[1],  # a
-                                          gdal_transform[2],  # b
-                                          gdal_transform[0],  # c
-                                          gdal_transform[4],  # d
-                                          gdal_transform[5],  # e
-                                          gdal_transform[3])  # f
+                                   gdal_transform[2],  # b
+                                   gdal_transform[0],  # c
+                                   gdal_transform[4],  # d
+                                   gdal_transform[5],  # e
+                                   gdal_transform[3])  # f
         else:
             raise ValueError("Unsupported driver. Choose 'rasterio' or 'gdal'.")
 
@@ -122,7 +125,6 @@ def load_image_from_file(image_id, image_path=None, image_type="tif",
 
 
 if __name__ == "__main__":
-
     img_id = "CA172031L0258"
 
     image = load_image_from_file(img_id)

@@ -8,14 +8,16 @@ import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import parse
 from tqdm import tqdm
 
+import base.print_v as p
+
 
 # __DONE __ #
 
 debug_print = False
 debug_print_errors = True
 
-def resampfid(project_folder, m_args,
-              resample_masks=True, move_images=True,
+def resampfid(project_folder, image_ids, m_args,
+              resample_masks=False, verify_images=True,
               save_stats=True, stats_folder="stats",
               delete_temp_files=True,
               print_output=False, print_orig_errors=False):
@@ -23,6 +25,7 @@ def resampfid(project_folder, m_args,
     # get some links to folders and files
     xml_folder = project_folder + "/" + "Ori-InterneScan"
     stats_folder = project_folder + "/" + stats_folder
+    images_orig_folder = project_folder + "/images_orig"
 
     # set the required arguments
     required_args = ["ImagePattern", "ScanResolution"]
@@ -55,31 +58,78 @@ def resampfid(project_folder, m_args,
         # get the images we are working with
         _lst_images = []
         _lst_masks = []
-        for _elem_ in glob.glob(project_folder + "/" + m_args["ImagePattern"]):
-            img_name = _elem_.split("/")[-1].split(".")[0]
-            if img_name.startswith("OIS-Reech_"):
+
+        # check how many images are already resampled and how many are missing
+        nr_resampled_images = 0
+        nr_missing_images = 0
+
+        # iterate all images
+        for img_name in image_ids:
+
+            # check if image is already resampled
+            if os.path.isfile(project_folder + "/OIS-Reech_" + img_name + ".tif"):
+                nr_resampled_images +=1
                 continue
 
-            if img_name.endswith("_mask"):
-                _lst_masks.append(img_name)
-            else:
+            # check if image already at good place:
+            if os.path.isfile(project_folder + "/" + img_name + ".tif"):
                 _lst_images.append(img_name)
+                continue
 
-        # check if we can find images
-        assert len(_lst_images) > 0, "No images could be found with this image pattern"
+            # check if image must be copied
+            if os.path.isfile(project_folder + "/images_orig/" + img_name + ".tif"):
+                shutil.move(project_folder + "/images_orig/" + img_name + ".tif",
+                            project_folder + "/" + img_name + ".tif")
+                _lst_images.append(img_name)
+                continue
+
+            # this means image is not existing
+            nr_missing_images += 1
+
+            #if img_name.startswith("OIS-Reech_"):
+            #    nr_resampled_images += 1
+            #    continue
+
+            #if img_name.endswith("_mask"):
+            #    _lst_masks.append(img_name)
+            #else:
+            #    _lst_images.append(img_name)
+
+        # if we couldn't find any images, something went completly wrong and we stop the whole procedure
+        if nr_missing_images == len(image_ids):
+            p.print_v(f"ReSampfid: No images could be found for resampling", color="red")
+            exit()
+
+        if nr_missing_images > 0:
+            p.print_v(f"ReSampfid: {nr_missing_images} images could not be found for resampling", color="yellow")
 
         # assert we have for each image the suitable xml file and the suitable mask
-        for _elem_ in _lst_images:
-            assert os.path.isfile(xml_folder + "/MeasuresIm-" + _elem_ + ".tif.xml"), \
-                f"No xml file for {_elem_}"
+        for img_name in image_ids:
+
+            # check if we have an xml file for every image
+            if os.path.isfile(xml_folder + "/MeasuresIm-" + img_name + ".tif.xml") is False:
+                p.print_v(f"No xml file for {img_name}", color="yellow")
+
+                print(project_folder + "/" + img_name + ".tif")
+
+                # copy the image already to image orig folder (otherwise resampfid fails)
+                if os.path.isfile(project_folder + "/" + img_name + ".tif"):
+                    shutil.move(project_folder + "/" + img_name + ".tif",
+                                project_folder + "/images_orig/" + img_name + ".tif")
+                    print("MOVE", img_name)
+
             if resample_masks:
-                assert _elem_ + "_mask" in _lst_masks, \
-                    f"No mask file for {_elem_}"
+                assert img_name + "_mask" in _lst_masks, \
+                    f"No mask file for {img_name}"
 
         return _lst_images, _lst_masks
 
     # validate the input and get at the same time a list of images and masks
     lst_images, lst_masks = __validate_input()
+
+    # if lst_images is None no images must be resampled
+    if lst_images is None:
+        return
 
     # copy the xml files for the masks
     if resample_masks:
@@ -112,6 +162,7 @@ def resampfid(project_folder, m_args,
 
     # in this dict we save the stats
     stats = {
+        "command": "",
         "residuals": {},
         "epip": {}
     }
@@ -130,15 +181,18 @@ def resampfid(project_folder, m_args,
     print("Start with ResampFid")  # noqa
     print(shell_string)
 
+    # save the shell string
+    stats["command"] = shell_string
+
     with subprocess.Popen(["/bin/bash", "-i", "-c", shell_string],
                           cwd=project_folder,
                           stdout=subprocess.PIPE,
                           universal_newlines=True
-                          ) as p:
+                          ) as po:
 
         line_counter = 0  # serves as a progress bar
 
-        for stdout_line in tqdm(p.stdout):
+        for stdout_line in tqdm(po.stdout):
 
             line_counter += 1
 
@@ -198,7 +252,7 @@ def resampfid(project_folder, m_args,
 
                 print(ValueError(error_msg))
 
-                p.kill()
+                po.kill()
                 exit()
 
             # the last resort: everything we didn't catch before is printed here
@@ -206,31 +260,13 @@ def resampfid(project_folder, m_args,
 
     print("Finished with ResampFid")  # noqa
 
-    if move_images:
-        new_folder_path = project_folder + "/images_original"
-        if not os.path.exists(new_folder_path):
-            os.makedirs(new_folder_path)
-        for _elem in lst_images:
-            shutil.move(project_folder + "/" + _elem + ".tif",
-                        new_folder_path + "/" + _elem + ".tif")
+    for img_id in image_ids:
+        if os.path.exists(project_folder + "/" + img_id + ".tif"):
+            shutil.move(project_folder + "/" + img_id + ".tif",
+                        project_folder + "/images_orig/" + img_id + ".tif")
 
-        if resample_masks:
-
-            # copy the original mask files
-            new_folder_path = project_folder + "/masks_original"
-            if not os.path.exists(new_folder_path):
-                os.makedirs(new_folder_path)
-            for _elem in lst_masks:
-                shutil.move(project_folder + "/" + _elem + ".tif",
-                            new_folder_path + "/" + _elem + ".tif")
-
-            # copy the resampled mask files
-            new_folder_path = project_folder + "/masks_resampled"
-            if not os.path.exists(new_folder_path):
-                os.makedirs(new_folder_path)
-            for _elem in lst_images:
-                shutil.move(project_folder + "/OIS-Reech_" + _elem + "_mask.tif",
-                            new_folder_path + "/mask_OIS-Reech_" + _elem + ".tif")
+    if resample_masks:
+        print("STILL NEED TO BE DONE!!")
 
     if save_stats:
         with open(stats_folder + "/resampfid.json", "w") as outfile:
@@ -246,7 +282,6 @@ def resampfid(project_folder, m_args,
             filename = os.fsdecode(file)
             if filename.startswith("MM-Error-") and filename.endswith(".txt"):
                 os.remove(project_folder + "/" + filename)
-
 
 if __name__ == "__main__":
 

@@ -468,7 +468,7 @@ def georef_img(image_id, overwrite=False, catch=True, verbose=False, pbar=None):
 
         # check if the image was geo-referenced correctly
         if debug_check_georef:
-            image_is_valid = cgi.check_georef_image(path_tiff, catch=catch, verbose=verbose, pbar=pbar)
+            image_is_valid = cgi.check_georef_validity(path_tiff, catch=catch, verbose=verbose, pbar=pbar)
 
         # without checks images are always valid
         else:

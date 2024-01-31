@@ -1,0 +1,105 @@
+import os
+import numpy as np
+import rasterio
+import warnings
+
+from osgeo import gdal
+
+# Global constant for default image path
+DEFAULT_IMAGE_FLD = "C:/Users/Felix/Desktop/"
+
+def load_image(image_id, image_path=None, image_type="tif", 
+               driver='rasterio', return_transform=False,
+               catch=True):
+    """
+    Loads an image from the specified path and returns it as a numpy array.
+
+    Args:
+        image_id (str): Identifier for the image. Can be a path or just an ID.
+        image_path (str, optional): Path to the image directory. Defaults to None.
+        image_type (str, optional): Image file extension (without '.'). Defaults to 'tif'.
+        driver (str, optional): Library to use for loading the image ('rasterio' or 'gdal'). Defaults to 'rasterio'.
+        return_transform (bool, optional): If True, returns the image transform alongside the image. Defaults to False.
+        catch (bool, optional): If True, the function handles exceptions gracefully. Defaults to True.
+        verbose (bool, optional): If True, prints operation status. Defaults to False.
+        pbar (tqdm-progress-bar, optional): Progress bar for display. Defaults to None.
+
+    Returns:
+        numpy.ndarray: The loaded image as a numpy array.
+        rasterio.transform.Affine or None: Image transform if 'return_transform' is True and the image is loaded successfully.
+
+    Raises:
+        FileNotFoundError: If the image file does not exist and `catch` is False.
+
+    Examples:
+        Load an image with default settings:
+        >>> image = load_image("example_image_id")
+        
+        Load an image with a specific path and type:
+        # >>> image = load_image("example_image_id", "/path/to/images", "tif")
+    """
+
+    # ignore warnings of files not being geo-referenced
+    warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
+
+    def create_absolute_path(image_id, fld, filetype):
+        """ Constructs the absolute path for the image. """
+        
+        # path is already a file -> return immediately
+        if os.path.isfile(image_id):
+            return image_id
+
+        # check image id and fld
+        image_id = f"{image_id}.{filetype}" if "." not in image_id else image_id
+        fld = fld if fld is not None else DEFAULT_IMAGE_FLD
+
+        # create absolute image path
+        absolute_image_path = os.path.join(fld, image_id)
+
+        # check if the path is valid
+        assert os.path.isfile(absolute_image_path), f"No image could be found at {absolute_image_path}"
+
+        return absolute_image_path
+
+    absolute_image_path = create_absolute_path(image_id, image_path, image_type)
+
+    def read_image(absolute_image_path, driver):
+        """ Reads an image using the specified driver. """
+
+        # read with rasterio
+        if driver == "rasterio":
+            ds = rasterio.open(absolute_image_path, 'r')
+            img = ds.read()
+
+            # 
+            transform = ds.transform if img.shape[0] == 1 else None
+            return img[0] if img.shape[0] == 1 else img, transform
+        
+        # read with gdal 
+        elif driver == "gdal":
+            ds = gdal.Open(absolute_image_path)
+            nbands = ds.RasterCount
+            if nbands == 1:
+                band = ds.GetRasterBand(1)
+                img = band.ReadAsArray()
+            else:
+                img = np.zeros((ds.RasterYSize, ds.RasterXSize, nbands), dtype=np.uint8)
+                for b in range(nbands):
+                    band = ds.GetRasterBand(b + 1)
+                    img[:, :, b] = band.ReadAsArray()
+            gdal_transform = ds.GetGeoTransform()
+            transform = Affine(gdal_transform[1], gdal_transform[2], gdal_transform[0],
+                            gdal_transform[4], gdal_transform[5], gdal_transform[3])
+            return img, transform
+        else:
+            raise ValueError("Unsupported driver. Choose 'rasterio' or 'gdal'.")
+
+    try:
+        img, transform = read_image(absolute_image_path, driver)
+        return (img, transform) if return_transform else img
+
+    except Exception as e:
+        if catch:
+            return (None, None) if return_transform else None
+        else:
+            raise e

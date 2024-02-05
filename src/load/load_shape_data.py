@@ -1,5 +1,6 @@
 import geopandas as gpd
 
+
 def load_shape_data(path_to_file: str, verbose: bool = False) -> gpd.GeoDataFrame:
     """
     Load shape data from a specified file path and return it as a GeoDataFrame.

@@ -328,7 +328,7 @@ def get_good_squares(num_images):
 # find out the type of image
 def get_img_type(input_img):
 
-    # check for 0 size and then stop checking -> otherwise error
+    # check for 0 size and Athen stop checking -> otherwise error
     for elem in input_img.shape:
         if elem == 0:
             return "binary"

@@ -1,0 +1,1 @@
+def extract_approx_footprint()

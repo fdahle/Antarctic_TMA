@@ -2,6 +2,10 @@ import numpy as np
 
 
 def rotate_points(points, angle, original_center, new_center):
+
+    if angle % 360 == 0:
+        return points
+
     # Convert angle from degrees to radians
     angle_rad = np.radians(angle)
 

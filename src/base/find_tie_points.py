@@ -8,7 +8,7 @@ from scipy.spatial.distance import cdist
 from skimage import transform as tf
 from typing import List, Tuple, Optional
 
-import snippets.resize_image as ri
+import base.resize_image as ri
 
 import display.display_images as di
 

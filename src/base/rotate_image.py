@@ -9,16 +9,30 @@ def rotate_image(image: np.ndarray, angle: float,
 
     Args:
         image (np.ndarray): The image to rotate.
-        angle (float): The rotation angle in degrees. Positive values mean counter-clockwise rotation.
-        expand (bool, optional): Whether to expand the output image to fit the rotated image. Defaults to True.
+        angle (float): The rotation angle in degrees. Positive values indicate a counter-clockwise rotation,
+            while negative values indicate a clockwise rotation.
+        expand (bool): If True, the output image size is expanded to fit the entire rotated image.
+            If False, the output image size is the same as the input, and parts of the rotated image may be cropped.
 
     Returns:
-        tuple[np.ndarray, np.ndarray, tuple[int, int]]: A tuple containing the rotated image, the rotation matrix used
-            for the transformation, and the center of the original image.
+        rotated_image (np.ndarray): The rotated image as a NumPy array. The size may change from the original
+            based on the angle and whether expansion is requested.
+        rotation_matrix (np.ndarray): The 2x3 affine rotation matrix used for the transformation. This matrix can be
+            used to understand the rotation and translation applied to the original image.
+        center_of_original (tuple[int, int]): The center point (x, y) of the original image. This point is used as
+            the pivot for the rotation.
     """
+
     # calculate image center
     height, width = image.shape[:2]
     center = (width // 2, height // 2)
+
+    # If angle is 0 or a multiple of 360, no need to rotate
+    if angle % 360 == 0:
+        # Create an identity matrix for the rotation matrix
+        rotation_matrix = np.array([[1, 0, 0],
+                                    [0, 1, 0]], dtype=np.float32)
+        return image, rotation_matrix, center
 
     # Get the rotation matrix
     rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)

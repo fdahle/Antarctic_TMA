@@ -2,13 +2,23 @@ import copy
 import numpy as np
 import scipy
 
+from typing import Optional, Tuple, Union
+from shapely.geometry import Polygon
+from shapely.wkt import loads as load_wkt
+
+# own loading functions
 import load.load_satellite as ls
 
+# own base functions
 import base.enhance_image as ei
 import base.find_tie_points as ftp
 import base.rotate_image as ri
 import base.rotate_points as rp
 
+# own display function
+import display.display_images as di
+
+# own georef function
 import georef.snippets.calc_transform as ct
 import georef.snippets.convert_image_to_footprint as citf
 
@@ -18,9 +28,8 @@ class GeorefSatellite:
     def __init__(self,
                  min_tps_final=25,
                  locate_image=True, location_max_order=3, location_overlap=1 / 3,
-                 tweak_image=True, tweak_max_iterations=10, tweak_step_size=2500,
-                 enhance_image=True,
-                 transform_method="rasterio", transform_order=3):
+                 tweak_image=True, tweak_max_iterations=10, tweak_step_size=2500, tweak_max_counter=2,
+                 enhance_image=True, transform_method="rasterio", transform_order=3):
 
         # settings for tps
         self.min_tps_final = min_tps_final
@@ -34,6 +43,7 @@ class GeorefSatellite:
         self.tweak_image = tweak_image
         self.tweak_max_iterations = tweak_max_iterations
         self.tweak_step_size = tweak_step_size
+        self.tweak_max_counter = tweak_max_counter
 
         # settings for enhance image
         self.enhance_image = enhance_image
@@ -44,7 +54,30 @@ class GeorefSatellite:
         self.transform_method = transform_method
         self.transform_order = transform_order
 
-    def georeference(self, input_image, approx_footprint, mask=None, angle=0, month=0):
+    def georeference(self, input_image: np.ndarray, approx_footprint: Union[Polygon, str],
+                     mask: Optional[np.ndarray] = None, angle: float = 0,
+                     month: int = 0) -> Tuple[Polygon, np.ndarray, float]:
+        """
+        Geo-references an input image by aligning it with a satellite image based on the provided approximate footprint,
+        optional mask, rotation angle, and month for satellite imagery.
+
+        Args:
+            input_image (np.ndarray): The image to be geo-referenced as a NumPy array.
+            approx_footprint (Union[Polygon, str]): An object representing the approximate footprint of the input image,
+                as either a Shapely Polygon or a WKT string.
+            mask (Optional[np.ndarray], optional): An optional mask image to be applied to the input image, as a NumPy
+                array. Defaults to None.
+            angle (float, optional): The rotation angle in degrees to be applied to the image and mask. Defaults to 0.
+            month (int, optional): The month for which the satellite image is to be loaded. This parameter is used to
+                select the appropriate satellite imagery. Defaults to 0.
+
+        Returns:
+            footprint (Polygon): The geo-referenced footprint of the input image as a Shapely Polygon.
+            transform (np.ndarray): The transformation matrix of the geo-referenced image as a NumPy array.
+            residuals(float): The residuals from the transformation.
+        Raises:
+            Exception: If no satellite image is available for the given bounds and month.
+        """
 
         print("Geo-reference image by satellite")
 
@@ -54,8 +87,16 @@ class GeorefSatellite:
         if mask is not None:
             pass
 
+        # Check if approx_footprint is a WKT string, then convert it to a Shapely Polygon
+        if isinstance(approx_footprint, str):
+            approx_footprint = load_wkt(approx_footprint)
+
+        # Ensure approx_footprint is now a Shapely Polygon
+        if not isinstance(approx_footprint, Polygon):
+            raise ValueError("approx_footprint must be a Shapely Polygon or a WKT string")
+
         # get the bounds of the approximate footprint
-        image_bounds = approx_footprint.bounds()
+        image_bounds = approx_footprint.bounds
 
         # load the initial satellite image and transform
         sat, sat_transform = ls.load_satellite(image_bounds, month=month)
@@ -67,18 +108,20 @@ class GeorefSatellite:
         # if we don't have a satellite image, we cannot geo-reference
         if sat is None:
             print("No satellite is available for this image")
-            return
+            return None, None, None
 
         # rotate image (and mask)
-        # (IMAGE CHANGE NR. 1)
         image, _, _ = ri.rotate_image(image, angle)
         if mask is not None:
             mask, _, _ = ri.rotate_image(mask, angle)
 
+        # save the rotated image
+        image_rotated = copy.deepcopy(image)
+
         # adjust the image and mask so that it has the same pixel size as the satellite image
-        # (IMAGE CHANGE NR. 2)
-        image, adjust_factors = self._adjust_image_resolution(image, sat, image_bounds, sat_bounds)
-        mask, _ = self._adjust_image_resolution(mask, sat, image_bounds, sat_bounds)
+        image, adjust_factors = self._adjust_image_resolution(sat, image, sat_bounds, image_bounds)
+        if mask is not None:
+            mask, _ = self._adjust_image_resolution(sat, mask, sat_bounds, image_bounds)
 
         # enhance the image for an improved tie-point detection
         if self.enhance_image:
@@ -87,25 +130,64 @@ class GeorefSatellite:
         # initial tie-point matching
         tps, conf = self.tp_finder.find_tie_points(sat, image, None, mask)
 
+        style_config = {"title": "Initial tie-points for geo-referencing"}
+        di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
+
         # locate the image around the approx footprint
         if self.locate_image:
             sat, sat_transform, sat_bounds, tps, conf = self._perform_locate_image(image, mask, sat, sat_bounds,
                                                                                    sat_transform, tps, conf)
+
+            style_config = {"title": "Located tie-points for geo-referencing"}
+            di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
+
         # tweak the image coordinates for maximum tie-points
         if self.tweak_image:
             sat, sat_transform, sat_bounds, tps, conf = self._perform_tweak_image(image, mask, sat, sat_bounds,
                                                                                   sat_transform, tps, conf)
 
+            style_config = {"title": "Tweaked tie-points for geo-referencing"}
+            di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
+
         # final check if there are enough tie-points
         if tps.shape[0] < self.min_tps_final:
             print(f"Too few tie-points found ({tps.shape[0]}/{self.min_tps_final}) for geo-referencing")
+            return None, None, None
+
+        import cv2
+        _, filter = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, 5.0)
+        filter = filter.flatten()
+
+        # 1 means outlier
+        tps = tps[filter == 0]
+        conf = conf[filter == 0]
+
+        print(f"{np.count_nonzero(filter)} outliers removed with RANSAC")
+
 
         # adjust points for the adapted image resolution
         tps[:, 2] = tps[:, 2] * (1 / adjust_factors[0])
         tps[:, 3] = tps[:, 3] * (1 / adjust_factors[1])
 
+        di.display_images([sat, image_rotated], tie_points=tps, tie_points_conf=conf)
+
+        # convert rotated tie-points to absolute values
+        rotated_absolute_points = np.array([sat_transform * tuple(point) for point in tps[:, 0:2]])
+        tps_rotated = copy.deepcopy(tps)
+        tps_rotated[:, 0:2] = rotated_absolute_points
+
+        transform_non_rotated, residuals_non_rotated = ct.calc_transform(image_rotated, tps_rotated,
+                                                                         transform_method=self.transform_method,
+                                                                         gdal_order=self.transform_order)
+
+        print(transform_non_rotated, residuals_non_rotated)
+
         # rotate points back for original image
-        tps = rp.rotate_points(tps, -angle, new_center="", original_center="")
+        origin_center = (input_image.shape[0]/2, input_image.shape[1]/2)
+        rotated_center = (image_rotated.shape[0]/2, image_rotated.shape[1]/2)
+        tps[:, 2:] = rp.rotate_points(tps[:,2:], -(360 - angle), rotated_center, origin_center)
+
+        di.display_images([sat, input_image], tie_points=tps, tie_points_conf=conf)
 
         # convert tie-points to absolute values
         absolute_points = np.array([sat_transform * tuple(point) for point in tps[:, 0:2]])
@@ -122,12 +204,12 @@ class GeorefSatellite:
     @staticmethod
     def _adjust_image_resolution(img1, img2, img_bound1, img_bound2):
 
-        # deepcopy image 1 to not change the original
-        img1 = copy.deepcopy(img1)
+        # deepcopy image 2 to not change the original
+        img2 = copy.deepcopy(img2)
 
         # Extract image dimensions
-        img_height_1, img_width_1 = img1.shape[:2]
-        img_height_2, img_width_2 = img2.shape[:2]
+        img_height_1, img_width_1 = img1.shape[1:]
+        img_height_2, img_width_2 = img2.shape
 
         # get height and width from the image bounds
         fp_width_1 = img_bound1[2] - img_bound1[0]
@@ -150,11 +232,12 @@ class GeorefSatellite:
             zoom_factor_y = 1 / zoom_factor_y
 
         # Resample the first image using the zoom factors in x and y directions
-        resampled_img1 = scipy.ndimage.zoom(img1, (zoom_factor_y, zoom_factor_x))
+        resampled_img2 = scipy.ndimage.zoom(img2, (zoom_factor_y, zoom_factor_x))
 
-        print("Adjusted image resolution from {} to {}")
+        print(f"Adjusted image resolution with "
+              f"zoom-factor ({round(zoom_factor_y, 4) }, {round(zoom_factor_x, 4)})")
 
-        return resampled_img1, (zoom_factor_x, zoom_factor_y)
+        return resampled_img2, (zoom_factor_x, zoom_factor_y)
 
     @staticmethod
     def _find_footprint_direction(img, points, step_size):
@@ -234,7 +317,7 @@ class GeorefSatellite:
                 # add the tile to the list of checked tiles
                 lst_checked_tiles.append(tile)
 
-                print(f"Check tile {len(lst_checked_tiles)} (Coords: {tile}, Order {order})")
+                print(f"  Check tile {len(lst_checked_tiles) - 1} (Coords: {tile}, Order {order})")
 
                 # adapt the satellite bounds for this tile
                 sat_bounds_tile = copy.deepcopy(sat_bounds)
@@ -258,9 +341,15 @@ class GeorefSatellite:
                 tps_tile, conf_tile = self.tp_finder.find_tie_points(sat_tile, img,
                                                                      None, mask)
 
+                print(f"  {tps_tile.shape[0]} points were found in this tile.")
+
+                # if we didn't find tie-points we can immediately continue to the next tile
+                if tps_tile.shape[0] == 0:
+                    continue
+
                 # check if we have the best combination
-                if tps_tile > best_tps or \
-                        (tps_tile == best_tps and
+                if tps_tile.shape[0] > best_tps.shape[0] or \
+                        (tps_tile.shape[0] == best_tps.shape[0] and
                          np.mean(conf_tile) > np.mean(best_conf)):
                     # save best tie-points and conf
                     best_tps = copy.deepcopy(tps_tile)
@@ -285,7 +374,7 @@ class GeorefSatellite:
         sat_transform = copy.deepcopy(best_sat_transform)
         sat_bounds = copy.deepcopy(best_sat_bounds)
 
-        print(f"Best tile is {best_tile} with {tps.shape[0]} tie-points ({np.mean(conf)})")
+        print(f"Best tile is {best_tile} with {tps.shape[0]} tie-points ({round(np.mean(conf), 3)})")
 
         return sat, sat_transform, sat_bounds, tps, conf
 
@@ -307,8 +396,9 @@ class GeorefSatellite:
         best_tps = copy.deepcopy(tps)
         best_conf = copy.deepcopy(conf)
 
-        # init counter for number of tweaks
+        # init counters for number of tweaks
         counter = 0
+        counter_going_down = 0
 
         # tweak the image in a loop
         while counter < self.tweak_max_iterations:
@@ -320,7 +410,7 @@ class GeorefSatellite:
             step_y, step_x = self._find_footprint_direction(tweaked_sat, tweaked_tps[:, 0:2],
                                                             self.tweak_step_size)
 
-            print(f"Tweak image ({counter}/{self.tweak_max_iterations}) with ({step_y}, {step_x})")
+            print(f"  Tweak image ({counter}/{self.tweak_max_iterations}) with ({step_y}, {step_x})")
 
             # tweak the satellite bounds
             tweaked_sat_bounds[0] = tweaked_sat_bounds[0] + step_x
@@ -351,10 +441,18 @@ class GeorefSatellite:
                 best_tps = copy.deepcopy(tweaked_tps)
                 best_conf = copy.deepcopy(tweaked_conf)
 
+                # reset going down counter
+                counter_going_down = 0
+
             else:
-                # stop the loop
+
                 print(f"  Points going down ({tweaked_tps.shape[0]} < {best_tps.shape[0]})")
-                break
+                counter_going_down += 1
+
+                if counter_going_down == self.tweak_max_counter:
+                    # stop the loop
+                    print("  Break the loop")
+                    break
 
         # restore the best settings again
         sat = copy.deepcopy(best_sat)

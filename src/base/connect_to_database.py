@@ -1,9 +1,11 @@
 import pandas as pd
 import psycopg2
+import warnings
 
 # Global psql constants
 PSQL_HOST = "127.0.0.1"
-PSQL_PORT = "7777"
+#PSQL_PORT = "7777"
+PSQL_PORT = "5432"
 PSQL_PASSWORD = "password"
 PSQL_USER = "admin"
 PSQL_DATABASE = "antarctica2"
@@ -27,9 +29,13 @@ def execute_sql(sql_string, conn):
 
     # we want to get data from db        
     if action_type == "SELECT":
-        
-        # use pandas to get the data from database
-        data_frame = pd.read_sql(sql_string, conn)
+
+        # ignore the pandas sqlAlchemy warning
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            # use pandas to get the data from database
+            data_frame = pd.read_sql(sql_string, conn)
 
         return data_frame
 
@@ -39,15 +45,3 @@ def execute_sql(sql_string, conn):
         # execute the edit
         cursor.execute(sql_string)
         conn.commit()
-
-print("TEST")
-print("START CONN")
-conn = establish_connection()
-
-print(conn)
-
-sql_string = "SELECT * FROM images LIMIT 1"
-
-data = execute_sql(sql_string, conn)
-print(data)
-print("TEST2")

@@ -1,3 +1,4 @@
+import copy
 import math
 import matplotlib.pyplot as plt
 import numpy as np
@@ -88,7 +89,10 @@ def display_images(images: List[Any],
     axes = axarr.flatten()
 
     # Iterate over images and their corresponding axes
-    for idx, img in enumerate(images):
+    for idx, enum_img in enumerate(images):
+
+        # deep copy image to not change it
+        img = copy.deepcopy(enum_img)
 
         # get ax for that image
         ax = axes[idx]
@@ -96,11 +100,15 @@ def display_images(images: List[Any],
         # determine the type of the image
         img_type = _determine_image_type(img)  # noqa
 
+        # we need to assure color images have the right format
+        if img_type == "color" and img.shape[0] == 3:
+            img = np.moveaxis(img, 0, 2)
+
         # show image differently based on the image type
         if img_type == "gray":
             ax.imshow(img, cmap="gray")
         elif img_type == "color":
-            ax.imshow(img)
+            ax.imshow(img, interpolation=None)
         else:  # Default or undefined types
             ax.imshow(img)
 

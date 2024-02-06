@@ -1,4 +1,5 @@
 import numpy as np
+import rasterio
 
 from affine import Affine
 from osgeo import gdal, osr

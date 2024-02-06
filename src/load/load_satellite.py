@@ -7,7 +7,7 @@ from rasterio import Affine
 from rasterio import mask, merge
 from typing import Optional, Tuple
 
-DEFAULT_SAT_FLD = "data/satellite"
+DEFAULT_SAT_FLD = "/data_1/ATM/data_1/satellite"
 
 
 def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,
@@ -47,7 +47,7 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
 
     # adapt path to load from a certain satellite type
     if satellite_type == "sentinel2":
-        sat_folder = sat_folder + "/sentinel-2"
+        sat_folder = sat_folder + "/sentinel_2"
     else:
         raise ValueError(f"Satellite type '{satellite_type}' not supported yet'")
 
@@ -59,6 +59,10 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
 
     # adapt path to load for a certain month (0 means composite over complete year)
     sat_folder = sat_folder + "/" + month_strings[month]
+
+    # last check if we have the right folder
+    if os.path.isdir(sat_folder) is False:
+        raise ValueError(f"'{sat_folder}' is not a valid folder")
 
     # convert bounds to shapely polygon if not already polygon
     if isinstance(bounds, shapely.geometry.base.BaseGeometry) is False:

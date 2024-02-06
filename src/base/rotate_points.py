@@ -1,29 +1,31 @@
 import numpy as np
 
 
-def rotate_points(points, angle, original_center, new_center):
+def rotate_points(points, angle, rotated_center, origin_center):
 
+    # no need to rotate points with 0 degree angle
     if angle % 360 == 0:
         return points
+
+    # Ensure input is a NumPy array
+    points = np.array(points)
+    rotated_center = np.array(rotated_center)
+    origin_center = np.array(origin_center)
 
     # Convert angle from degrees to radians
     angle_rad = np.radians(angle)
 
-    rotated_points = []
+    # Translate points to origin (rotation center)
+    translated_points = points - rotated_center
 
-    for x, y in points:
-        # Translate point to origin (rotation center)
-        translated_point = (x - original_center[0], y - original_center[1])
+    # Create the rotation matrix
+    rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad)],
+                                [np.sin(angle_rad), np.cos(angle_rad)]])
 
-        # Rotate point
-        rotated_point_x = (translated_point[0] * np.cos(angle_rad)) - (translated_point[1] * np.sin(angle_rad))
-        rotated_point_y = (translated_point[0] * np.sin(angle_rad)) + (translated_point[1] * np.cos(angle_rad))
+    # Rotate points
+    rotated_points = np.dot(translated_points, rotation_matrix.T)
 
-        # Translate point back and adjust for new image center
-        final_point_x = int(rotated_point_x + new_center[0])
-        final_point_y = int(rotated_point_y + new_center[1])
+    # Translate points back and adjust for new center
+    final_points = rotated_points + origin_center
 
-        # Convert the rotated point back to tuple and append to the list
-        rotated_points.append([final_point_x, final_point_y])
-
-    return rotated_points
+    return final_points

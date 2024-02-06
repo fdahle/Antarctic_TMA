@@ -1,2 +1,6 @@
 #Images
 *.tif
+
+# Python temp files
+.idea/
+__pycache__/

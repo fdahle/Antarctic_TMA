@@ -3,6 +3,19 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/DLLs" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/Lib" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/Library" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/Menu" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/Scripts" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/Tools" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/conda-meta" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/etc" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/fonts" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/include" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/libs" />
+      <excludeFolder url="file://$MODULE_DIR$/.conda/share" />
     </content>
     <orderEntry type="jdk" jdkName="c:\Users\Felix\Documents\GitHub\Antarctic_TMA\.conda" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

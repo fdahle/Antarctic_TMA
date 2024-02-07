@@ -1,31 +1,29 @@
 import numpy as np
+import cv2
 
+def rotate_points(points, rotation_matrix, invert=False):
+    """
+    Projects points from the rotated and expanded image back to the original image.
 
-def rotate_points(points, angle, rotated_center, origin_center):
+    Args:
+        points (list of tuples or np.ndarray): Points to project back, specified as (x, y).
+        rotation_matrix (np.ndarray): 2x3 affine rotation matrix used for the original rotation.
+        original_shape (tuple): The shape (height, width) of the original image.
+        rotated_shape (tuple): The shape (height, width) of the rotated and expanded image.
 
-    # no need to rotate points with 0 degree angle
-    if angle % 360 == 0:
-        return points
+    Returns:
+        np.ndarray: The projected points as a numpy array.
+    """
+    # Convert points to numpy array if not already
+    points = np.array(points, dtype=np.float32)
 
-    # Ensure input is a NumPy array
-    points = np.array(points)
-    rotated_center = np.array(rotated_center)
-    origin_center = np.array(origin_center)
+    # Invert the rotation matrix
+    if invert:
+        matrix = cv2.invertAffineTransform(rotation_matrix)
+    else:
+        matrix = rotation_matrix
 
-    # Convert angle from degrees to radians
-    angle_rad = np.radians(angle)
+    # Apply the inverse rotation matrix
+    projected_points = cv2.transform(np.array([points]), matrix)[0]
 
-    # Translate points to origin (rotation center)
-    translated_points = points - rotated_center
-
-    # Create the rotation matrix
-    rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad)],
-                                [np.sin(angle_rad), np.cos(angle_rad)]])
-
-    # Rotate points
-    rotated_points = np.dot(translated_points, rotation_matrix.T)
-
-    # Translate points back and adjust for new center
-    final_points = rotated_points + origin_center
-
-    return final_points
+    return projected_points

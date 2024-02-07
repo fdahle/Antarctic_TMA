@@ -1,19 +1,22 @@
 import copy
-
+import numpy as np
 import torch
 
 import src.base.find_tie_points as ftp
 
-def identify_gcps(images, transforms, overlap_dict=None):
+def identify_gcps(images, transforms):
 
     # init tie-point matcher
     tp_finder = ftp.TiePointDetector(matching_method="lightglue")
 
-    # match every image with every image
-    for i in range(len(images)):
+    all_gcps = np.empty([0, 4]
+    all_conf = np.empty([0, 1])
 
-        # find tie-points between the images
-        tps, conf = tp_finder.find_tie_points(image1, image2)
+    # iterate all images
+    for image in images):
+
+        # find gcps in the images
+        tps, conf = _find_gcps(image)
 
 
 def _find_gcps(image):

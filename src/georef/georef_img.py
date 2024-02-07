@@ -37,3 +37,6 @@ class GeorefImage:
             # convert tie-points to absolute values
             absolute_points = np.array([georeferenced_transform * tuple(point) for point in tps[:, 0:2]])
             tps[:, 0:2] = absolute_points
+
+            # add tps and conf to global list
+            all_tps = np.concatenate([all_tps, tps])

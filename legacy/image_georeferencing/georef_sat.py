@@ -719,7 +719,7 @@ if __name__ == "__main__":
     # for file in os.listdir(path):
     #     image_ids.append(file[:-4])
 
-    image_ids = ["CA184832V0117"]
+    image_ids = ["CA184632V0341"]
 
     for _image_id in image_ids:
         _path_fld = "/home/fdahle/Desktop/temp_georef"

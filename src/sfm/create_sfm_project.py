@@ -1,5 +1,5 @@
 
-class sfm_project(object):
+class SFMProject(object):
     def __init__(self, project_name, fld):
         self.project_name = project_name
         self.project_folder = fld + "/" + project_name

@@ -1,4 +1,5 @@
 import copy
+import cv2
 import numpy as np
 import scipy
 
@@ -10,17 +11,17 @@ from shapely.wkt import loads as load_wkt
 import load.load_satellite as ls
 
 # own base functions
-import base.enhance_image as ei
-import base.find_tie_points as ftp
-import base.rotate_image as ri
-import base.rotate_points as rp
+import src.base.enhance_image as ei
+import src.base.find_tie_points as ftp
+import src.base.rotate_image as ri
+import src.base.rotate_points as rp
 
 # own display function
-import display.display_images as di
+import src.display.display_images as di
 
 # own georef function
-import georef.snippets.calc_transform as ct
-import georef.snippets.convert_image_to_footprint as citf
+import src.georef.snippets.calc_transform as ct
+import src.georef.snippets.convert_image_to_footprint as citf
 
 
 class GeorefSatellite:
@@ -29,7 +30,8 @@ class GeorefSatellite:
                  min_tps_final=25,
                  locate_image=True, location_max_order=3, location_overlap=1 / 3,
                  tweak_image=True, tweak_max_iterations=10, tweak_step_size=2500, tweak_max_counter=2,
-                 enhance_image=True, transform_method="rasterio", transform_order=3):
+                 enhance_image=True, transform_method="rasterio", transform_order=3,
+                 filter_outliers=True):
 
         # settings for tps
         self.min_tps_final = min_tps_final
@@ -44,6 +46,8 @@ class GeorefSatellite:
         self.tweak_max_iterations = tweak_max_iterations
         self.tweak_step_size = tweak_step_size
         self.tweak_max_counter = tweak_max_counter
+
+        self.filter_outliers = filter_outliers
 
         # settings for enhance image
         self.enhance_image = enhance_image
@@ -154,16 +158,16 @@ class GeorefSatellite:
             print(f"Too few tie-points found ({tps.shape[0]}/{self.min_tps_final}) for geo-referencing")
             return None, None, None
 
-        import cv2
-        _, filter = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, 5.0)
-        filter = filter.flatten()
+        # last filtering of the tie-points
+        if self.filter_outliers:
+            _, filtered = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, 5.0)
+            filtered = filtered.flatten()
 
-        # 1 means outlier
-        tps = tps[filter == 0]
-        conf = conf[filter == 0]
+            # 1 means outlier
+            tps = tps[filtered == 0]
+            conf = conf[filtered == 0]
 
-        print(f"{np.count_nonzero(filter)} outliers removed with RANSAC")
-
+            print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC")
 
         # adjust points for the adapted image resolution
         tps[:, 2] = tps[:, 2] * (1 / adjust_factors[0])
@@ -185,7 +189,7 @@ class GeorefSatellite:
         # rotate points back for original image
         origin_center = (input_image.shape[0]/2, input_image.shape[1]/2)
         rotated_center = (image_rotated.shape[0]/2, image_rotated.shape[1]/2)
-        tps[:, 2:] = rp.rotate_points(tps[:,2:], -(360 - angle), rotated_center, origin_center)
+        tps[:, 2:] = rp.rotate_points(tps[:, 2:], -(360 - angle), rotated_center, origin_center)
 
         di.display_images([sat, input_image], tie_points=tps, tie_points_conf=conf)
 

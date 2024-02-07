@@ -176,7 +176,8 @@ class TiePointDetector:
                 tps = np.concatenate((tps, tps_extra))
                 conf = np.concatenate((conf, conf_extra))
 
-                # remove duplicates in tps and conf (can be that the same tie-points are detected in additional and extra)
+                # remove duplicates in tps and conf (can be that the same tie-points are detected
+                # in additional and extra)
                 tps, unique_indices = np.unique(tps, return_index=True, axis=0)
                 tps = tps.astype(int)
                 conf = conf[unique_indices]

@@ -115,7 +115,7 @@ def display_images(images: List[Any],
         # Optionally draw points on the image
         if points and idx < len(points):
             for point in points[idx]:
-                ax.plot(point[0], point[1], 'o', color=style_config['point_color'],
+                ax.plot(point[0], point[1], 'o', color=_normalize_color(style_config['point_color']),
                         markersize=style_config['point_size'])
 
         # Optionally draw lines on the image

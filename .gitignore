@@ -1,12 +1,12 @@
-#Images
-*.tif
+# data
+/data
 
 # environment
-.conda
+/.conda
 
 # IDE settings
-.idea
-.vscode
+/.idea
+/.vscode
 
 # Python temp files
-__pycache__/
+**/__pycache__/

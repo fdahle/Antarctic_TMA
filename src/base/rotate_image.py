@@ -2,8 +2,7 @@ import cv2
 import numpy as np
 
 
-def rotate_image(image: np.ndarray, angle: float,
-                 expand: bool = True) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
+def rotate_image(image: np.ndarray, angle: float, expand: bool = True) -> (np.ndarray, np.ndarray):
     """
     Rotates an image by a given angle, optionally expanding the image to fit the rotated result.
 
@@ -19,8 +18,6 @@ def rotate_image(image: np.ndarray, angle: float,
             based on the angle and whether expansion is requested.
         rotation_matrix (np.ndarray): The 2x3 affine rotation matrix used for the transformation. This matrix can be
             used to understand the rotation and translation applied to the original image.
-        center_of_original (tuple[int, int]): The center point (x, y) of the original image. This point is used as
-            the pivot for the rotation.
     """
 
     # calculate image center
@@ -32,7 +29,7 @@ def rotate_image(image: np.ndarray, angle: float,
         # Create an identity matrix for the rotation matrix
         rotation_matrix = np.array([[1, 0, 0],
                                     [0, 1, 0]], dtype=np.float32)
-        return image, rotation_matrix, center
+        return image, rotation_matrix
 
     # Get the rotation matrix
     rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
@@ -54,4 +51,4 @@ def rotate_image(image: np.ndarray, angle: float,
         # Apply the rotation matrix to the image with original dimensions
         rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
 
-    return rotated_image, rotation_matrix, center
+    return rotated_image, rotation_matrix

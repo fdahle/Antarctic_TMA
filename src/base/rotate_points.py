@@ -1,19 +1,27 @@
 import numpy as np
 import cv2
 
-def rotate_points(points, rotation_matrix, invert=False):
-    """
-    Projects points from the rotated and expanded image back to the original image.
+from typing import Union, List, Tuple
+
+
+def rotate_points(points: Union[List[Tuple[float, float]], np.ndarray],
+                  rotation_matrix: np.ndarray,
+                  invert: bool = False) -> np.ndarray:
+    """Rotate points using a given rotation matrix, optionally inverting the rotation.
+
+    This function applies a rotation (or its inverse) to a collection of points
+    using a provided affine rotation matrix.
 
     Args:
-        points (list of tuples or np.ndarray): Points to project back, specified as (x, y).
-        rotation_matrix (np.ndarray): 2x3 affine rotation matrix used for the original rotation.
-        original_shape (tuple): The shape (height, width) of the original image.
-        rotated_shape (tuple): The shape (height, width) of the rotated and expanded image.
+        points: A list of tuples or a numpy array of points specified as (x, y).
+        rotation_matrix: A 2x3 affine rotation matrix used for the original rotation.
+        invert: A boolean flag to indicate whether to invert the rotation matrix before
+                applying it. Defaults to False, applying the rotation as is.
 
     Returns:
-        np.ndarray: The projected points as a numpy array.
+        A numpy array of the rotated points.
     """
+
     # Convert points to numpy array if not already
     points = np.array(points, dtype=np.float32)
 

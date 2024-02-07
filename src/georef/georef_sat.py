@@ -300,9 +300,6 @@ class GeorefSatellite:
             # check all tiles
             for tile in tiles:
 
-                if tile[0] != 0 and tile[1] != 7380:
-                    continue
-
                 # check if we already checked this tile
                 if tile in lst_checked_tiles:
                     continue

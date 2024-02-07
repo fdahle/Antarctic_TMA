@@ -20,6 +20,7 @@ from external.SuperGlue.matching import Matching
 
 OOM_REDUCE_VALUE = 0.9
 
+
 # TODO: FIX WARNING LEVELS OF PRINT
 
 class TiePointDetector:
@@ -132,7 +133,7 @@ class TiePointDetector:
             if tps.shape[0] < self.min_resized_points:
                 self.logger.print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})",
                                   color="WARNING")
-                return np.empty((0,4)), np.empty((0,1))
+                return np.empty((0, 4)), np.empty((0, 1))
 
             # optional additional matching
             if self.matching_additional:
@@ -266,14 +267,14 @@ class TiePointDetector:
             tuple[np.ndarray, np.ndarray]: A tuple containing filtered 'tps' and 'conf' arrays.
         """
 
-        _, filter = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, self.ransac_value)
-        filter = filter.flatten()
+        _, filtered = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, self.ransac_value)
+        filtered = filtered.flatten()
 
         # 1 means outlier
-        tps = tps[filter == 0]
-        conf = conf[filter == 0]
+        tps = tps[filtered == 0]
+        conf = conf[filtered == 0]
 
-        self.logger.print(f"{np.count_nonzero(filter)} outliers removed with RANSAC", color="OKBLUE")
+        self.logger.print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC", color="OKBLUE")
 
         return tps, conf
 

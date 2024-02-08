@@ -31,7 +31,10 @@ def identify_gcps(images, transforms):
         # find interesting point in the images
         tps, conf = _find_gcps(image)
 
+        # init list for all transformed points
         tps_transformed_list = []
+
+        # transform points batchwise -> faster
         for j in range(0, tps.shape[0], batch_size):
             # Select a batch of points
             tps_batch = tps[j:j + batch_size, :]

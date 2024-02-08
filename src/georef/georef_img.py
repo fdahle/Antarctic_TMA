@@ -1,9 +1,13 @@
-import copy
+import cv2
 
 import numpy as np
 
+# import base functions
 import src.base.enhance_image as eh
 import src.base.find_tie_points as ftp
+
+# import georef snippet functions
+import src.georef.snippets.calc_transform as ct
 
 
 class GeorefImage:
@@ -19,8 +23,8 @@ class GeorefImage:
     def georeference(self, image, georeferenced_images, georeferenced_transforms,
                      mask=None, georeferenced_masks=None):
 
-        all_tps = np.empty([0, 4])
-        all_confs = np.empty([0, 1])
+        tps = np.empty([0, 4])
+        conf = np.empty([0, 1])
 
         if self.enhance_image:
             image = eh.enhance_image(image, mask)
@@ -42,15 +46,30 @@ class GeorefImage:
                 georeferenced_image = eh.enhance_image(georeferenced_image, georeferenced_mask)
 
             # apply tie-point matching between geo-referenced image and input image
-            tps, conf = self.tp_finder.find_tie_points(georeferenced_image, image,
+            tps_img, conf_img = self.tp_finder.find_tie_points(georeferenced_image, image,
                                                        georeferenced_mask, mask)
 
             # convert tie-points to absolute values
-            absolute_points = np.array([georeferenced_transform * tuple(point) for point in tps[:, 0:2]])
-            tps[:, 0:2] = absolute_points
+            absolute_points = np.array([georeferenced_transform * tuple(point) for point in tps_img[:, 0:2]])
+            tps_img[:, 0:2] = absolute_points
 
             # add tps and conf to global list
-            all_tps = np.concatenate([all_tps, tps])
-            all_confs = np.concatenate([all_confs], conf)
+            tps = np.concatenate([tps, tps_img])
+            conf = np.concatenate([conf, conf_img])
 
-        print(all_tps, all_confs)
+        # last filtering of the tie-points
+        if self.filter_outliers:
+            _, filtered = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, 5.0)
+            filtered = filtered.flatten()
+
+            # 1 means outlier
+            tps = tps[filtered == 0]
+            conf = conf[filtered == 0]
+
+            print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC")
+
+        transform, residuals = ct.calc_transform(image, tps,
+                                                 transform_method=self.transform_method,
+                                                 gdal_order=self.transform_order)
+
+        return transform, residuals, tps, conf

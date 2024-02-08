@@ -2,7 +2,7 @@ import numpy as np
 import geopandas as gpd
 from shapely.geometry import Point
 
-def export_shape(np_array, output_file):
+def export_shape(poly, output_file):
 
     # Extract x and y coordinates
     geometry = [Point(xy) for xy in np_array[:, :2]]

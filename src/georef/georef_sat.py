@@ -7,20 +7,21 @@ from typing import Optional, Tuple, Union
 from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
-# own loading functions
+# import loading functions
 import load.load_satellite as ls
 
-# own base functions
+# import base functions
 import src.base.enhance_image as ei
 import src.base.find_tie_points as ftp
 import src.base.rotate_image as ri
 import base.rotate_points as rp
 
-# own display function
+# import display functions
 import src.display.display_images as di
 
-# own georef function
+# import georef snippet functions
 import src.georef.snippets.calc_transform as ct
+
 
 class GeorefSatellite:
 
@@ -113,12 +114,12 @@ class GeorefSatellite:
         # if we don't have a satellite image, we cannot geo-reference
         if sat is None:
             print("No satellite is available for this image")
-            return None, None, None
+            return None, None, None, None
 
         # rotate image (and mask)
-        image, rotation_matrix, _ = ri.rotate_image(image, angle)
+        image, rotation_matrix = ri.rotate_image(image, angle)
         if mask is not None:
-            mask, _, _ = ri.rotate_image(mask, angle)
+            mask, _ = ri.rotate_image(mask, angle)
 
         # adjust the image and mask so that it has the same pixel size as the satellite image
         image, adjust_factors = self._adjust_image_resolution(sat, image, sat_bounds, image_bounds)

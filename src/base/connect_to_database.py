@@ -20,7 +20,15 @@ def establish_connection():
     )
 
 def execute_sql(sql_string, conn):
+    """
+    Execute the sql string and return the data from the database.
+    Args:
+        sql_string:
+        conn:
 
+    Returns:
+        data_frame:
+    """
     # get cursor for this connection
     cursor = conn.cursor()
 
@@ -39,7 +47,7 @@ def execute_sql(sql_string, conn):
 
         return data_frame
 
-    # we want to edit data in db
+    # we want to edit/delete data in db
     else:
         
         # execute the edit

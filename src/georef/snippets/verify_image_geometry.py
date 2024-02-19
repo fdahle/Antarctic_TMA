@@ -3,8 +3,8 @@ import numpy as np
 from typing import Tuple
 
 
-def verify_image(image: np.ndarray, transform: np.ndarray, length_difference: float = 15,
-                 max_pixel_size: float = 2, angle_threshold: float = 10) -> Tuple[bool, str]:
+def verify_image_geometry(image: np.ndarray, transform: np.ndarray, length_difference: float = 15,
+                          max_pixel_size: float = 2, angle_threshold: float = 10) -> Tuple[bool, str]:
     """
     Verifies the geometric integrity of a geo-referenced image based on specified thresholds for length difference,
     maximum pixel size, and angle threshold.
@@ -30,16 +30,24 @@ def verify_image(image: np.ndarray, transform: np.ndarray, length_difference: fl
     corners = np.array([(0, 0), (0, rows), (cols, rows), (cols, 0)])
 
     # Convert to abs coordinates
-    corners_abs = [transform * xy for xy in corners]
+    corners_abs = np.array([transform * xy for xy in corners])
 
-    # Calculate distances between corner points to get all side lengths
-    distances = np.linalg.norm(np.diff(corners_abs[:, :4], axis=1), axis=0)
+    # Calculate distances between consecutive corner points
+    distances = [np.linalg.norm(corners_abs[(i + 1) % 4] - corners_abs[i]) for i in range(4)]
 
     # Calculate angles between sides
     angles = []
     for i in range(4):
-        p1, p2, p3 = corners_abs[:, i], corners_abs[:, (i + 1) % 4], corners_abs[:, (i + 2) % 4]
-        v1, v2 = p2 - p1, p3 - p2
+        # Adjust indexing to access the points directly
+        p1 = corners_abs[i]
+        p2 = corners_abs[(i + 1) % 4]
+        p3 = corners_abs[(i + 2) % 4]
+
+        # Calculate vectors between the points
+        v1 = p2 - p1
+        v2 = p3 - p2
+
+        # Calculate the angle between the vectors
         angle = np.degrees(np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))))
         angles.append(angle)
 
@@ -62,7 +70,7 @@ def verify_image(image: np.ndarray, transform: np.ndarray, length_difference: fl
     # Fail reason 3: The image is not a rectangle
     elif wrong_angles:
         wrong_angle_str = ", ".join(f"{angle:.2f}" for angle in wrong_angles)
-        return False, f"angle : {wrong_angle_str}"
+        return False, f"angle: {wrong_angle_str}"
 
     # Success: The image is valid
     else:

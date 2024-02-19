@@ -1,7 +1,36 @@
 import numpy as np
 
+from typing import Optional, Dict, Tuple, List
 
-def create_mask(image, fid_marks=None, ignore_boxes=None, default_fid_position=500):
+
+def create_mask(image: np.ndarray,
+                fid_marks: Optional[Dict[str, Tuple[int, int]]] = None,
+                ignore_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
+                default_fid_position: int = 500) -> np.ndarray:
+    """
+    This function generates a mask for an image based on provided fiducial marks (everything outside
+    these marks is masked). If no marks are provided, default positions are used. Additionally,
+    specific boxes within the image can be ignored by setting them to zero in the mask.
+    Masked areas are set to 0, unmasked areas are set to 1.
+
+    3 ## 7 ## 2
+    #         #
+    5 # PPA # 6
+    #         #
+    1 ## 8 ## 4
+
+    Args:
+        image: A numpy array representing the image to mask.
+        fid_marks: An optional dictionary of fiducial marks with keys as string identifiers
+                   and values as tuples representing positions (x, y). If None, default positions are used.
+        ignore_boxes: An optional list of boxes to ignore, each specified as a tuple of four integers
+                      (x1, y1, x2, y2) representing the top left (x1, y1) and bottom right (x2, y2) corners.
+        default_fid_position: An optional integer defining the default position for fiducial marks
+                              if none are provided. Defaults to 500.
+    Returns:
+        A numpy array representing the masked image, where regions outside the specified fiducial
+        marks and ignore boxes are set to zero.
+    """
 
     # create base mask
     mask = np.ones_like(image)
@@ -40,7 +69,7 @@ def create_mask(image, fid_marks=None, ignore_boxes=None, default_fid_position=5
     # Mask the ignore_boxes if any
     if ignore_boxes is not None:
         for box in ignore_boxes:
-            top_left, bottom_right = box
-            mask[top_left[1]:bottom_right[1], top_left[0]:bottom_right[0]] = 0
+            x1, y1, x2, y2 = box
+            mask[y1:y2, x1:x2] = 0
 
     return mask

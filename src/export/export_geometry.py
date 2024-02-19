@@ -9,6 +9,7 @@ from shapely.wkt import loads
 def export_geometry(geometry: Union[str, shape],
                     output_path: str,
                     attributes: Optional[Dict[str, Union[str, int, float]]] = None,
+                    key_attribute: Optional[str] = None,
                     crs: Union[int, str] = 'EPSG:3031',
                     attach: bool = False,
                     overwrite: bool = False) -> None:
@@ -31,6 +32,9 @@ def export_geometry(geometry: Union[str, shape],
         ValueError: If both 'attach' and 'overwrite' are set to True, or if the
             file extension is unsupported.
     """
+
+    # TODO: Implement attach and overwrite true at the same time to overvrite the image_id
+
     if attach and overwrite:
         raise ValueError("'attach' and 'overwrite' cannot be true at the same time.")
 

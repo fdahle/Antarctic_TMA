@@ -12,13 +12,23 @@ import src.georef.snippets.calc_transform as ct
 
 class GeorefImage:
 
-    def __init__(self, enhance_image=True, enhance_georef_images=True):
+    def __init__(self, enhance_image=True, enhance_georef_images=True,
+                 transform_method="rasterio", transform_order=3,
+                 filter_outliers=True):
 
-        self.enhance_image = True
-        self.enhance_georef_images = True
+        # settings for enhance image
+        self.enhance_image = enhance_image
+        self.enhance_georef_images = enhance_georef_images
+
+        # settings for filtering
+        self.filter_outliers = filter_outliers
 
         # initialize tie point detector
         self.tp_finder = ftp.TiePointDetector(matching_method="lightglue")
+
+        # transform settings
+        self.transform_method = transform_method
+        self.transform_order = transform_order
 
     def georeference(self, image, georeferenced_images, georeferenced_transforms,
                      mask=None, georeferenced_masks=None):
@@ -47,7 +57,7 @@ class GeorefImage:
 
             # apply tie-point matching between geo-referenced image and input image
             tps_img, conf_img = self.tp_finder.find_tie_points(georeferenced_image, image,
-                                                       georeferenced_mask, mask)
+                                                               georeferenced_mask, mask)
 
             # convert tie-points to absolute values
             absolute_points = np.array([georeferenced_transform * tuple(point) for point in tps_img[:, 0:2]])

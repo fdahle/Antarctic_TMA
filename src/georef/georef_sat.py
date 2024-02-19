@@ -47,16 +47,18 @@ class GeorefSatellite:
         self.tweak_step_size = tweak_step_size
         self.tweak_max_counter = tweak_max_counter
 
+        # settings for filtering
         self.filter_outliers = filter_outliers
 
         # settings for enhance image
         self.enhance_image = enhance_image
 
-        # initialize tie point detector
-        self.tp_finder = ftp.TiePointDetector(matching_method="lightglue")
-
+        # transform settings
         self.transform_method = transform_method
         self.transform_order = transform_order
+
+        # initialize tie point detector
+        self.tp_finder = ftp.TiePointDetector(matching_method="lightglue")
 
         self.display = display
 

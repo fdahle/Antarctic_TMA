@@ -49,7 +49,7 @@ def verify_image_position(footprint: Union[Polygon, str],
     # Create a line function from the fit
     line_func = np.poly1d(line_fit)
 
-    # Generate a long line for distance calculation; this might need adjustment based on your coordinate system
+    # Generate a long line for distance calculation;
     x_long = np.linspace(min(x) - 1, max(x) + 1, num=2)
     y_long = line_func(x_long)
 

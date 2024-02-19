@@ -4,11 +4,12 @@ import warnings
 
 # Global psql constants
 PSQL_HOST = "127.0.0.1"
-#PSQL_PORT = "7777"
+# PSQL_PORT = "7777"
 PSQL_PORT = "5432"
 PSQL_PASSWORD = "password"
 PSQL_USER = "admin"
 PSQL_DATABASE = "antarctica2"
+
 
 def establish_connection():
     return psycopg2.connect(
@@ -18,6 +19,7 @@ def establish_connection():
         host=PSQL_HOST,
         port=PSQL_PORT
     )
+
 
 def execute_sql(sql_string, conn):
     """

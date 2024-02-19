@@ -62,7 +62,8 @@ class GeorefSatellite:
 
     def georeference(self, input_image: np.ndarray, approx_footprint: Union[Polygon, str],
                      mask: Optional[np.ndarray] = None, angle: float = 0,
-                     month: int = 0) -> Tuple[Polygon, np.ndarray, float]:
+                     month: int = 0) -> Tuple[Optional[np.ndarray], Optional[np.ndarray],
+                                              Optional[np.ndarray], Optional[list]]:
         """
         Geo-references an input image by aligning it with a satellite image based on the provided approximate footprint,
         optional mask, rotation angle, and month for satellite imagery.
@@ -78,9 +79,10 @@ class GeorefSatellite:
                 select the appropriate satellite imagery. Defaults to 0.
 
         Returns:
-            footprint (Polygon): The geo-referenced footprint of the input image as a Shapely Polygon.
             transform (np.ndarray): The transformation matrix of the geo-referenced image as a NumPy array.
             residuals(float): The residuals from the transformation.
+            tps
+            conf
         Raises:
             Exception: If no satellite image is available for the given bounds and month.
         """
@@ -91,6 +93,7 @@ class GeorefSatellite:
 
         # check the input parameters
         if mask is not None:
+            # TODO  implement
             pass
 
         # Check if approx_footprint is a WKT string, then convert it to a Shapely Polygon

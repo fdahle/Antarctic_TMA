@@ -28,7 +28,9 @@ import src.georef.snippets.verify_image_geometry as vi
 
 DEFAULT_SAVE_FOLDER = ""
 
-def georef(georef_with_satellite=True, georef_with_image=True, georef_with_calc=True):
+
+def georef(georef_with_satellite=True, georef_with_image=True, georef_with_calc=True,
+           catch=False):
 
     # init the geo-reference objects
     georefSat = gs.GeorefSatellite()
@@ -44,7 +46,7 @@ def georef(georef_with_satellite=True, georef_with_image=True, georef_with_calc=
 
     # get fid mark data
     sql_string_fid_marks = "SELECT * FROM images_fid_points"
-    data_fid_marks = ctd.execute_sql(sql_string_fid_marks)
+    data_fid_marks = ctd.execute_sql(sql_string_fid_marks, conn)
 
     # get extracted data
     sql_string_extracted = "SELECT image_id, text_bbox, ST_AsText(footprint_approx) AS footprint_approx " \
@@ -103,23 +105,26 @@ def georef(georef_with_satellite=True, georef_with_image=True, georef_with_calc=
             transform, residuals, tps, conf = georefSat.georeference(image, approx_footprint,
                                                                      mask, azimuth, month)
 
+            if transform is None:
+                # TODO add reason
+                continue
+
             # verify the geo-referenced image
             valid_image, reason = vi.verify_image(image, transform)
 
             if valid_image:
-               _save_results(image_id, image, transform, residuals, tps, conf)
-               processed_images[image_id] = {"status": "georeferenced", "reason": ""}
+                _save_results("sat", image_id, image, transform, residuals, tps, conf)
+                processed_images[image_id] = {"status": "georeferenced", "reason": ""}
             else:
-               processed_images[image_id] = {"status": "invalid", "reason": "failed"}
+                processed_images[image_id] = {"status": "invalid", "reason": "failed"}
 
         # that means the geo-referencing fails
-        except:
+        except (Exception,) as e:
             # TODO
             pass
 
     # now that we have more images, verify the images again to check for wrong positions
     for image_id in processed_images:
-
         # load the image
         image = li.load_image(image_id)
 
@@ -127,30 +132,32 @@ def georef(georef_with_satellite=True, georef_with_image=True, georef_with_calc=
 
     # geo-reference with image
     for image_id in tqdm(input_ids):
-
         # load the image
         image = li.load_image(image_id)
 
         # load the mask
         mask = cm.create_mask(image, fid_marks, text_boxes)
 
-
         georefImg.georeference(image, mask)
 
     # geo-reference with calc
     for image_id in tqdm(input_ids):
-        pass
+        gc.georeference(image_id)
+
 
 def _create_mask():
     pass
 
+
 def _save_results(georef_type, image_id, image, transform, residuals, tps, conf):
 
+    # define the save paths
     path_img = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}.tif"
     path_transform = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_transform.txt"
     path_points = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_points.txt"
 
-    path_shp_file = f"{DEFAULT_SAVE_FOLDER}/sat.shp"
+    # define the path for the overview-shp file
+    path_shp_file = f"{DEFAULT_SAVE_FOLDER}/{georef_type}.shp"
 
     # create a footprint for this image
     footprint = citf.convert_image_to_footprint(image, transform)
@@ -168,18 +175,20 @@ def _save_results(georef_type, image_id, image, transform, residuals, tps, conf)
     tps_conf = np.concatenate([tps, conf], axis=1)
     np.save(path_points, tps_conf)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     # define the bounds in which images should be geo-referenced
     bounds = [613566, 2530845, 1318654, 1965841]
 
     # load all approximate positions of images
     import src.load.load_shape_data as lsd
+
     path_approx_shape = "/data_1/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
     image_positions = lsd.load_shape_data(path_approx_shape)
 
     # filter the ids inside the bounds
-    input_ids = ei.extract_ids(bounds, image_positions)
+    input_ids = ei.extract_ids(bounds, image_positions,
+                               image_directions=["V"], complete_flightpaths=True)
 
     print(input_ids)
 

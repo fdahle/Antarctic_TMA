@@ -8,13 +8,13 @@ from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
 # import loading functions
-import load.load_satellite as ls
+import src.load.load_satellite as ls
 
 # import base functions
 import src.base.enhance_image as ei
 import src.base.find_tie_points as ftp
 import src.base.rotate_image as ri
-import base.rotate_points as rp
+import src.base.rotate_points as rp
 
 # import display functions
 import src.display.display_images as di

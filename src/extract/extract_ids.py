@@ -1,11 +1,23 @@
 import geopandas as gpd
 
-import base.connect_to_database as ctd
+from shapely.geometry import Polygon
+
+import src.base.connect_to_database as ctd
 
 def extract_ids(aoi, image_positions=None,
                 image_directions=['L', 'V', 'R'], complete_flightpaths=False):
 
+<<<<<<< Updated upstream
     # if we don't have image positions yet, we can get them from the database
+=======
+    # Create points for the corners of the bounding box
+    # Order: Bottom Left -> Bottom Right -> Top Right -> Top Left
+    points = [(aoi[0], aoi[1]), (aoi[0], aoi[3]), (aoi[0], aoi[3]), (aoi[2], aoi[1]), (aoi[0], aoi[1])]
+    # Create a polygon from the points
+    poly = Polygon(points)
+
+    # if we don't have image positions yet, we can get the from the database
+>>>>>>> Stashed changes
     if image_positions is None:
         # establish connection to psql
         conn = ctd.establish_connection()
@@ -13,7 +25,7 @@ def extract_ids(aoi, image_positions=None,
         sql_string = "SELECT footprint_approx FROM images"
 
     # convert polygon to geopandas
-    poly_gpd = gpd.GeoDataFrame(geometry=[polygon], crs=shape_data.crs)  # noqa
+    poly_gpd = gpd.GeoDataFrame(geometry=[aoi], crs=3031)  # noqa
 
     # filter the points that are intersect this polygon
     filtered_shape_data = gpd.sjoin(image_positions, poly_gpd, op="intersect")
@@ -22,9 +34,13 @@ def extract_ids(aoi, image_positions=None,
         flight_paths = filtered_shape_data['TMA_num'].unique()
 
         print(flight_paths)
+<<<<<<< Updated upstream
 
     # init the list for ids
     ids = []
+=======
+    exit()
+>>>>>>> Stashed changes
 
     # get the nadir-looking images
     if "V" in image_directions:

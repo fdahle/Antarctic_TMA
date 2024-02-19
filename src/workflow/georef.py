@@ -10,6 +10,9 @@ import src.base.create_mask as cm
 # import export functions
 import src.export.export_geometry as eg
 
+# import extract function
+import src.extract.extract_ids as ei
+
 # import load functions
 import src.load.load_image as li
 
@@ -167,6 +170,17 @@ def _save_results(georef_type, image_id, image, transform, residuals, tps, conf)
 
 if __name__ == "__main__":
 
-    input_ids = get_ids()
+    # define the bounds in which images should be geo-referenced
+    bounds = [613566, 2530845, 1318654, 1965841]
 
-    georef(input_ids)
+    # load all approximate positions of images
+    import src.load.load_shape_data as lsd
+    path_approx_shape = "/data_1/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
+    image_positions = lsd.load_shape_data(path_approx_shape)
+
+    # filter the ids inside the bounds
+    input_ids = ei.extract_ids(bounds, image_positions)
+
+    print(input_ids)
+
+    # georef(input_ids)

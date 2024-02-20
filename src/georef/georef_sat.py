@@ -132,6 +132,7 @@ class GeorefSatellite:
             mask, _ = self._adjust_image_resolution(sat, mask, sat_bounds, image_bounds)
 
         # enhance the image for an improved tie-point detection
+        # TODO: FIX ENHANCE IMAGE; IF TRUE LESS TIE-points are found
         if self.enhance_image:
             image = ei.enhance_image(image, mask)
 
@@ -151,8 +152,8 @@ class GeorefSatellite:
                 style_config = {"title": "Located tie-points for geo-referencing"}
                 di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
 
-        # tweak the image coordinates for maximum tie-points
-        if self.tweak_image:
+        # tweak the image coordinates for maximum tie-points (minimum of 2 points required)
+        if self.tweak_image and tps.shape[0] > 1:
             sat, sat_bounds, sat_transform, tps, conf = self._perform_tweak_image(image, mask, sat, sat_bounds,
                                                                                   sat_transform, tps, conf)
 
@@ -375,6 +376,10 @@ class GeorefSatellite:
         sat_transform = copy.deepcopy(best_sat_transform)
         sat_bounds = copy.deepcopy(best_sat_bounds)
 
+        # manually set conf to 0 if no tie-points were found
+        if tps.shape[0] == 0:
+            conf = 0
+
         print(f"Best tile is {best_tile} with {tps.shape[0]} tie-points ({round(np.mean(conf), 3)})")
 
         return sat, sat_bounds, sat_transform, tps, conf
@@ -447,7 +452,7 @@ class GeorefSatellite:
 
             else:
 
-                print(f"  Points going down ({tweaked_tps.shape[0]} < {best_tps.shape[0]})")
+                print(f"  Points not increasing ({tweaked_tps.shape[0]} < {best_tps.shape[0]})")
                 counter_going_down += 1
 
                 if counter_going_down == self.tweak_max_counter:

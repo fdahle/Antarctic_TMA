@@ -30,6 +30,8 @@ def extract_ids(aoi: Union[Polygon, List[float]],
 
     """
 
+    print("Extract ids")
+
     # set default value for image_directions
     if image_directions is None:
         image_directions = ['L', 'V', 'R']
@@ -67,11 +69,15 @@ def extract_ids(aoi: Union[Polygon, List[float]],
     # filter the points that are intersect this polygon
     filtered_shape_data = gpd.sjoin(image_positions, poly_gpd, predicate="intersects")
 
-    # get all ids from the flight-paths
+    # get all images from the flightpaths that intersect the aoi
     if complete_flightpaths:
 
         # get the TMA numbers from the image_ids
-        filtered_shape_data['TMA_num'] = filtered_shape_data['image_id'].str[2:6]
+        if 'image_id' in filtered_shape_data.columns:
+            filtered_shape_data['TMA_num'] = filtered_shape_data['image_id'].str[2:6]
+
+        # ensure the TMA numbers follow the correct format
+        filtered_shape_data['TMA_num'] = filtered_shape_data['TMA_num'].astype(str).str.zfill(4)
 
         # get the unique values for TMA numbers
         flight_paths = filtered_shape_data['TMA_num'].unique()
@@ -79,6 +85,7 @@ def extract_ids(aoi: Union[Polygon, List[float]],
         # get all ids from database with these TMA numbers
         sql_string = "SELECT image_id FROM images WHERE tma_number IN " + str(tuple(flight_paths))
         complete_data = ctd.execute_sql(sql_string, conn)
+
     else:
         complete_data = pd.DataFrame(filtered_shape_data['image_id'], columns=['image_id'])
 
@@ -90,5 +97,7 @@ def extract_ids(aoi: Union[Polygon, List[float]],
         if direction in ['L', 'V', 'R']:
             images_direction = complete_data[complete_data['image_id'].str.contains(direction)]['image_id']
             ids += images_direction.tolist()
+
+    print(f"{len(ids)} ids are extracted")
 
     return ids

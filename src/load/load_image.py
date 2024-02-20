@@ -7,7 +7,8 @@ from affine import Affine
 from osgeo import gdal
 
 # Global constant for default image path
-DEFAULT_IMAGE_FLD = "C:/Users/Felix/Documents/GitHub/Antarctic_TMA/data/images"
+#DEFAULT_IMAGE_FLD = "C:/Users/Felix/Documents/GitHub/Antarctic_TMA/data/images"
+DEFAULT_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 
 def load_image(image_id, image_path=None, image_type="tif",
                driver='rasterio', return_transform=False):

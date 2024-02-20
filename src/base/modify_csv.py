@@ -23,7 +23,7 @@ def modify_csv(file_path: str, image_id: str, modus: str, data: Optional[Dict[st
 
     # define some parameters
     rows = []
-    existing_columns = {"id"}
+    existing_columns = ["id"]
 
     # check if the file is already existing
     file_exists = os.path.exists(file_path)
@@ -32,9 +32,10 @@ def modify_csv(file_path: str, image_id: str, modus: str, data: Optional[Dict[st
     if file_exists:
         with open(file_path, mode='r', newline='') as f:
             reader = csv.DictReader(f, delimiter=';')
+            existing_columns.extend(reader.fieldnames)  # Extend the list with existing field names
+            existing_columns = list(dict.fromkeys(existing_columns))  # Remove duplicates while preserving order
             for row in reader:
                 rows.append(row)
-                existing_columns.update(row.keys())  # noqa
 
     # Handle 'check' mode directly
     if modus == "check":
@@ -49,7 +50,11 @@ def modify_csv(file_path: str, image_id: str, modus: str, data: Optional[Dict[st
             # Add new row with data if image_id not found
             new_row = {"id": image_id, **data}
             rows.append(new_row)
-            existing_columns.update(data.keys())
+
+            # Ensure new columns are added at the end
+            for key in data.keys():
+                if key not in existing_columns:
+                    existing_columns.append(key)
 
     # For 'delete' mode, remove the specified image_id row
     elif modus == "delete":
@@ -60,14 +65,9 @@ def modify_csv(file_path: str, image_id: str, modus: str, data: Optional[Dict[st
         for col in existing_columns:
             row.setdefault(col, None)
 
-    # Define headers for the CSV file
-    headers = ["id"] + sorted(existing_columns - {"id"})
-
-    # Write changes back to the file, creating it if necessary
     with open(file_path, mode='w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=headers, delimiter=';')
-        if not file_exists:
-            writer.writeheader()
+        writer = csv.DictWriter(f, fieldnames=existing_columns, delimiter=';')
+        writer.writeheader()
         writer.writerows(rows)
 
     return None

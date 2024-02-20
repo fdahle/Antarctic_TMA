@@ -88,8 +88,6 @@ def export_geometry(geometry: Union[str, shape],
     # Create a GeoDataFrame
     gdf = gpd.GeoDataFrame(data, crs=crs)
 
-    print(gdf)
-
     # Easy case: no file existing, or we just overwrite file
     if os.path.isfile(output_path) is False or overwrite_file:
         gdf.to_file(output_path, driver='GeoJSON' if file_extension == '.geojson' else None)
@@ -106,7 +104,7 @@ def export_geometry(geometry: Union[str, shape],
             raise ValueError(f"Key field '{key_field}' not found in the file.")
 
         # key field value already exists
-        if attributes[key_field] in existing_gdf[key_field].values:
+        if existing_gdf[key_field].eq(attributes[key_field]).any():
 
             # remove existing entry if overwrite is True
             if overwrite_entry:

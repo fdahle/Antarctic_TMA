@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import scipy
 
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
@@ -175,7 +175,7 @@ class GeorefSatellite:
 
             if self.display:
                 style_config = {"title": "Located tie-points for geo-referencing"}
-                di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
+                di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
         # tweak the image coordinates for maximum tie-points (minimum of 2 points required)
         if self.tweak_image and tps.shape[0] > 1:
@@ -184,7 +184,7 @@ class GeorefSatellite:
 
             if self.display:
                 style_config = {"title": "Tweaked tie-points for geo-referencing"}
-                di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
+                di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
         # final check if there are enough tie-points
         if tps.shape[0] < self.min_tps_final:
@@ -220,7 +220,19 @@ class GeorefSatellite:
         return transform, residuals, tps, conf
 
     @staticmethod
-    def _adjust_image_resolution(img1, img2, img_bound1, img_bound2):
+    def _adjust_image_resolution(img1: np.ndarray, img2: np.ndarray, img_bound1: List[int],
+                                 img_bound2: List[int]) -> Tuple[np.ndarray, Tuple[float, float]]:
+        """
+        Adjusts the resolution of the second image to match that of the first image based on their respective bounds.
+        Args:
+            img1 (np.ndarray): The reference image with known resolution.
+            img2 (np.ndarray): The image to be adjusted.
+            img_bound1 (List[int]): The bounds of the first image (x_min, y_min, x_max, y_max).
+            img_bound2 (List[int]): The bounds of the second image (x_min, y_min, x_max, y_max).
+        Returns:
+            resampled_img2 (np.ndarray): The adjusted image
+            zoom_factors (Tuple[float, float]): The zoom factors (zoom_factor_x, zoom_factor_y) used for adjustment.
+        """
 
         # deepcopy image 2 to not change the original
         img2 = copy.deepcopy(img2)
@@ -258,7 +270,17 @@ class GeorefSatellite:
         return resampled_img2, (zoom_factor_x, zoom_factor_y)
 
     @staticmethod
-    def _find_footprint_direction(img, points, step_size):
+    def _find_footprint_direction(img: np.ndarray, points: np.ndarray, step_size: int) -> Tuple[int, int]:
+        """
+        Finds the direction to adjust the footprint based on the distribution of tie points.
+        Args:
+            img (np.ndarray): The image for which the footprint direction is being determined.
+            points (np.ndarray): An array of tie points.
+            step_size (int): The step size in pixels to adjust the footprint.
+        Returns:
+            step_y (int): The adjustment in y direction.
+            step_x (int): The adjustment in x direction.
+        """
 
         # Validate input image dimensions
         if img.ndim not in [2, 3]:
@@ -295,7 +317,31 @@ class GeorefSatellite:
 
         return step_y, step_x
 
-    def _perform_locate_image(self, img, mask, sat, sat_bounds, sat_transform, tps, conf):
+    def _perform_locate_image(self, img: np.ndarray, mask: Optional[np.ndarray], sat: np.ndarray,
+                              sat_bounds: List[int], sat_transform: np.ndarray, tps: np.ndarray,
+                              conf: np.ndarray) -> Tuple[np.ndarray, List[int], np.ndarray, np.ndarray, np.ndarray]:
+        """
+            Attempts to locate the image within the satellite imagery by adjusting its position to maximize
+            the number of tie points. This method iterates through different positions around the initial guess,
+            trying to find a location with a higher number of relevant tie points, which indicate a better alignment
+             between the input image and the satellite imagery.
+        Args:
+            img (np.ndarray): The input image to be geo-referenced.
+            mask (Optional[np.ndarray]): An optional mask image to be applied, ignoring tie-points from the masked
+                pixels. Defaults to None.
+            sat (np.ndarray): The initial satellite image against which the input image will be compared.
+            sat_bounds (List[int]): The bounds of the initial satellite image (x_min, y_min, x_max, y_max).
+            sat_transform (np.ndarray): The transformation matrix associated with the initial satellite image.
+            tps (np.ndarray): The initial tie points found between the input image and the satellite image.
+            conf (np.ndarray): The confidence scores associated with the initial tie points.
+        Returns:
+            sat (np.ndarray): The updated satellite image that best matches the input image after location adjustment.
+            sat_bounds (List[int]): The updated bounds of the satellite image after the location adjustment.
+            sat_transform (np.ndarray): The updated transformation matrix of the satellite image after location
+                adjustment.
+            tps (np.ndarray): The updated tie points between the input image and the best-matching satellite image.
+            conf (np.ndarray): The updated confidence scores associated with the updated tie points.
+        """
 
         print("Locate image position")
 
@@ -403,13 +449,38 @@ class GeorefSatellite:
 
         # manually set conf to 0 if no tie-points were found
         if tps.shape[0] == 0:
-            conf = 0
+            conf = np.zeros([0])
 
-        print(f"Best tile is {best_tile} with {tps.shape[0]} tie-points ({round(np.mean(conf), 3)})")
+        # get average conf
+        conf_mean: float = np.mean(conf).astype(float)  # noqa
+
+        print(f"Best tile is {best_tile} with {tps.shape[0]} tie-points ({round(conf_mean, 3)})")
 
         return sat, sat_bounds, sat_transform, tps, conf
 
-    def _perform_tweak_image(self, img, mask, sat, sat_bounds, sat_transform, tps, conf):
+    def _perform_tweak_image(self, img: np.ndarray, mask: Optional[np.ndarray], sat: np.ndarray,
+                             sat_bounds: List[int], sat_transform: np.ndarray, tps: np.ndarray,
+                             conf: np.ndarray) -> Tuple[np.ndarray, List[int], np.ndarray, np.ndarray, np.ndarray]:
+        """
+            This method tweaks the position of the input image by adjusting its coordinates in small increments,
+            aiming to find a better alignment with the satellite image based on the distribution of tie points.
+        Args:
+            img (np.ndarray): The input image to be geo-referenced.
+            mask (Optional[np.ndarray]): An optional mask image to be applied, ignoring tie-points from the masked
+                pixels. Defaults to None.
+            sat (np.ndarray): The satellite image against which the input image will be compared.
+            sat_bounds (List[int]): The bounds of the satellite image (x_min, y_min, x_max, y_max).
+            sat_transform (np.ndarray): The transformation matrix associated with the satellite image.
+            tps (np.ndarray): The initial tie points found between the input image and the satellite image.
+            conf (np.ndarray): The confidence scores associated with the initial tie points.
+        Returns:
+            sat (np.ndarray): The updated satellite image that best matches the input image after location adjustment.
+            sat_bounds (List[int]): The updated bounds of the satellite image after the location adjustment.
+            sat_transform (np.ndarray): The updated transformation matrix of the satellite image after location
+                adjustment.
+            tps (np.ndarray): The updated tie points between the input image and the best-matching satellite image.
+            conf (np.ndarray): The updated confidence scores associated with the updated tie points.
+        """
 
         print("Tweak image position")
 

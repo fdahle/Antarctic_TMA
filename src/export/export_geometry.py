@@ -103,12 +103,13 @@ def export_geometry(geometry: Union[str, shape],
         if key_field not in existing_gdf:
             raise ValueError(f"Key field '{key_field}' not found in the file.")
 
-        # key field value already exists
-        if existing_gdf[key_field].eq(attributes[key_field]).any():
+        # check if key field value already exists
+        if attributes[key_field].iloc[0] in existing_gdf[key_field].values:
 
             # remove existing entry if overwrite is True
             if overwrite_entry:
-                existing_gdf = existing_gdf[existing_gdf[key_field] != attributes[key_field]]
+
+                existing_gdf = existing_gdf[existing_gdf[key_field] != attributes[key_field].iloc[0]]
 
             # raise error because we are not allowed to overwrite
             else:

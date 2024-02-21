@@ -93,6 +93,7 @@ def display_images(images: List[Any],
 
         # deep copy image to not change it
         img = copy.deepcopy(enum_img)
+        img = np.asarray(img)
 
         # get ax for that image
         ax = axes[idx]

@@ -7,9 +7,6 @@ from typing import Optional, Tuple, Union
 from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
-# import loading functions
-import src.load.load_satellite as ls
-
 # import base functions
 import src.base.enhance_image as ei
 import src.base.find_tie_points as ftp
@@ -22,16 +19,44 @@ import src.display.display_images as di
 # import georef snippet functions
 import src.georef.snippets.calc_transform as ct
 
+# import loading functions
+import src.load.load_satellite as ls
+
 
 class GeorefSatellite:
 
     def __init__(self,
-                 min_tps_final=25,
-                 locate_image=True, location_max_order=3, location_overlap=1 / 3,
-                 tweak_image=True, tweak_max_iterations=10, tweak_step_size=2500, tweak_max_counter=2,
-                 enhance_image=True, transform_method="rasterio", transform_order=3,
-                 filter_outliers=True,
-                 display=False):
+                 min_tps_final: int = 25,
+                 locate_image: bool = True, location_max_order: int = 3, location_overlap: float = 1 / 3,
+                 tweak_image: bool = True, tweak_max_iterations: int = 10,
+                 tweak_step_size: int = 2500, tweak_max_counter: int = 2,
+                 enhance_image: bool = True, transform_method: str = "rasterio", transform_order: int = 3,
+                 filter_outliers: bool = True,
+                 display: bool = False):
+        """
+                Initialize the GeorefSatellite class with various settings for geo-referencing satellite images.
+
+        Args:
+            min_tps_final (int): Minimum number of tie points required for the final geo-referencing process.
+                Defaults to 25.
+            locate_image (bool): Whether to attempt locating the image within a broader area. Defaults to True.
+            location_max_order (int): The maximum order to attempt for image location, affecting the search breadth.
+                Defaults to 3.
+            location_overlap (float): The overlap fraction between search tiles, influencing the granularity of the
+                search. Defaults to 1/3.
+            tweak_image (bool): Whether to refine the image positioning for better tie point matching. Defaults to True.
+            tweak_max_iterations (int): The maximum number of iterations for tweaking the image position.
+                Defaults to 10.
+            tweak_step_size (int): The step size in pixels for each tweak iteration. Defaults to 2500.
+            tweak_max_counter (int): The maximum count of non-improving tweaks before stopping. Defaults to 2.
+            enhance_image (bool): Whether to enhance the image before tie point detection, which can improve matching.
+                Defaults to True.
+            transform_method (str): The method used for the transformation calculation. Defaults to "rasterio".
+            transform_order (int): The order of transformation for the geo-referencing process. Defaults to 3.
+            filter_outliers (bool): Whether to filter outliers in the tie point matching process. Defaults to True.
+            display (bool): Whether to display intermediate images and tie points for debugging purposes.
+                Defaults to False.
+        """
 
         # settings for tps
         self.min_tps_final = min_tps_final

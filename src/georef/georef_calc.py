@@ -6,12 +6,17 @@ from shapely.geometry import LineString, Point, Polygon
 # import georef snippet functions
 import src.georef.snippets.calc_transform as ct
 
+debug_show_image_footprint = False
+
 class GeorefCalc:
 
-    def __init__(self):
+    def __init__(self, transform_method="rasterio", transform_order=3,):
 
         self.min_nr_of_images = 2
         self.max_range = 4
+
+        self.transform_method = transform_method
+        self.transform_order = transform_order
 
     def georeference(self, image, image_id, georeferenced_ids, georeferenced_footprints):
 
@@ -32,19 +37,34 @@ class GeorefCalc:
         image_footprint = self._derive_image_geometry(image_id, image_position,
                                                       georeferenced_ids, georeferenced_footprints)
 
-        print(image_position)
-        print(image_footprint)
+        if debug_show_image_footprint:
+            style_config = {
+                'labels': [georeferenced_ids, None, image_id, None],
+                'colors': ['blue', 'blue', 'red', 'red'],
+            }
 
-        import src.display.display_shapes as ds
-        ds.display_shapes([georeferenced_centers, georeferenced_footprints,
-                           image_position, image_footprint], normalize=True)
+            import src.display.display_shapes as ds
+            ds.display_shapes([georeferenced_centers, georeferenced_footprints,
+                               image_position, image_footprint],
+                              style_config=style_config, normalize=True)
 
+        # get corners from footprint excluding the repeated last point
+        tps_abs = np.asarray(list(image_footprint.exterior.coords)[:-1])
 
-        #transform, residuals = ct.calc_transform(image, tps,
-        #                                         transform_method=self.transform_method,
-        #                                         gdal_order=self.transform_order)
+        # create tps for the image and sort them
+        tps_img = np.array([[0, 0], [image.shape[1], 0], [image.shape[1], image.shape[0]], [0, image.shape[0]]])
 
-        #return transform, residuals, tps, conf
+        # create merged tie-point array
+        tps = np.concatenate((tps_abs, tps_img), axis=1)
+
+        # confidence is always 1
+        conf = np.ones(tps.shape[0])
+
+        transform, residuals = ct.calc_transform(image, tps,
+                                                 transform_method=self.transform_method,
+                                                 gdal_order=self.transform_order)
+
+        return transform, residuals, tps, conf
 
 
     def _derive_image_position(self, image_id, georeferenced_ids, georeferenced_centers):

@@ -1,6 +1,9 @@
 import pandas as pd
 import psycopg2
+import sqlite3
 import warnings
+
+from typing import Optional
 
 # Global psql constants
 PSQL_HOST = "127.0.0.1"
@@ -21,16 +24,20 @@ def establish_connection():
     )
 
 
-def execute_sql(sql_string, conn):
+def execute_sql(sql_string: str, conn: sqlite3.Connection) -> Optional[pd.DataFrame]:
     """
-    Execute the sql string and return the data from the database.
+    Executes an SQL string using a given database connection and returns the data as a pandas DataFrame
+    for SELECT queries, or commits the action for non-SELECT queries without returning data.
+
     Args:
-        sql_string:
-        conn:
+        sql_string (str): The SQL query string to be executed.
+        conn (sqlite3.Connection): The database connection object.
 
     Returns:
-        data_frame:
+        Optional[pd.DataFrame]: A pandas DataFrame containing the result of the SELECT query, or None
+        for non-SELECT queries.
     """
+
     # get cursor for this connection
     cursor = conn.cursor()
 
@@ -55,3 +62,5 @@ def execute_sql(sql_string, conn):
         # execute the edit
         cursor.execute(sql_string)
         conn.commit()
+
+        return None

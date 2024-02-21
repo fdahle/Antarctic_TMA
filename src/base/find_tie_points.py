@@ -951,7 +951,7 @@ class TiePointDetector:
         """
         Selects spatially distributed points based on confidence scores and image dimensions.
 
-        This method divides the image into a grid and attempts to select points from as many
+        This method divides the image into a grid and attempts to select points from as much
         different grid cells as possible, prioritizing points with higher confidence scores.
         If not enough unique cells can be filled to reach the desired number of points,
         it back-fills with the highest confidence points not yet selected.

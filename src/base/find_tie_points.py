@@ -111,95 +111,98 @@ class TiePointDetector:
             assert (input_img2.shape[0] == mask2.shape[0] and
                     input_img2.shape[1] == mask2.shape[1])
 
-        # we handle the warnings ourselves -> ignore them
-        with np.errstate(divide='ignore', invalid='ignore'), warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)  # Ignore runtime warnings, e.g., mean of empty slice
+        try:
+            # we handle the warnings ourselves -> ignore them
+            with np.errstate(divide='ignore', invalid='ignore'), warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)  # Ignore runtime warnings, e.g., mean of empty slice
 
-            # prepare the images
-            img1, img2 = self._prepare_images(input_img1, input_img2)
+                # prepare the images
+                img1, img2 = self._prepare_images(input_img1, input_img2)
 
-            # initial tie-point matching
-            tps, conf = self._perform_initial_matching(img1, img2)
+                # initial tie-point matching
+                tps, conf = self._perform_initial_matching(img1, img2)
 
-            # mask initial tie-points
-            tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
+                # mask initial tie-points
+                tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
 
-            # display the initial tie-points
-            if self.display:
-                style_config = {"title": f"{len(conf)} initial Tie-points"}
-                di.display_images([img1, img2], tie_points=tps, tie_points_conf=list(conf),
-                                  style_config=style_config)
-
-            if tps.shape[0] < self.min_resized_points:
-                self.logger.print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})",
-                                  color="WARNING")
-                return np.empty((0, 4)), np.empty((0, 1))
-
-            # optional additional matching
-            if self.matching_additional:
-                # additional tie-point matching
-                tps_additional, conf_additional = self._perform_additional_matching(img1, img2, tps)
-
-                # mask additional tie-points
-                tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional, mask1, mask2)
-
-                # display the additional tie-points
+                # display the initial tie-points
                 if self.display:
-                    style_config = {"title": f"{len(conf_additional)} additional Tie-points"}
-                    di.display_images([img1, img2],
-                                      tie_points=tps_additional, tie_points_conf=list(conf_additional),
+                    style_config = {"title": f"{len(conf)} initial Tie-points"}
+                    di.display_images([img1, img2], tie_points=tps, tie_points_conf=list(conf),
                                       style_config=style_config)
 
-                # either we keep the resized points or just use the additional ones
-                if self.keep_resized_points:
-                    tps = np.concatenate((tps, tps_additional))
-                    conf = np.concatenate((conf, conf_additional))
-                else:
-                    tps = tps_additional
-                    conf = conf_additional
+                if tps.shape[0] < self.min_resized_points:
+                    self.logger.print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})",
+                                      color="WARNING")
+                    return np.empty((0, 4)), np.empty((0, 1))
 
-            # optional extra matching
-            if self.matching_extra:
-                # extra tie-point matching
-                tps_extra, conf_extra = self._perform_extra_matching(img1, img2, mask1, mask2, tps, conf)
+                # optional additional matching
+                if self.matching_additional:
+                    # additional tie-point matching
+                    tps_additional, conf_additional = self._perform_additional_matching(img1, img2, tps)
 
-                # mask extra tie-points
-                tps_extra, conf_extra = self._mask_tie_points(tps_extra, conf_extra, mask1, mask2)
+                    # mask additional tie-points
+                    tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional, mask1, mask2)
 
-                # display the additional tie-points
+                    # display the additional tie-points
+                    if self.display:
+                        style_config = {"title": f"{len(conf_additional)} additional Tie-points"}
+                        di.display_images([img1, img2],
+                                          tie_points=tps_additional, tie_points_conf=list(conf_additional),
+                                          style_config=style_config)
+
+                    # either we keep the resized points or just use the additional ones
+                    if self.keep_resized_points:
+                        tps = np.concatenate((tps, tps_additional))
+                        conf = np.concatenate((conf, conf_additional))
+                    else:
+                        tps = tps_additional
+                        conf = conf_additional
+
+                # optional extra matching
+                if self.matching_extra:
+                    # extra tie-point matching
+                    tps_extra, conf_extra = self._perform_extra_matching(img1, img2, mask1, mask2, tps, conf)
+
+                    # mask extra tie-points
+                    tps_extra, conf_extra = self._mask_tie_points(tps_extra, conf_extra, mask1, mask2)
+
+                    # display the additional tie-points
+                    if self.display:
+                        style_config = {"title": f"{len(conf_extra)} extra Tie-points"}
+                        di.display_images([img1, img2],
+                                          tie_points=tps_extra, tie_points_conf=list(conf_extra),
+                                          style_config=style_config)
+
+                    # add the extra tie-points
+                    tps = np.concatenate((tps, tps_extra))
+                    conf = np.concatenate((conf, conf_extra))
+
+                    # remove duplicates in tps and conf (can be that the same tie-points are detected
+                    # in additional and extra)
+                    tps, unique_indices = np.unique(tps, return_index=True, axis=0)
+                    tps = tps.astype(int)
+                    conf = conf[unique_indices]
+
+                # apply threshold filter
+                tps, conf = self._filter_with_threshold(tps, conf)
+
+                # apply outlier filter
+                tps, conf = self._filter_outliers(tps, conf)
+
+                # average the tie-points for logical consistency (same tie-points pointing to different other tie-points)
+                # are removed
+                tps, conf = self._average_tie_points(tps, conf, [0, 1])
+                tps, conf = self._average_tie_points(tps, conf, [2, 3])
+
+                # display the final tie-points
                 if self.display:
-                    style_config = {"title": f"{len(conf_extra)} extra Tie-points"}
+                    style_config = {"title": f"{len(conf)} final Tie-points"}
                     di.display_images([img1, img2],
-                                      tie_points=tps_extra, tie_points_conf=list(conf_extra),
+                                      tie_points=tps, tie_points_conf=list(conf),
                                       style_config=style_config)
-
-                # add the extra tie-points
-                tps = np.concatenate((tps, tps_extra))
-                conf = np.concatenate((conf, conf_extra))
-
-                # remove duplicates in tps and conf (can be that the same tie-points are detected
-                # in additional and extra)
-                tps, unique_indices = np.unique(tps, return_index=True, axis=0)
-                tps = tps.astype(int)
-                conf = conf[unique_indices]
-
-            # apply threshold filter
-            tps, conf = self._filter_with_threshold(tps, conf)
-
-            # apply outlier filter
-            tps, conf = self._filter_outliers(tps, conf)
-
-            # average the tie-points for logical consistency (same tie-points pointing to different other tie-points)
-            # are removed
-            tps, conf = self._average_tie_points(tps, conf, [0, 1])
-            tps, conf = self._average_tie_points(tps, conf, [2, 3])
-
-            # display the final tie-points
-            if self.display:
-                style_config = {"title": f"{len(conf)} final Tie-points"}
-                di.display_images([img1, img2],
-                                  tie_points=tps, tie_points_conf=list(conf),
-                                  style_config=style_config)
+        except (Exception,):
+            return np.empty((0, 4)), np.empty((0, 1))
 
         return tps, conf
 

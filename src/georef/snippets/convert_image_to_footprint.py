@@ -2,12 +2,11 @@ import numpy as np
 import rasterio.features
 import shapely.ops
 
-from affine import Affine
 from numpy import ndarray
 from shapely.geometry import Polygon, MultiPolygon
 
 
-def convert_image_to_footprint(image: ndarray, transform: Affine, no_data_value: int = 0) -> Polygon:
+def convert_image_to_footprint(image: ndarray, transform: ndarray, no_data_value: int = 0) -> Polygon:
     """
     Converts a raster image into a footprint polygon by creating a mask to identify
     valid data points, converting these points to polygons, and then simplifying and
@@ -15,7 +14,7 @@ def convert_image_to_footprint(image: ndarray, transform: Affine, no_data_value:
 
     Args:
         image (ndarray): The input raster image as a NumPy array.
-        transform (Affine): The affine transform associated with the raster image,
+        transform (ndarray): The affine transform associated with the raster image,
                             which converts pixel coordinates to spatial coordinates.
         no_data_value (int): The value in the raster that represents no data.
                              Pixels with this value are excluded from the footprint. Defaults to 0.

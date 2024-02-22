@@ -1,6 +1,7 @@
 import cv2
-
 import numpy as np
+
+from typing import Optional, Tuple
 
 # import base functions
 import src.base.enhance_image as eh
@@ -12,9 +13,24 @@ import src.georef.snippets.calc_transform as ct
 
 class GeorefImage:
 
-    def __init__(self, enhance_image=True, enhance_georef_images=True,
-                 transform_method="rasterio", transform_order=3,
-                 filter_outliers=True):
+    def __init__(self, enhance_image: bool = True, enhance_georef_images: bool = True,
+                 transform_method: str = "rasterio", transform_order: int = 3,
+                 filter_outliers: bool = True) -> None:
+        """
+        Initialize the GeorefImage class with various settings for geo-referencing historical images
+        with neighbouring, already geo-referenced historical images.
+        Args:
+            enhance_image (bool): Whether to enhance the input image before geo-referencing.
+                Defaults to True.
+            enhance_georef_images (bool): Whether to enhance the already geo-referenced images.
+                Defaults to True.
+            transform_method (str): The method used for transformation calculations.
+                Defaults to "rasterio".
+            transform_order (int): The order of transformation for geo-referencing.
+                Defaults to 3.
+            filter_outliers (bool): Whether to filter outliers in tie points detection.
+                Defaults to True.
+        """
 
         # settings for enhance image
         self.enhance_image = enhance_image
@@ -30,9 +46,29 @@ class GeorefImage:
         self.transform_method = transform_method
         self.transform_order = transform_order
 
-    def georeference(self, image, georeferenced_images, georeferenced_transforms,
-                     mask=None, georeferenced_masks=None):
-
+    def georeference(self, image: np.ndarray, georeferenced_images: list[np.ndarray],
+                     georeferenced_transforms: list, mask: np.ndarray = None,
+                     georeferenced_masks: list[np.ndarray] = None) -> Tuple[Optional[np.ndarray],
+                                                                            Optional[np.ndarray],
+                                                                            Optional[np.ndarray],
+                                                                            Optional[np.ndarray]]:
+        """
+        Performs the geo-referencing on an image using a list of neighbouring geo-referenced images
+        and their transformations. Possible to filter tie-points with masks.
+        Args:
+            image (np.ndarray): The input image to be georeferenced.
+            georeferenced_images (list[np.ndarray]): A list of geo-referenced images.
+            georeferenced_transforms (list): A list of transformations corresponding to the geo-referenced
+                images.
+            mask (np.ndarray, optional): The mask for the input image. Defaults to None.
+            georeferenced_masks (list[np.ndarray], optional): A list of masks for each georeferenced image.
+                Defaults to None.
+        Returns:
+            transform (np.ndarray): The transformation matrix of the geo-referenced image as a NumPy array.
+            residuals(np.ndarray): The residuals of the transformation points as a NumPy array.
+            tps (np.ndarray): The tie points between the input image and the satellite image as a NumPy array.
+            conf (np.ndarray): The confidence scores associated with the tie points as a NumPy array.
+        """
         tps = np.empty([0, 4])
         conf = np.empty([0, 1])
 
@@ -78,6 +114,7 @@ class GeorefImage:
 
             print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC")
 
+        # calculate the transformation-matrix
         transform, residuals = ct.calc_transform(image, tps,
                                                  transform_method=self.transform_method,
                                                  gdal_order=self.transform_order)

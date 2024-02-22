@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import scipy
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
@@ -22,6 +22,8 @@ import src.georef.snippets.calc_transform as ct
 # import loading functions
 import src.load.load_satellite as ls
 
+debug_display_steps = False
+
 
 class GeorefSatellite:
 
@@ -31,11 +33,10 @@ class GeorefSatellite:
                  tweak_image: bool = True, tweak_max_iterations: int = 10,
                  tweak_step_size: int = 2500, tweak_max_counter: int = 2,
                  enhance_image: bool = True, transform_method: str = "rasterio", transform_order: int = 3,
-                 filter_outliers: bool = True,
-                 display: bool = False):
+                 filter_outliers: bool = True):
         """
-                Initialize the GeorefSatellite class with various settings for geo-referencing satellite images.
-
+        Initialize the GeorefSatellite class with various settings for geo-referencing historical images
+        with modern geo-referenced satellite images.
         Args:
             min_tps_final (int): Minimum number of tie points required for the final geo-referencing process.
                 Defaults to 25.
@@ -54,8 +55,6 @@ class GeorefSatellite:
             transform_method (str): The method used for the transformation calculation. Defaults to "rasterio".
             transform_order (int): The order of transformation for the geo-referencing process. Defaults to 3.
             filter_outliers (bool): Whether to filter outliers in the tie point matching process. Defaults to True.
-            display (bool): Whether to display intermediate images and tie points for debugging purposes.
-                Defaults to False.
         """
 
         # settings for tps
@@ -85,16 +84,14 @@ class GeorefSatellite:
         # initialize tie point detector
         self.tp_finder = ftp.TiePointDetector(matching_method="lightglue")
 
-        self.display = display
-
     def georeference(self, input_image: np.ndarray, approx_footprint: Union[Polygon, str],
                      mask: Optional[np.ndarray] = None, angle: float = 0,
                      month: int = 0) -> Tuple[Optional[np.ndarray], Optional[np.ndarray],
-                                              Optional[np.ndarray], Optional[list]]:
+                                              Optional[np.ndarray], Optional[np.ndarray]]:
         """
         Geo-references an input image by aligning it with a satellite image based on the provided approximate footprint,
-        optional mask, rotation angle, and month for satellite imagery.
-
+        optional mask, rotation angle, and month for satellite imagery. This method uses tie-point matching to find
+        corresponding points between the input image and the satellite image, and then calculates a transformation.
         Args:
             input_image (np.ndarray): The image to be geo-referenced as a NumPy array.
             approx_footprint (Union[Polygon, str]): An object representing the approximate footprint of the input image,
@@ -104,12 +101,11 @@ class GeorefSatellite:
             angle (float, optional): The rotation angle in degrees to be applied to the image and mask. Defaults to 0.
             month (int, optional): The month for which the satellite image is to be loaded. This parameter is used to
                 select the appropriate satellite imagery. Defaults to 0.
-
         Returns:
-            transform (np.ndarray): The transformation matrix of the geo-referenced image as a NumPy array.
-            residuals(float): The residuals from the transformation.
-            tps
-            conf
+            transform (Affine): The transformation matrix of the geo-referenced image as a NumPy array.
+            residuals(np.ndarray): The residuals of the transformation points as a NumPy array.
+            tps (np.ndarray): The tie points between the input image and the satellite image as a NumPy array.
+            conf (np.ndarray): The confidence scores associated with the tie points as a NumPy array.
         Raises:
             Exception: If no satellite image is available for the given bounds and month.
         """
@@ -164,7 +160,7 @@ class GeorefSatellite:
         # initial tie-point matching
         tps, conf = self.tp_finder.find_tie_points(sat, image, None, mask)
 
-        if self.display:
+        if debug_display_steps:
             style_config = {"title": "Initial tie-points for geo-referencing"}
             di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
 
@@ -173,7 +169,7 @@ class GeorefSatellite:
             sat, sat_bounds, sat_transform, tps, conf = self._perform_locate_image(image, mask, sat, sat_bounds,
                                                                                    sat_transform, tps, conf)
 
-            if self.display:
+            if debug_display_steps:
                 style_config = {"title": "Located tie-points for geo-referencing"}
                 di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
@@ -182,7 +178,7 @@ class GeorefSatellite:
             sat, sat_bounds, sat_transform, tps, conf = self._perform_tweak_image(image, mask, sat, sat_bounds,
                                                                                   sat_transform, tps, conf)
 
-            if self.display:
+            if debug_display_steps:
                 style_config = {"title": "Tweaked tie-points for geo-referencing"}
                 di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
@@ -213,6 +209,7 @@ class GeorefSatellite:
         absolute_points = np.array([sat_transform * tuple(point) for point in tps[:, 0:2]])
         tps[:, 0:2] = absolute_points
 
+        # calculate the transformation-matrix
         transform, residuals = ct.calc_transform(input_image, tps,
                                                  transform_method=self.transform_method,
                                                  gdal_order=self.transform_order)
@@ -220,8 +217,8 @@ class GeorefSatellite:
         return transform, residuals, tps, conf
 
     @staticmethod
-    def _adjust_image_resolution(img1: np.ndarray, img2: np.ndarray, img_bound1: List[int],
-                                 img_bound2: List[int]) -> Tuple[np.ndarray, Tuple[float, float]]:
+    def _adjust_image_resolution(img1: np.ndarray, img2: np.ndarray, img_bound1: list[int],
+                                 img_bound2: list[int]) -> Tuple[np.ndarray, Tuple[float, float]]:
         """
         Adjusts the resolution of the second image to match that of the first image based on their respective bounds.
         Args:
@@ -318,13 +315,13 @@ class GeorefSatellite:
         return step_y, step_x
 
     def _perform_locate_image(self, img: np.ndarray, mask: Optional[np.ndarray], sat: np.ndarray,
-                              sat_bounds: List[int], sat_transform: np.ndarray, tps: np.ndarray,
-                              conf: np.ndarray) -> Tuple[np.ndarray, List[int], np.ndarray, np.ndarray, np.ndarray]:
+                              sat_bounds: list[int], sat_transform: np.ndarray, tps: np.ndarray,
+                              conf: np.ndarray) -> Tuple[np.ndarray, list[int], np.ndarray, np.ndarray, np.ndarray]:
         """
-            Attempts to locate the image within the satellite imagery by adjusting its position to maximize
-            the number of tie points. This method iterates through different positions around the initial guess,
-            trying to find a location with a higher number of relevant tie points, which indicate a better alignment
-             between the input image and the satellite imagery.
+        Attempts to locate the image within the satellite imagery by adjusting its position to maximize
+        the number of tie points. This method iterates through different positions around the initial guess,
+        trying to find a location with a higher number of relevant tie points, which indicate a better alignment
+        between the input image and the satellite imagery.
         Args:
             img (np.ndarray): The input image to be geo-referenced.
             mask (Optional[np.ndarray]): An optional mask image to be applied, ignoring tie-points from the masked
@@ -450,20 +447,22 @@ class GeorefSatellite:
         # manually set conf to 0 if no tie-points were found
         if tps.shape[0] == 0:
             conf = np.zeros([0])
-
-        # get average conf
-        conf_mean: float = np.mean(conf).astype(float)  # noqa
+            conf_mean = 0
+        else:
+            # get average conf
+            # noinspection PyTypeChecker
+            conf_mean: float = np.mean(conf)
 
         print(f"Best tile is {best_tile} with {tps.shape[0]} tie-points ({round(conf_mean, 3)})")
 
         return sat, sat_bounds, sat_transform, tps, conf
 
     def _perform_tweak_image(self, img: np.ndarray, mask: Optional[np.ndarray], sat: np.ndarray,
-                             sat_bounds: List[int], sat_transform: np.ndarray, tps: np.ndarray,
-                             conf: np.ndarray) -> Tuple[np.ndarray, List[int], np.ndarray, np.ndarray, np.ndarray]:
+                             sat_bounds: list[int], sat_transform: np.ndarray, tps: np.ndarray,
+                             conf: np.ndarray) -> Tuple[np.ndarray, list[int], np.ndarray, np.ndarray, np.ndarray]:
         """
-            This method tweaks the position of the input image by adjusting its coordinates in small increments,
-            aiming to find a better alignment with the satellite image based on the distribution of tie points.
+        This method tweaks the position of the input image by adjusting its coordinates in small increments,
+        aiming to find a better alignment with the satellite image based on the distribution of tie points.
         Args:
             img (np.ndarray): The input image to be geo-referenced.
             mask (Optional[np.ndarray]): An optional mask image to be applied, ignoring tie-points from the masked

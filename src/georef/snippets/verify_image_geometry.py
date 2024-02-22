@@ -1,4 +1,5 @@
 import numpy as np
+import rasterio.transform
 
 from typing import Tuple
 
@@ -21,16 +22,17 @@ def verify_image_geometry(image: np.ndarray, transform: np.ndarray, length_diffe
             False otherwise.
         str: A message string providing feedback on a specific verification check.
             If the image is verified successfully, The string is empty
-
-
     """
 
     # Get the pixel coordinates of the four corners of the image
     rows, cols = image.shape[0], image.shape[1]
     corners = np.array([(0, 0), (0, rows), (cols, rows), (cols, 0)])
 
+    # convert np-array to rasterio transform
+    t_transform = rasterio.transform.Affine(*transform)
+
     # Convert to abs coordinates
-    corners_abs = np.array([transform * xy for xy in corners])
+    corners_abs = np.array([t_transform * xy for xy in corners])
 
     # Calculate distances between consecutive corner points
     distances = [np.linalg.norm(corners_abs[(i + 1) % 4] - corners_abs[i]) for i in range(4)]

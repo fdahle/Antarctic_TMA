@@ -135,10 +135,13 @@ def calc_transform(image, tps, conf=None, transform_method="rasterio",
     # Calculate Residual Errors if the transformation method was successful
     if transform:
         transformed_coords = [transform * (point[2], point[3]) for point in tps]
-        errors = [np.sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2) for (x, y), point in
-                  zip(transformed_coords, tps)]
-        residual_error = np.mean(errors)
+        residuals = [np.sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2) for (x, y), point in
+                     zip(transformed_coords, tps)]
     else:
         raise ValueError("Transform was not successful")
 
-    return transform, residual_error
+    # convert output to numpy array
+    transform = np.array(transform)
+    residuals = np.array(residuals)
+
+    return transform, residuals

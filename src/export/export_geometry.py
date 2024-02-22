@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-from typing import Union, Optional, Dict
+from typing import Union, Optional
 
 import geopandas as gpd
 from shapely.geometry import shape
@@ -10,7 +10,7 @@ from shapely.wkt import loads
 
 def export_geometry(geometry: Union[str, shape],
                     output_path: str,
-                    attributes: Optional[Dict[str, Union[str, int, float]]] = None,
+                    attributes: pd.DataFrame = None,
                     key_field: Optional[str] = None,
                     crs: Union[int, str] = 'EPSG:3031',
                     attach: bool = False,
@@ -24,8 +24,8 @@ def export_geometry(geometry: Union[str, shape],
     Args:
         geometry (Union[str, shape]): A Shapely geometry object or its WKT string representation.
         output_path (str): The file path where the geometry should be saved.
-        attributes (Optional[Dict[str, Union[str, int, float]]], optional): Attributes to be saved
-            alongside the geometry. Defaults to None.
+        attributes (pd.DataFrame): Attributes as a dataframe that can be saved alongside the
+            geometry. Defaults to None.
         key_field (Optional[str], optional): The unique attribute key to identify existing entries
             for updating. Required if 'overwrite_entry' is True.
         crs (Union[int, str], optional): The coordinate reference system to use.

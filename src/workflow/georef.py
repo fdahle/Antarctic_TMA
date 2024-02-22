@@ -3,12 +3,12 @@ import os.path
 import numpy as np
 import pandas as pd
 
-from affine import Affine
 from tqdm import tqdm
 
 # import base functions
 import src.base.connect_to_database as ctd
 import src.base.create_mask as cm
+import src.base.find_overlapping_images as foi
 import src.base.modify_csv as mc
 
 # import export functions
@@ -76,8 +76,14 @@ def georef(input_ids, processed_images=None,
            retry_failed_sat=True, retry_failed_img=True, retry_failed_calc=True,
            retry_invalid_sat=True, retry_invalid_img=True, retry_invalid_calc=True,
            min_complexity=0.0, verify_image_positions=True, distance_threshold=100,
-           calc_types=["sat", "img"],
+           calc_types=None,
            catch=False):
+
+    print("Start georef")
+
+    # set the right calc types
+    if calc_types is None:
+        calc_types = ["sat", "img"]
 
     # flag required for the loop
     keyboard_interrupt = False
@@ -146,7 +152,7 @@ def georef(input_ids, processed_images=None,
 
                 # ignore images with a too low complexity
                 if data_extracted.loc[data_extracted['image_id'] == image_id]['complexity'].iloc[0] < min_complexity:
-                    processed_images[image_id] = {"method": "sat", "status": "invalid",
+                    processed_images[image_id] = {"method": "sat", "status": "failed",
                                                   "reason": "complexity"}
                     continue
 
@@ -277,10 +283,29 @@ def georef(input_ids, processed_images=None,
                 print(f"{image_id} already geo-referenced with image")
                 continue
 
+            # check if image is already invalid
+            if (processed_images.get(image_id, {}).get('method') == "img" and
+                    processed_images.get(image_id, {}).get('status') == "invalid" and
+                    not retry_invalid_img):
+                print(f"{image_id} already invalid")
+                continue
+
+            # check if image did already fail
+            if (processed_images.get(image_id, {}).get('method') == "img" and
+                    processed_images.get(image_id, {}).get('status') == "failed" and
+                    not retry_failed_img):
+                print(f"{image_id} already failed")
+                continue
+
             # try to geo-reference the image
             try:
 
+                # find overlapping images
+                image_ids = foi.find_overlapping_images(image_id)
+
                 # ignore images with no neighbouring images
+                georeferenced_images = []
+                georeferenced_transforms = []
 
                 print(f"Geo-reference {image_id} with image")
 
@@ -289,10 +314,6 @@ def georef(input_ids, processed_images=None,
 
                 # load the mask
                 mask = _prepare_mask(image_id, image, data_fid_marks, data_extracted)
-
-                # get the month of the image
-                month = data_images.loc[
-                    data_images['image_id'] == image_id]['date_month'].iloc[0]
 
                 # check if all required data is there
                 if mask is None:
@@ -317,6 +338,11 @@ def georef(input_ids, processed_images=None,
 
                 # save valid images
                 if valid_image:
+
+                    # get the month of the image
+                    month = data_images.loc[
+                        data_images['image_id'] == image_id]['date_month'].iloc[0]
+
                     _save_results("img", image_id, image, transform, residuals, tps, conf, month)
                     processed_images[image_id] = {"method": "img", "status": "georeferenced",
                                                   "reason": ""}
@@ -390,6 +416,20 @@ def georef(input_ids, processed_images=None,
                 print(f"{image_id} already geo-referenced with calc")
                 continue
 
+            # check if image is already invalid
+            if (processed_images.get(image_id, {}).get('method') == "calc" and
+                    processed_images.get(image_id, {}).get('status') == "invalid" and
+                    not retry_invalid_calc):
+                print(f"{image_id} already invalid")
+                continue
+
+            # check if image did already fail
+            if (processed_images.get(image_id, {}).get('method') == "calc" and
+                    processed_images.get(image_id, {}).get('status') == "failed" and
+                    not retry_failed_calc):
+                print(f"{image_id} already failed")
+                continue
+
             # try to geo-reference the image
             try:
 
@@ -414,6 +454,11 @@ def georef(input_ids, processed_images=None,
 
                 # save valid images
                 if valid_image:
+
+                    # get the month of the image
+                    month = data_images.loc[
+                        data_images['image_id'] == image_id]['date_month'].iloc[0]
+
                     _save_results("calc", image_id, image, transform, residuals, tps, conf, month)
                     processed_images[image_id] = {"method": "calc", "status": "georeferenced",
                                                   "reason": ""}
@@ -476,7 +521,7 @@ def _prepare_mask(image_id: str, image: np.ndarray,
     text_string = data_extracted.loc[data_extracted['image_id'] == image_id]['text_bbox'].iloc[0]
 
     # create text-boxes list
-    text_boxes = [list(group) for group in eval(text_string.replace(";", ","))]
+    text_boxes = [tuple(group) for group in eval(text_string.replace(";", ","))]
 
     # load the mask
     mask = cm.create_mask(image, fid_dict, text_boxes)
@@ -485,7 +530,7 @@ def _prepare_mask(image_id: str, image: np.ndarray,
 
 
 def _save_results(georef_type: str, image_id: str, image: np.ndarray,
-                  transform: Affine, residuals: np.ndarray,
+                  transform: np.ndarray, residuals: np.ndarray,
                   tps: np.ndarray, conf: np.ndarray, month: int):
     """
     This function saves multiple components of the geo-referencing process including the
@@ -510,20 +555,28 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
 
     # save the transform
     path_transform = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_transform.txt"
-    np.savetxt(path_transform, transform, fmt='%.5f')
+    # noinspection PyTypeChecker
+    np.savetxt(path_transform, transform.reshape(3,3), fmt='%.5f')
 
-    # save the points and conf
+    # save the points, conf and residuals
     path_points = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_points.txt"
-    tps_conf = np.concatenate([tps, conf.reshape(-1, 1)], axis=1)
-    np.savetxt(path_points, tps_conf, fmt=['%i', '%i', '%.2f', '%.2f', '%.3f'])
+    tps_conf = np.concatenate([tps, conf.reshape(-1, 1), residuals.reshape((-1, 1))], axis=1)
+    # noinspection PyTypeChecker
+    np.savetxt(path_points, tps_conf, fmt=['%i', '%i', '%.2f', '%.2f', '%.3f', '%.3f'])
+
+    # calculate average values
+    # noinspection PyTypeChecker
+    conf_mean: float = np.mean(conf)
+    # noinspection PyTypeChecker
+    residuals_mean: float = np.mean(residuals)
 
     # define attributes for shapefile
     attributes = {
         'image_id': image_id,
         'month': month,
         'num_tps': tps.shape[0],
-        'avg_conf': round(np.mean(conf), 3),
-        'avg_resi': round(np.mean(residuals), 3),
+        'avg_conf': round(conf_mean, 3),
+        'avg_resi': round(residuals_mean, 3),
     }
     attributes = pd.DataFrame.from_dict(attributes, orient='index').T
 
@@ -569,6 +622,12 @@ if __name__ == "__main__":
            georef_with_satellite=GEOREF_WITH_SATELLITE,
            georef_with_image=GEOREF_WITH_IMAGE,
            georef_with_calc=GEOREF_WITH_CALC,
+           retry_failed_sat=RETRY_FAILED_SAT,
+           retry_failed_img=RETRY_FAILED_IMG,
+           retry_failed_calc=RETRY_FAILED_CALC,
+           retry_invalid_sat=RETRY_INVALID_SAT,
+           retry_invalid_img=RETRY_INVALID_IMG,
+           retry_invalid_calc=RETRY_INVALID_CALC,
            min_complexity=MIN_COMPLEXITY,
            verify_image_positions=VERIFY_IMAGE_POSITIONS,
            distance_threshold=DISTANCE_THRESHOLD,

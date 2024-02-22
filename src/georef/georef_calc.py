@@ -1,43 +1,88 @@
 import numpy as np
+import shapely
 
 from shapely.affinity import translate
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import Point, Polygon
+from typing import Optional, Tuple
 
 # import georef snippet functions
 import src.georef.snippets.calc_transform as ct
 
-debug_show_image_footprint = False
+debug_display_image_footprint = False
+
 
 class GeorefCalc:
 
-    def __init__(self, transform_method="rasterio", transform_order=3,):
+    def __init__(self, min_nr_of_images: int = 3, max_range: int = 4,
+                 transform_method: str = "rasterio", transform_order: str = 3):
+        """
+        Initialize the GeoRefCalc class with various settings for geo-referencing historical images
+        by calculating the footprint of the image derived by already geo-referenced images from the
+        same flight path.
 
-        self.min_nr_of_images = 2
-        self.max_range = 4
+        Args:
+            min_nr_of_images (int): The minimum number of images needed to calculate a position.
+                Defaults to 3.
+            max_range (int): The maximum distance of neighbouring images that are used to calculate
+                the average footprint.
+            transform_method (str): The method used for the transformation calculation.
+                Defaults to "rasterio".
+            transform_order (int): The order of transformation for the geo-referencing process.
+                Defaults to 3.
+        """
+        self.min_nr_of_images = min_nr_of_images
+        self.max_range = max_range
 
         self.transform_method = transform_method
         self.transform_order = transform_order
 
-    def georeference(self, image, image_id, georeferenced_ids, georeferenced_footprints):
+    def georeference(self, image: np.ndarray, image_id: str,
+                     georeferenced_ids: list[str],
+                     georeferenced_footprints: list[shapely.Polygon]) -> Tuple[Optional[np.ndarray],
+                                                                               Optional[np.ndarray],
+                                                                               Optional[np.ndarray],
+                                                                               Optional[np.ndarray]]:
+        """
+        Geo-reference an image using a list of neighbouring geo-referenced images and their footprints.
+        Args:
+            image (np.ndarray): The input image to be georeferenced.
+            image_id (str): The image id of the input image.
+            georeferenced_ids (list[str]): A list of image ids of the geo-referenced images.
+            georeferenced_footprints (list[shapely.Polygon]): A list of footprints of the
+                geo-referenced images.
+        Returns:
+            transform (np.ndarray): The transformation matrix of the geo-referenced image as a NumPy array.
+            residuals(np.ndarray): The residuals of the transformation points as a NumPy array.
+            tps (np.ndarray): The tie points between the input image and the satellite image as a NumPy array.
+            conf (np.ndarray): The confidence scores associated with the tie points as a NumPy array.
+        """
 
         # check if there are enough geo-referenced images to calculate a position
         if len(georeferenced_ids) < self.min_nr_of_images:
             return None, None, None, None
 
-        # check if the image is already geo-referenced -> no calculation needed
-        if image_id in georeferenced_ids:
-            pass
-
         # Get the centroids of the footprints
         georeferenced_centers = [footprint.centroid for footprint in georeferenced_footprints]
 
-        # derive the position of the image
-        image_position = self._derive_image_position(image_id, georeferenced_ids, georeferenced_centers)
+        # check if the image is already geo-referenced -> no calculation needed
+        if image_id in georeferenced_ids:
 
-        image_footprint = self._derive_image_geometry(image_id, image_position,
-                                                      georeferenced_ids, georeferenced_footprints)
+            # get the index of the image in the list
+            index = georeferenced_ids.index(image_id)
 
-        if debug_show_image_footprint:
+            # get the equivalent position & footprint
+            image_position = georeferenced_centers[index]
+            image_footprint = georeferenced_footprints[index]
+
+        # calculate image position and footprint
+        else:
+            # derive the position of the image
+            image_position = self._derive_image_position(image_id, georeferenced_ids, georeferenced_centers)
+
+            image_footprint = self._derive_image_geometry(image_id, image_position,
+                                                          georeferenced_ids, georeferenced_footprints)
+
+        if debug_display_image_footprint:
             style_config = {
                 'labels': [georeferenced_ids, None, image_id, None],
                 'colors': ['blue', 'blue', 'red', 'red'],
@@ -60,14 +105,30 @@ class GeorefCalc:
         # confidence is always 1
         conf = np.ones(tps.shape[0])
 
+        # calculate the transformation-matrix
         transform, residuals = ct.calc_transform(image, tps,
                                                  transform_method=self.transform_method,
                                                  gdal_order=self.transform_order)
 
         return transform, residuals, tps, conf
 
-
-    def _derive_image_position(self, image_id, georeferenced_ids, georeferenced_centers):
+    @staticmethod
+    def _derive_image_position(image_id: str, georeferenced_ids: list[str],
+                               georeferenced_centers: list[Point]) -> Point:
+        """
+        This function calculates the position(=Point) where a new image should be placed based on
+        the spatial arrangement and numerical ID order of existing georeferenced images.
+        It fits a linear model to the positions of georeferenced images, calculates the average
+        adjusted distance between them, and places the new image accordingly on the line.
+        Args:
+            image_id (str): The ID of the new image to be positioned.
+            georeferenced_ids (list[str]): A list of IDs for the already georeferenced images.
+            georeferenced_centers (list[Point]): A list of Shapely Point objects representing
+                the centers of the georeferenced images.
+        Returns:
+            Point: A Shapely Point object representing the calculated position/center for the
+                new image.
+        """
 
         # convert image ids to just their numbers
         image_nr = int(image_id[-4:])
@@ -91,8 +152,9 @@ class GeorefCalc:
         # Calculate adjusted distances between consecutive points, considering their numerical IDs
         distances_adjusted = []
         for i in range(len(georeferenced_centers_sorted) - 1):
-            spatial_distance = Point(georeferenced_centers_sorted[i]).distance(Point(georeferenced_centers_sorted[i+1]))
-            id_difference = abs(georeferenced_numbers_sorted[i+1] - georeferenced_numbers_sorted[i])
+            spatial_distance = Point(georeferenced_centers_sorted[i]).distance(
+                Point(georeferenced_centers_sorted[i + 1]))
+            id_difference = abs(georeferenced_numbers_sorted[i + 1] - georeferenced_numbers_sorted[i])
             adjusted_distance = spatial_distance / max(1, id_difference)  # Avoid division by zero
             distances_adjusted.append(adjusted_distance)
 
@@ -100,8 +162,13 @@ class GeorefCalc:
         avg_distance_adjusted = np.mean(distances_adjusted)
 
         # Find the position where the new image fits in
-        position_index = next((i for i, num in enumerate(georeferenced_numbers_sorted) if num > image_nr), len(georeferenced_numbers_sorted))
+        position_index = next((i for i, num in enumerate(georeferenced_numbers_sorted) if num > image_nr),
+                              len(georeferenced_numbers_sorted))
 
+        # init points to satisfy the linter
+        next_point = prev_point = None
+
+        # calculate the reference point and the next point
         if position_index == 0:
             reference_point = georeferenced_centers_sorted[0]
             next_point = georeferenced_centers_sorted[1]
@@ -145,7 +212,24 @@ class GeorefCalc:
 
         return calculated_point
 
-    def _derive_image_geometry(self, image_id, image_center, georeferenced_ids, georeferenced_footprints):
+    def _derive_image_geometry(self, image_id: str, image_center: Point, georeferenced_ids: list[str],
+                               georeferenced_footprints: list[Polygon]) -> Polygon:
+        """
+        This method derives a footprint polygon for a new image by calculating the weighted
+        average position of the corners of nearby georeferenced footprints. The weights are based
+        on the numerical distance between the new image's ID and the IDs of georeferenced images,
+        favoring closer numerical IDs to influence the derived geometry more strongly.
+        Args:
+            image_id (str): The ID of the new image, used to calculate numerical distances to
+                georeferenced images.
+            image_center (Point): A Shapely Point object representing the center of the new image.
+            georeferenced_ids (List[str]): A list of IDs for georeferenced images.
+            georeferenced_footprints (List[Polygon]): A list of Shapely Polygon objects representing
+                the footprints of georeferenced images.
+        Returns:
+            Polygon: A Shapely Polygon object representing the derived footprint of the new image,
+                adjusted to be centered on the provided image center.
+        """
 
         # convert image ids to just their numbers
         image_nr = int(image_id[-4:])

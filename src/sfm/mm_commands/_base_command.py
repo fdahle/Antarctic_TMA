@@ -1,11 +1,19 @@
 import subprocess
 
 
-class base_mm_command():
+class BaseCommand():
 
-    def __init__(self):
-        pass
+    # specifications defined in the child class
+    required_args = []
+    allowed_args = []
 
+    def __init__(self, project_folder):
+
+        # the path to the project folder
+        self.project_folder = project_folder
+
+        # arguments of this command
+        self.args = {}
 
     def execute_shell_cmd(self, shell_string):
         with subprocess.Popen(["/bin/bash", "-i", "-c", shell_string],
@@ -22,8 +30,8 @@ class base_mm_command():
 
         # check if we have the required arguments
         for r_arg in self.required_args:
-            assert r_arg in m_args, f"{r_arg} is a required argument"
+            assert r_arg in self.args, f"{r_arg} is a required argument"
 
         # check if only allowed arguments were used
-        for arg in m_args:
-            assert arg in allowed_args, f"{arg} is not an allowed argument"
+        for arg in self.args:
+            assert arg in self.allowed_args, f"{arg} is not an allowed argument"

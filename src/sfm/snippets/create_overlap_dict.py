@@ -1,6 +1,6 @@
 from shapely.geometry import Polygon
 
-def get_overlapping_images(image_ids, footprints):
+def create_overlap_dict(image_ids, footprints):
 
     overlap_dict = {}
 

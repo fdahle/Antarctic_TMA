@@ -142,7 +142,8 @@ class TiePointDetector:
                     tps_additional, conf_additional = self._perform_additional_matching(img1, img2, tps)
 
                     # mask additional tie-points
-                    tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional, mask1, mask2)
+                    tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional,
+                                                                            mask1, mask2)
 
                     # display the additional tie-points
                     if self.display:
@@ -158,6 +159,10 @@ class TiePointDetector:
                     else:
                         tps = tps_additional
                         conf = conf_additional
+
+                # sometimes there are 0 tie-points after additional matching -> stop process
+                if tps.shape[0] == 0:
+                    return np.empty((0, 4)), np.empty((0, 1))
 
                 # optional extra matching
                 if self.matching_extra:
@@ -190,8 +195,8 @@ class TiePointDetector:
                 # apply outlier filter
                 tps, conf = self._filter_outliers(tps, conf)
 
-                # average the tie-points for logical consistency (same tie-points pointing to different other tie-points)
-                # are removed
+                # average the tie-points for logical consistency
+                # (same tie-points pointing to different other tie-points are removed)
                 tps, conf = self._average_tie_points(tps, conf, [0, 1])
                 tps, conf = self._average_tie_points(tps, conf, [2, 3])
 

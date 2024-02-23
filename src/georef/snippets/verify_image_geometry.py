@@ -61,18 +61,18 @@ def verify_image_geometry(image: np.ndarray, transform: np.ndarray, length_diffe
 
     # Fail reason 1: Difference between height and width of the image is too big
     if diff > length_difference:
-        return False, f"length: {round(diff, 2)}"
+        return False, f"length:{round(diff, 2)}"
 
     # Fail reason 2: The pixel-size is too big
     elif np.abs(transform[0]) > max_pixel_size or np.abs(transform[4]) > max_pixel_size:
         pix_x = round(transform[0], 4)
         pix_y = round(transform[4], 4)
-        return False, f"pixel size: {pix_x},{pix_y}"
+        return False, f"pixel_size:{pix_x},{pix_y}"
 
     # Fail reason 3: The image is not a rectangle
     elif wrong_angles:
-        wrong_angle_str = ", ".join(f"{angle:.2f}" for angle in wrong_angles)
-        return False, f"angle: {wrong_angle_str}"
+        wrong_angle_str = ",".join(f"{angle:.2f}" for angle in wrong_angles)
+        return False, f"angle:{wrong_angle_str}"
 
     # Success: The image is valid
     else:

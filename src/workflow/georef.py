@@ -2,6 +2,7 @@ import logging
 import os.path
 import numpy as np
 import pandas as pd
+import time
 
 from tqdm import tqdm
 
@@ -78,7 +79,6 @@ def georef(input_ids, processed_images=None,
            min_complexity=0.0, verify_image_positions=True, distance_threshold=100,
            calc_types=None,
            catch=False):
-
     print("Start georef")
 
     # set the right calc types
@@ -147,6 +147,9 @@ def georef(input_ids, processed_images=None,
                 print(f"{image_id} already failed")
                 continue
 
+            # start the timer
+            start = time.time()
+
             # try to geo-reference the image
             try:
 
@@ -179,15 +182,15 @@ def georef(input_ids, processed_images=None,
                 # check if all required data is there
                 if approx_footprint is None:
                     processed_images[image_id] = {"method": "sat", "status": "missing_data",
-                                                  "reason": "approx_footprint"}
+                                                  "reason": "approx_footprint", "time": ""}
                     continue
                 elif mask is None:
                     processed_images[image_id] = {"method": "sat", "status": "missing_data",
-                                                  "reason": "mask"}
+                                                  "reason": "mask", "time": ""}
                     continue
                 elif azimuth is None:
                     processed_images[image_id] = {"method": "sat", "status": "missing_data",
-                                                  "reason": "azimuth"}
+                                                  "reason": "azimuth", "time": ""}
                     continue
 
                 # we need to adapt the azimuth to account for EPSG:3031
@@ -199,8 +202,16 @@ def georef(input_ids, processed_images=None,
 
                 # skip images we can't geo-reference
                 if transform is None:
-                    processed_images[image_id] = {"method": "sat", "status": "failed",
-                                                  "reason": "no_transform"}
+
+                    # images failed due to exception
+                    if tps is None:
+                        processed_images[image_id] = {"method": "sat", "status": "failed",
+                                                      "reason": "exception", "time": time.time() - start}
+                    # too few tps
+                    else:
+                        processed_images[image_id] = {"method": "sat", "status": "failed",
+                                                      "reason": f"too_few_tps:{tps.shape[0]}",
+                                                      "time": time.time() - start}
                     continue
 
                 # verify the geo-referenced image
@@ -210,12 +221,12 @@ def georef(input_ids, processed_images=None,
                 if valid_image:
                     _save_results("sat", image_id, image, transform, residuals, tps, conf, month)
                     processed_images[image_id] = {"method": "sat", "status": "georeferenced",
-                                                  "reason": ""}
+                                                  "reason": "", "time": time.time() - start}
 
                 # set image to invalid if position is wrong
                 else:
                     processed_images[image_id] = {"method": "sat", "status": "invalid",
-                                                  "reason": reason}
+                                                  "reason": reason, "time": time.time() - start}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -227,7 +238,7 @@ def georef(input_ids, processed_images=None,
             except (Exception,) as e:
 
                 processed_images[image_id] = {"method": "sat", "status": "failed",
-                                              "reason": "exception"}
+                                              "reason": "exception", "time": time.time() - start}
 
                 if catch is False:
                     raise e
@@ -259,6 +270,7 @@ def georef(input_ids, processed_images=None,
 
                 # set image to invalid if position is wrong
                 if not valid_image:
+                    # TODO FIX TIMER
                     processed_images[image_id] = {"method": "sat", "status": "invalid",
                                                   "reason": "position"}
                     mc.modify_csv(csv_path, image_id, "add", processed_images[image_id], overwrite=True)
@@ -300,6 +312,9 @@ def georef(input_ids, processed_images=None,
             # try to geo-reference the image
             try:
 
+                # start the timer
+                start = time.time()
+
                 # find overlapping images
                 image_ids = foi.find_overlapping_images(image_id)
 
@@ -318,7 +333,7 @@ def georef(input_ids, processed_images=None,
                 # check if all required data is there
                 if mask is None:
                     processed_images[image_id] = {"method": "img", "status": "missing_data",
-                                                  "reason": "mask"}
+                                                  "reason": "mask", "time": ""}
                     continue
 
                 # the actual geo-referencing
@@ -329,8 +344,9 @@ def georef(input_ids, processed_images=None,
 
                 # skip images we can't geo-reference
                 if transform is None:
+                    # TODO DIFFERENTIATE BETWEEN FAILED AN TOO FEW TPS
                     processed_images[image_id] = {"method": "img", "status": "failed",
-                                                  "reason": "no_transform"}
+                                                  "reason": "no_transform", "time": time.time() - start}
                     continue
 
                 # verify the geo-referenced image
@@ -374,6 +390,8 @@ def georef(input_ids, processed_images=None,
 
                 if keyboard_interrupt is False:
                     mc.modify_csv(csv_path, image_id, "add", processed_images[image_id], overwrite=True)
+
+    # TODO: ADD TIMER
 
     # geo-reference with calc
     if georef_with_calc:
@@ -556,7 +574,7 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
     # save the transform
     path_transform = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_transform.txt"
     # noinspection PyTypeChecker
-    np.savetxt(path_transform, transform.reshape(3,3), fmt='%.5f')
+    np.savetxt(path_transform, transform.reshape(3, 3), fmt='%.5f')
 
     # save the points, conf and residuals
     path_points = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_points.txt"

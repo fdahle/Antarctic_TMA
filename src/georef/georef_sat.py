@@ -185,7 +185,7 @@ class GeorefSatellite:
         # final check if there are enough tie-points
         if tps.shape[0] < self.min_tps_final:
             print(f"Too few tie-points found ({tps.shape[0]}/{self.min_tps_final}) for geo-referencing")
-            return None, None, None, None
+            return None, None, tps, conf
 
         # last filtering of the tie-points
         if self.filter_outliers:

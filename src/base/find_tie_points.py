@@ -28,7 +28,7 @@ class TiePointDetector:
     def __init__(self, matching_method: str, matching_additional: bool = True, matching_extra: bool = True,
                  keep_resized_points: bool = False, min_resized_points: int = 10, num_transform_points: int = 25,
                  min_conf_value: float = 0.0, ransac_value: float = 5.0, average_threshold: float = 10.0,
-                 display: bool = False, verbose: bool = True):
+                 display: bool = False, catch=True, verbose: bool = True):
         """
         Initializes the TiePointDetector with specified configuration for tie-point detection and matching.
 
@@ -62,6 +62,7 @@ class TiePointDetector:
         self.ransac_value = ransac_value
 
         self.verbose = verbose
+        self.catch = catch
         self.display = display
         self.logger = cp.CustomPrint(verbosity=0)
 
@@ -132,8 +133,7 @@ class TiePointDetector:
                                       style_config=style_config)
 
                 if tps.shape[0] < self.min_resized_points:
-                    self.logger.print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})",
-                                      color="WARNING")
+                    print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})")
                     return np.empty((0, 4)), np.empty((0, 1))
 
                 # optional additional matching
@@ -160,9 +160,9 @@ class TiePointDetector:
                         tps = tps_additional
                         conf = conf_additional
 
-                # sometimes there are 0 tie-points after additional matching -> stop process
-                if tps.shape[0] == 0:
-                    return np.empty((0, 4)), np.empty((0, 1))
+                # sometimes there are too few tie-points after additional matching -> stop process
+                if tps.shape[0] < 3:
+                    return tps, conf
 
                 # optional extra matching
                 if self.matching_extra:
@@ -206,8 +206,11 @@ class TiePointDetector:
                     di.display_images([img1, img2],
                                       tie_points=tps, tie_points_conf=list(conf),
                                       style_config=style_config)
-        except (Exception,):
-            return np.empty((0, 4)), np.empty((0, 1))
+        except (Exception,) as e:
+            if self.catch:
+                return np.empty((0, 4)), np.empty((0, 1))
+            else:
+                raise e
 
         return tps, conf
 
@@ -902,8 +905,8 @@ class TiePointDetector:
                     resize_factor1 = OOM_REDUCE_VALUE * resize_factor1
                     resize_factor2 = OOM_REDUCE_VALUE * resize_factor2
 
-                    sg_img_1 = ri.resize_image(sg_img_1, (img_height1, img_width1), "proportion")  # noqa
-                    sg_img_2 = ri.resize_image(sg_img_2, (img_height2, img_width2), "proportion")  # noqa
+                    sg_img_1 = ri.resize_image(input_img1, (img_height1, img_width1), "proportion")  # noqa
+                    sg_img_2 = ri.resize_image(input_img2, (img_height2, img_width2), "proportion")  # noqa
 
         # adapt the tie points to account for resizing
         pts0[:, 0] = pts0[:, 0] * 1 / resize_factor1

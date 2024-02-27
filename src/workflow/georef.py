@@ -2,6 +2,7 @@ import logging
 import os.path
 import numpy as np
 import pandas as pd
+import shutil
 import time
 
 from tqdm import tqdm
@@ -37,7 +38,7 @@ DEFAULT_SAVE_FOLDER = "/data_1/ATM/data_1/georef"
 
 # define input bounds or image ids
 INPUT_TYPE = "bounds"  # can be either "bounds" or "ids
-BOUNDS = [-2307556, 1002181, -2088228, 1172914]  # min_x, min_y, max_x, max_y
+BOUNDS = [-2618381, 610661, -1630414, 1670625]  # min_x, min_y, max_x, max_y
 IMAGE_IDS = []
 
 # which type of geo-referencing should be done
@@ -71,7 +72,7 @@ RETRY_INVALID_IMG = False
 RETRY_INVALID_CALC = False
 
 
-def georef(input_ids, processed_images=None,
+def georef(input_ids, processed_images_sat=None, processed_images_img=None, processed_images_calc=None,
            georef_with_satellite=True, georef_with_image=True, georef_with_calc=True,
            overwrite_sat=False, overwrite_img=False, overwrite_calc=False,
            retry_failed_sat=True, retry_failed_img=True, retry_failed_calc=True,
@@ -111,12 +112,18 @@ def georef(input_ids, processed_images=None,
                            "FROM images_extracted"
     data_extracted = ctd.execute_sql(sql_string_extracted, conn)
 
-    # set the path to the csv file with processed images
-    csv_path = DEFAULT_SAVE_FOLDER + "/processed_images.csv"
+    # set the path to the csv files with processed images
+    csv_path_sat = DEFAULT_SAVE_FOLDER + "/sat_processed_images.csv"
+    csv_path_img = DEFAULT_SAVE_FOLDER + "/img_processed_images.csv"
+    csv_path_calc = DEFAULT_SAVE_FOLDER + "/sat_processed_images.csv"
 
     # init processed images if not given
-    if processed_images is None:
-        processed_images = {}
+    if processed_images_sat is None:
+        processed_images_sat = {}
+    if processed_images_img is None:
+        processed_images_img = {}
+    if processed_images_calc is None:
+        processed_images_calc = {}
 
     # geo-reference with satellite
     if georef_with_satellite:
@@ -124,28 +131,33 @@ def georef(input_ids, processed_images=None,
         print("Start geo-referencing with satellite")
 
         # iterate all images
-        for image_id in tqdm(input_ids):
+        for img_counter, image_id in enumerate(tqdm(input_ids)):
 
             # check if image is already geo-referenced
-            if (processed_images.get(image_id, {}).get('method') == "sat" and
-                    processed_images.get(image_id, {}).get('status') == "georeferenced" and
+            if (processed_images_sat.get(image_id, {}).get('status') == "georeferenced" and
                     not overwrite_sat):
                 print(f"{image_id} already geo-referenced")
                 continue
 
             # check if image is already invalid
-            if (processed_images.get(image_id, {}).get('method') == "sat" and
-                    processed_images.get(image_id, {}).get('status') == "invalid" and
+            if (processed_images_sat.get(image_id, {}).get('status') == "invalid" and
                     not retry_invalid_sat):
                 print(f"{image_id} already invalid")
                 continue
 
             # check if image did already fail
-            if (processed_images.get(image_id, {}).get('method') == "sat" and
-                    processed_images.get(image_id, {}).get('status') == "failed" and
+            if (processed_images_sat.get(image_id, {}).get('status') == "failed" and
                     not retry_failed_sat):
                 print(f"{image_id} already failed")
                 continue
+
+            # backup the processed_images every 10th iteration
+            if img_counter % 10 == 0:
+                source_directory = os.path.dirname(csv_path_sat)
+                backup_directory = os.path.join(source_directory, 'backup')
+                filename = os.path.basename(csv_path_sat)
+                backup_path = os.path.join(backup_directory, filename)
+                shutil.copy(csv_path_sat, backup_path)
 
             # start the timer
             start = time.time()
@@ -155,8 +167,8 @@ def georef(input_ids, processed_images=None,
 
                 # ignore images with a too low complexity
                 if data_extracted.loc[data_extracted['image_id'] == image_id]['complexity'].iloc[0] < min_complexity:
-                    processed_images[image_id] = {"method": "sat", "status": "failed",
-                                                  "reason": "complexity"}
+                    processed_images_sat[image_id] = {"method": "sat", "status": "failed",
+                                                      "reason": "complexity"}
                     continue
 
                 print(f"Geo-reference {image_id} with satellite")
@@ -181,16 +193,16 @@ def georef(input_ids, processed_images=None,
 
                 # check if all required data is there
                 if approx_footprint is None:
-                    processed_images[image_id] = {"method": "sat", "status": "missing_data",
-                                                  "reason": "approx_footprint", "time": ""}
+                    processed_images_sat[image_id] = {"method": "sat", "status": "missing_data",
+                                                      "reason": "approx_footprint", "time": ""}
                     continue
                 elif mask is None:
-                    processed_images[image_id] = {"method": "sat", "status": "missing_data",
-                                                  "reason": "mask", "time": ""}
+                    processed_images_sat[image_id] = {"method": "sat", "status": "missing_data",
+                                                      "reason": "mask", "time": ""}
                     continue
                 elif azimuth is None:
-                    processed_images[image_id] = {"method": "sat", "status": "missing_data",
-                                                  "reason": "azimuth", "time": ""}
+                    processed_images_sat[image_id] = {"method": "sat", "status": "missing_data",
+                                                      "reason": "azimuth", "time": ""}
                     continue
 
                 # we need to adapt the azimuth to account for EPSG:3031
@@ -203,30 +215,34 @@ def georef(input_ids, processed_images=None,
                 # skip images we can't geo-reference
                 if transform is None:
 
+                    georef_time = round(time.time() - start)
+
                     # images failed due to exception
                     if tps is None:
-                        processed_images[image_id] = {"method": "sat", "status": "failed",
-                                                      "reason": "exception", "time": time.time() - start}
+                        processed_images_sat[image_id] = {"method": "sat", "status": "failed",
+                                                          "reason": "exception", "time": georef_time}
                     # too few tps
                     else:
-                        processed_images[image_id] = {"method": "sat", "status": "failed",
-                                                      "reason": f"too_few_tps:{tps.shape[0]}",
-                                                      "time": time.time() - start}
+                        processed_images_sat[image_id] = {"method": "sat", "status": "failed",
+                                                          "reason": f"too_few_tps:{tps.shape[0]}",
+                                                          "time": georef_time}
                     continue
 
                 # verify the geo-referenced image
                 valid_image, reason = vig.verify_image_geometry(image, transform)
 
+                georef_time = round(time.time() - start)
+
                 # save valid images
                 if valid_image:
                     _save_results("sat", image_id, image, transform, residuals, tps, conf, month)
-                    processed_images[image_id] = {"method": "sat", "status": "georeferenced",
-                                                  "reason": "", "time": time.time() - start}
+                    processed_images_sat[image_id] = {"method": "sat", "status": "georeferenced",
+                                                      "reason": "", "time": georef_time}
 
                 # set image to invalid if position is wrong
                 else:
-                    processed_images[image_id] = {"method": "sat", "status": "invalid",
-                                                  "reason": reason, "time": time.time() - start}
+                    processed_images_sat[image_id] = {"method": "sat", "status": "invalid",
+                                                      "reason": reason, "time": georef_time}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -237,8 +253,8 @@ def georef(input_ids, processed_images=None,
             # that means something in the geo-referencing process fails
             except (Exception,) as e:
 
-                processed_images[image_id] = {"method": "sat", "status": "failed",
-                                              "reason": "exception", "time": time.time() - start}
+                processed_images_sat[image_id] = {"method": "sat", "status": "failed",
+                                                  "reason": "exception", "time": round(time.time() - start)}
 
                 if catch is False:
                     raise e
@@ -249,7 +265,7 @@ def georef(input_ids, processed_images=None,
             finally:
 
                 if keyboard_interrupt is False:
-                    mc.modify_csv(csv_path, image_id, "add", processed_images[image_id], overwrite=True)
+                    mc.modify_csv(csv_path_sat, image_id, "add", processed_images_sat[image_id], overwrite=True)
 
         # now that we have more images, verify the images again to check for wrong positions
         if verify_image_positions:
@@ -259,7 +275,7 @@ def georef(input_ids, processed_images=None,
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
 
             # iterate all images
-            for image_id in tqdm(processed_images):
+            for image_id in tqdm(processed_images_sat):
 
                 footprint = sat_shape_data.loc[
                     sat_shape_data['image_id'] == image_id].geometry.iloc[0]
@@ -271,9 +287,9 @@ def georef(input_ids, processed_images=None,
                 # set image to invalid if position is wrong
                 if not valid_image:
                     # TODO FIX TIMER
-                    processed_images[image_id] = {"method": "sat", "status": "invalid",
-                                                  "reason": "position"}
-                    mc.modify_csv(csv_path, image_id, "add", processed_images[image_id], overwrite=True)
+                    processed_images_sat[image_id] = {"method": "sat", "status": "invalid",
+                                                      "reason": "position"}
+                    mc.modify_csv(csv_path_sat, image_id, "add", processed_images_sat[image_id], overwrite=True)
 
     # geo-reference with image
     if georef_with_image:
@@ -283,28 +299,24 @@ def georef(input_ids, processed_images=None,
         for image_id in tqdm(input_ids):
 
             # skip images that are already geo-referenced with satellite
-            if (processed_images.get(image_id, {}).get('method') == "sat" and
-                    processed_images.get(image_id, {}).get('status') == "georeferenced"):
+            if processed_images_sat.get(image_id, {}).get('status') == "georeferenced":
                 print(f"{image_id} already geo-referenced with satellite")
                 continue
 
             # check if image is already geo-referenced
-            if (processed_images.get(image_id, {}).get('method') == "img" and
-                    processed_images.get(image_id, {}).get('status') == "georeferenced" and
+            if (processed_images_img.get(image_id, {}).get('status') == "georeferenced" and
                     not overwrite_img):
                 print(f"{image_id} already geo-referenced with image")
                 continue
 
             # check if image is already invalid
-            if (processed_images.get(image_id, {}).get('method') == "img" and
-                    processed_images.get(image_id, {}).get('status') == "invalid" and
+            if (processed_images_img.get(image_id, {}).get('status') == "invalid" and
                     not retry_invalid_img):
                 print(f"{image_id} already invalid")
                 continue
 
             # check if image did already fail
-            if (processed_images.get(image_id, {}).get('method') == "img" and
-                    processed_images.get(image_id, {}).get('status') == "failed" and
+            if (processed_images_img.get(image_id, {}).get('status') == "failed" and
                     not retry_failed_img):
                 print(f"{image_id} already failed")
                 continue
@@ -332,8 +344,8 @@ def georef(input_ids, processed_images=None,
 
                 # check if all required data is there
                 if mask is None:
-                    processed_images[image_id] = {"method": "img", "status": "missing_data",
-                                                  "reason": "mask", "time": ""}
+                    processed_images_img[image_id] = {"method": "img", "status": "missing_data",
+                                                      "reason": "mask", "time": ""}
                     continue
 
                 # the actual geo-referencing
@@ -345,8 +357,8 @@ def georef(input_ids, processed_images=None,
                 # skip images we can't geo-reference
                 if transform is None:
                     # TODO DIFFERENTIATE BETWEEN FAILED AN TOO FEW TPS
-                    processed_images[image_id] = {"method": "img", "status": "failed",
-                                                  "reason": "no_transform", "time": time.time() - start}
+                    processed_images_img[image_id] = {"method": "img", "status": "failed",
+                                                      "reason": "no_transform", "time": round(time.time() - start)}
                     continue
 
                 # verify the geo-referenced image
@@ -360,13 +372,13 @@ def georef(input_ids, processed_images=None,
                         data_images['image_id'] == image_id]['date_month'].iloc[0]
 
                     _save_results("img", image_id, image, transform, residuals, tps, conf, month)
-                    processed_images[image_id] = {"method": "img", "status": "georeferenced",
-                                                  "reason": ""}
+                    processed_images_img[image_id] = {"method": "img", "status": "georeferenced",
+                                                      "reason": ""}
 
                 # set image to invalid if position is wrong
                 else:
-                    processed_images[image_id] = {"method": "img", "status": "invalid",
-                                                  "reason": reason}
+                    processed_images_img[image_id] = {"method": "img", "status": "invalid",
+                                                      "reason": reason}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -377,8 +389,8 @@ def georef(input_ids, processed_images=None,
             # that means something in the geo-referencing process fails
             except (Exception,) as e:
 
-                processed_images[image_id] = {"method": "img", "status": "failed",
-                                              "reason": "exception"}
+                processed_images_img[image_id] = {"method": "img", "status": "failed",
+                                                  "reason": "exception", "time": ""}
 
                 if catch is False:
                     raise e
@@ -389,7 +401,7 @@ def georef(input_ids, processed_images=None,
             finally:
 
                 if keyboard_interrupt is False:
-                    mc.modify_csv(csv_path, image_id, "add", processed_images[image_id], overwrite=True)
+                    mc.modify_csv(csv_path_img, image_id, "add", processed_images_img[image_id], overwrite=True)
 
     # TODO: ADD TIMER
 
@@ -421,29 +433,29 @@ def georef(input_ids, processed_images=None,
 
         for image_id in tqdm(input_ids):
 
-            # skip images that are already geo-referenced with satellite or image
-            if (processed_images.get(image_id, {}).get('method') in ["sat", "img"] and
-                    processed_images.get(image_id, {}).get('status') == "georeferenced"):
-                print(f"{image_id} already geo-referenced with satellite or image")
+            # skip images that are already geo-referenced with satellite
+            if processed_images_sat.get(image_id, {}).get('status') == "georeferenced":
+                print(f"{image_id} already geo-referenced with satellite")
+                continue
+
+            if processed_images_img.get(image_id, {}).get('status') == "georeferenced":
+                print(f"{image_id} already geo-referenced with image")
                 continue
 
             # check if image is already geo-referenced
-            if (processed_images.get(image_id, {}).get('method') == "calc" and
-                    processed_images.get(image_id, {}).get('status') == "georeferenced" and
+            if (processed_images_calc.get(image_id, {}).get('status') == "georeferenced" and
                     not overwrite_calc):
                 print(f"{image_id} already geo-referenced with calc")
                 continue
 
             # check if image is already invalid
-            if (processed_images.get(image_id, {}).get('method') == "calc" and
-                    processed_images.get(image_id, {}).get('status') == "invalid" and
+            if (processed_images_calc.get(image_id, {}).get('status') == "invalid" and
                     not retry_invalid_calc):
                 print(f"{image_id} already invalid")
                 continue
 
             # check if image did already fail
-            if (processed_images.get(image_id, {}).get('method') == "calc" and
-                    processed_images.get(image_id, {}).get('status') == "failed" and
+            if (processed_images_calc.get(image_id, {}).get('status') == "failed" and
                     not retry_failed_calc):
                 print(f"{image_id} already failed")
                 continue
@@ -463,8 +475,8 @@ def georef(input_ids, processed_images=None,
 
                 # skip images we can't geo-reference
                 if transform is None:
-                    processed_images[image_id] = {"method": "calc", "status": "failed",
-                                                  "reason": "no_transform"}
+                    processed_images_calc[image_id] = {"method": "calc", "status": "failed",
+                                                       "reason": "no_transform"}
                     continue
 
                 # verify the geo-referenced image
@@ -478,13 +490,13 @@ def georef(input_ids, processed_images=None,
                         data_images['image_id'] == image_id]['date_month'].iloc[0]
 
                     _save_results("calc", image_id, image, transform, residuals, tps, conf, month)
-                    processed_images[image_id] = {"method": "calc", "status": "georeferenced",
-                                                  "reason": ""}
+                    processed_images_calc[image_id] = {"method": "calc", "status": "georeferenced",
+                                                       "reason": ""}
 
                 # set image to invalid if position is wrong
                 else:
-                    processed_images[image_id] = {"method": "calc", "status": "invalid",
-                                                  "reason": reason}
+                    processed_images_calc[image_id] = {"method": "calc", "status": "invalid",
+                                                       "reason": reason}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -495,8 +507,8 @@ def georef(input_ids, processed_images=None,
             # that means something in the geo-referencing process fails
             except (Exception,) as e:
 
-                processed_images[image_id] = {"method": "calc", "status": "failed",
-                                              "reason": "exception"}
+                processed_images_calc[image_id] = {"method": "calc", "status": "failed",
+                                                   "reason": "exception"}
 
                 if catch is False:
                     raise e
@@ -507,7 +519,7 @@ def georef(input_ids, processed_images=None,
             finally:
 
                 if keyboard_interrupt is False:
-                    mc.modify_csv(csv_path, image_id, "add", processed_images[image_id], overwrite=True)
+                    mc.modify_csv(csv_path_calc, image_id, "add", processed_images_calc[image_id], overwrite=True)
 
 
 def _prepare_mask(image_id: str, image: np.ndarray,
@@ -537,6 +549,10 @@ def _prepare_mask(image_id: str, image: np.ndarray,
 
     # get the text boxes of the image
     text_string = data_extracted.loc[data_extracted['image_id'] == image_id]['text_bbox'].iloc[0]
+
+    # make all text strings to lists
+    if len(text_string) > 0 and "[" not in text_string:
+        text_string = "[" + text_string + "]"
 
     # create text-boxes list
     text_boxes = [tuple(group) for group in eval(text_string.replace(";", ","))]
@@ -609,6 +625,8 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
 
 if __name__ == "__main__":
 
+    import pandas as pd
+
     # load image ids with bounds
     if INPUT_TYPE == "bounds":
         # load all approximate positions of images
@@ -626,17 +644,25 @@ if __name__ == "__main__":
         _input_ids = IMAGE_IDS
 
     # check if there is a status csv and load it
-    if os.path.isfile(DEFAULT_SAVE_FOLDER + "/processed_images.csv"):
-        import pandas as pd
+    def _load_processed_images(filename):
+        full_path = os.path.join(DEFAULT_SAVE_FOLDER, filename)
+        if os.path.isfile(full_path):
+            df = pd.read_csv(full_path, delimiter=";")
+            df.set_index('id', inplace=True)
+            return df.to_dict(orient='index')
+        else:
+            return None
 
-        _processed_images = pd.read_csv(DEFAULT_SAVE_FOLDER + "/processed_images.csv", delimiter=";")
-        _processed_images.set_index('id', inplace=True)
-        _processed_images = _processed_images.to_dict(orient='index')
-    else:
-        _processed_images = None
+
+    _processed_images_sat = _load_processed_images("sat_processed_images.csv")
+    _processed_images_img = _load_processed_images("img_processed_images.csv")
+    _processed_images_calc = _load_processed_images("calc_processed_images.csv")
 
     # call the actual geo-referencing function
-    georef(_input_ids, _processed_images,
+    georef(_input_ids,
+           processed_images_sat=_processed_images_sat,
+           processed_images_img=_processed_images_img,
+           processed_images_calc=_processed_images_calc,
            georef_with_satellite=GEOREF_WITH_SATELLITE,
            georef_with_image=GEOREF_WITH_IMAGE,
            georef_with_calc=GEOREF_WITH_CALC,

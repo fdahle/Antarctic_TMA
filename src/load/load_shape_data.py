@@ -1,5 +1,6 @@
 import geopandas as gpd
-
+import os;
+os.environ['PROJ_LIB'] = '/home/fdahle/miniconda3/envs/conda_antarctic/share/proj'
 
 def load_shape_data(path_to_file: str, verbose: bool = False) -> gpd.GeoDataFrame:
     """
@@ -16,6 +17,6 @@ def load_shape_data(path_to_file: str, verbose: bool = False) -> gpd.GeoDataFram
     data = gpd.read_file(path_to_file)
     
     if verbose:
-        p.print_v(f"Shape data from {path_to_file} successfully loaded")
+        print(f"Shape data from {path_to_file} successfully loaded")
 
     return data

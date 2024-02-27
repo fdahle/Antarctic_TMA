@@ -32,13 +32,6 @@ image_pattern = "OIS*.*tif"
 # fld settings
 project_base_fld = base_fld + "projects/"
 
-# debug settings
-save_stats = True
-stats_folder = "stats"
-delete_temp_files = True,
-print_output = True
-print_orig_errors = False
-
 
 def create_model():
     # set the actual project folder

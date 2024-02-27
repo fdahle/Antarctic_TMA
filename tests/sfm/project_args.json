@@ -1,0 +1,19 @@
+{
+  "ReSampFid": {
+    "ImagePattern": "images_orig/.*.tif",
+    "ScanResolution": 0.025
+  },
+  "TapiocaCustom": {
+    "use_footprints": false,
+    "use_masks": true
+  },
+  "Schnaps": {
+    "ImagePattern": "*.*tif",
+    "ExpTxt": 1
+  },
+  "Tapas": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1,
+    "LibFoc": 0
+  }
+}

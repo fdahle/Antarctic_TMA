@@ -58,7 +58,7 @@ def _create_absolute_path(image_id, fld, filetype):
     # if "/" still in image_id, it's an invalid path
     if "/" in image_id:
         if os.path.isfile(image_id) is False:
-            raise ValueError(f"No image could be found at {image_id}")
+            raise FileNotFoundError(f"No image could be found at {image_id}")
 
     # check image id and fld
     image_id = f"{image_id}.{filetype}" if "." not in image_id else image_id
@@ -68,7 +68,8 @@ def _create_absolute_path(image_id, fld, filetype):
     absolute_image_path = os.path.join(fld, image_id)
 
     # check if the path is valid
-    assert os.path.isfile(absolute_image_path), f"No image could be found at {absolute_image_path}"
+    if os.path.isfile(absolute_image_path) is False:
+        raise FileNotFoundError(f"No image could be found at {absolute_image_path}")
 
     return absolute_image_path
 

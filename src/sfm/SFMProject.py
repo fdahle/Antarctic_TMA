@@ -12,14 +12,15 @@ from typing import Optional
 # constants for the default image folders
 DEFAULT_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 DEFAULT_RESAMPLED_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded_resampled"
-DEFAULT_MASK_FLD = ""
+DEFAULT_MASK_FLD = "/data_1/ATM/data_1/aerial/TMA/masked"
+DEFAULT_RESAMPLED_MASK_FLD = "/data_1/ATM/data_1/aerial/TMA/masked_resampled"
 DEFAULT_XML_FLD = "/data_1/ATM/data_1/sfm/xml/images/"
 
 # constant for the default camera folder
 DEFAULT_CAM_FLD = "/data_1/ATM/data_1/sfm/xml/camera"
 
-class SFMProject(object):
 
+class SFMProject(object):
     # list of supported commands
     valid_commands = {
         "AperiCloud": {
@@ -66,9 +67,9 @@ class SFMProject(object):
             "desc": "",
             "file": "mm_cmd.Tapioca"
         },
-        "Tapioca_custom": {
+        "TapiocaCustom": {
             "desc": "",
-            "file": "mm_cmd.Tapioca_custom"
+            "file": "mm_cmd.TapiocaCustom",
         },
         "Tarama": {
             "desc": "",
@@ -131,7 +132,6 @@ class SFMProject(object):
 
         self._create_project_structure()
 
-
     def set_camera(self, camera_name, camera_folder=None):
 
         # define the camera folder
@@ -160,6 +160,7 @@ class SFMProject(object):
     def set_images(self, image_ids: list[str], image_folder: Optional[str] = None,
                    copy_masks: bool = False, mask_folder: Optional[str] = None,
                    copy_resampled: bool = False, resampled_image_folder: Optional[str] = None,
+                   copy_resampled_masks: bool = False, resampled_mask_folder = None,
                    copy_xml: bool = False, xml_folder: Optional[str] = None,
                    overwrite: bool = False, skip_missing: bool = False) -> None:
         """
@@ -187,80 +188,98 @@ class SFMProject(object):
         """
 
         if self.debug:
-            print(f"Set images with {image_ids}")
+            print(f"Copy {image_ids}")
 
-        if image_folder is None:
-            image_folder = DEFAULT_IMAGE_FLD
+        # set default folders if not provided
+        image_folder = image_folder or DEFAULT_IMAGE_FLD
+        mask_folder = mask_folder or DEFAULT_MASK_FLD
+        resampled_image_folder = resampled_image_folder or DEFAULT_RESAMPLED_IMAGE_FLD
+        resampled_mask_folder = resampled_mask_folder or DEFAULT_RESAMPLED_MASK_FLD
+        xml_folder = xml_folder or DEFAULT_XML_FLD
 
-        if mask_folder is None:
-            mask_folder = DEFAULT_MASK_FLD
-
-        if resampled_image_folder is None:
-            resampled_image_folder = DEFAULT_RESAMPLED_IMAGE_FLD
-
-        if xml_folder is None:
-            xml_folder = DEFAULT_XML_FLD
-
-        for image_id in image_ids.copy():  # Iterate over a copy of list to allow removal during iteration
+        # copy images to the project (Iterate over a copy of list to allow removal during iteration)
+        for image_id in image_ids.copy():
 
             # Image paths
             old_img_path = os.path.join(image_folder, image_id + ".tif")
-            new_img_path = os.path.join(self.project_path, image_id + ".tif")
-            new_img_path2 = os.path.join(image_folder, "images_orig", image_id + ".tif")
+            new_img_path = os.path.join(self.project_path, "images_orig", image_id + ".tif")
 
             # check if image is existing in the original folder
             if os.path.isfile(old_img_path):
 
                 # do not copy if images are already in the images-orig folder
-                if os.path.isfile(new_img_path2) and (not os.path.isfile(new_img_path) or overwrite):
+                if not(os.path.isfile(new_img_path) and overwrite is False):
                     shutil.copyfile(old_img_path, new_img_path)
+
+            # image is not existing
             else:
                 if skip_missing:
                     image_ids.remove(image_id)  # Skip missing image
                     continue
                 else:
-                    raise Exception(f"No image found at {old_img_path}")
+                    raise FileNotFoundError(f"No image found at {old_img_path}")
 
             # Masks
             if copy_masks:
+
+                # Mask paths
                 old_mask_path = os.path.join(mask_folder, image_id + ".tif")
                 new_mask_path = os.path.join(self.project_path, "masks_orig", image_id + ".tif")
+
+                # check if mask is existing in the original folder
                 if os.path.isfile(old_mask_path):
-                    if not os.path.isfile(new_mask_path) or overwrite:
+                    if not (os.path.isfile(new_img_path) and overwrite is False):
                         shutil.copyfile(old_mask_path, new_mask_path)
+                else:
+                    raise FileNotFoundError(f"No mask found at {old_mask_path}")
 
             # Resampled images
             if copy_resampled:
-                old_resampled_img_path = os.path.join(resampled_image_folder, "OIS-Reech_" + image_id + ".tif")
-                new_resampled_img_path = os.path.join(self.project_path, "OIS-Reech_" + image_id + ".tif")
+                old_resampled_img_path = os.path.join(resampled_image_folder,
+                                                      "OIS-Reech_" + image_id + ".tif")
+                new_resampled_img_path = os.path.join(self.project_path, "images",
+                                                      "OIS-Reech_" + image_id + ".tif")
                 if os.path.isfile(old_resampled_img_path):
-                    if not os.path.isfile(new_resampled_img_path) or overwrite:
+                    if not (os.path.isfile(new_img_path) and overwrite is False):
                         shutil.copyfile(old_resampled_img_path, new_resampled_img_path)
+                else:
+                    raise FileNotFoundError(f"No resampled image found at {old_resampled_img_path}")
 
-                        # if we copied a resampled file, the original must be moved in the images_orig folder
-                        shutil.move(new_img_path, os.path.join(self.project_path, "images_orig", image_id + ".tif"))
+            # Resampled masks
+            if copy_resampled_masks:
+                old_resampled_mask_path = os.path.join(resampled_mask_folder,
+                                                         "OIS-Reech_" + image_id + ".tif")
+                new_resampled_mask_path = os.path.join(self.project_path, "masks",
+                                                         "OIS-Reech_" + image_id + ".tif")
+                if os.path.isfile(old_resampled_mask_path):
+                    if not (os.path.isfile(new_resampled_mask_path) and overwrite is False):
+                        shutil.copyfile(old_resampled_mask_path, new_resampled_mask_path)
+                else:
+                    raise FileNotFoundError(f"No resampled mask found at {old_resampled_mask_path}")
 
             # XML files
             if copy_xml:
                 old_xml_path = os.path.join(xml_folder, "MeasuresIm-" + image_id + ".tif.xml")
                 new_xml_path = os.path.join(self.project_path, "Ori-InterneScan", "MeasuresIm-" + image_id + ".tif.xml")
 
-                print(old_xml_path, new_xml_path)
-
                 if os.path.isfile(old_xml_path):
-                    if not os.path.isfile(new_xml_path) or overwrite:
+                    if not (os.path.isfile(old_xml_path) and overwrite is False):
                         shutil.copyfile(old_xml_path, new_xml_path)
+                else:
+                    raise FileNotFoundError(f"No XML file found at {old_xml_path}")
 
         self.image_ids = image_ids
 
-
-    def start(self, mode: str, commands: None, save_stats: bool = False,
-              use_custom_matching: bool = False,
-              stats_folder: Optional[str] = None):
+    def start(self, mode: str, commands: None,
+              micmac_args: dict = None,
+              print_all_output: bool = False,
+              stat_folder: Optional[str] = None,
+              raw_folder: Optional[str] = None) -> None:
         """
         Starts the processing of the project by executing a list of MicMac commands.
         Args:
             commands:
+            use_custom_matching:
             save_stats:
             stats_folder:
 
@@ -270,14 +289,12 @@ class SFMProject(object):
 
         if mode == "complete":
             commands = ["ReSampFid", "Tapioca", "HomolFilterMasq", "Schnaps", "Campari", "AperiCloud", "Malt"]
+        elif mode == "complete_custom":
+            commands = ["ReSampFid", "TapiocaCustom", "HomolFilterMasq", "Schnaps", "Campari", "AperiCloud", "Malt"]
         elif mode == "manual":
             commands = commands
         else:
             raise ValueError(f"Mode '{mode}' is not supported")
-
-        if use_custom_matching:
-            # replace Tapioca with Tapioca_custom
-            commands = [command if command != "Tapioca" else "Tapioca_custom" for command in commands]
 
         # check if there are enough images
         if len(self.image_ids) < 3:
@@ -294,24 +311,24 @@ class SFMProject(object):
                 missing_images.append(image_id)
 
         if len(missing_images) > 0:
-            raise Exception ("Image is missing for following image ids: " + str(missing_images))
+            raise Exception("Image is missing for following image ids: " + str(missing_images))
         if len(missing_xml) > 0:
-            raise Exception ("Image xml is missing for following image ids: " + str(missing_xml))
+            raise Exception("Image xml is missing for following image ids: " + str(missing_xml))
 
         # check if there's a camera xml
         if os.path.isfile(self.project_path + "/MicMac-LocalChantierDescripteur.xml") is False or \
                 os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresCamera.xml") is False:
             raise Exception("Camera xml is missing")
 
+        # execute the commands in order of the list
         for command in commands:
+
+            # check if the command is supported
             if command not in self.valid_commands:
                 raise Exception(f"Command '{command}' is not supported")
 
             # execute the command
-            self._execute_command(command, save_stats, stats_folder, mm_path=self.micmac_path)
-
-    def _copy_files(self):
-        pass
+            self._execute_command(command, micmac_args, print_all_output, stat_folder, raw_folder)
 
     def _create_project_structure(self):
 
@@ -351,7 +368,7 @@ class SFMProject(object):
         if os.path.isdir(self.project_path + "/Ori-Tapas") is False:
             os.mkdir(self.project_path + "/Ori-Tapas")
 
-    def _execute_command(self, command_name, save_stats, save_folder, mm_path=None):
+    def _execute_command(self, command_name, micmac_args, print_all_output=False, stat_folder=None, raw_folder=None):
 
         try:
             # Dynamically import the module (file)
@@ -361,15 +378,16 @@ class SFMProject(object):
             mm_class = getattr(module, command_name)
 
             # Create an instance of the class
-            mm_command = mm_class(self.project_path)
+            mm_command = mm_class(self.project_path,
+                                  mm_args=micmac_args[command_name],
+                                  print_all_output=print_all_output,
+                                  stat_folder=stat_folder, raw_folder=raw_folder)
 
         except (ImportError, AttributeError) as e:
             # Handle the error if the module or class is not found
             raise ImportError(f"Could not find a command named '{command_name}'. Error: {e}")
 
-        args = {
-            "ImagePattern": "*.*tif",
-            "ScanResolution": 0.025
-        }
-
-        mm_command.execute_shell_cmd(args, mm_path)
+        if command_name.endswith("Custom"):
+            mm_command.execute_custom_cmd()
+        else:
+            mm_command.execute_shell_cmd(self.micmac_path)

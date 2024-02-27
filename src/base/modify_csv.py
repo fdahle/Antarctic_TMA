@@ -1,5 +1,8 @@
 import csv
 import os
+import tempfile
+import shutil
+
 from typing import Dict, Optional
 
 
@@ -65,9 +68,21 @@ def modify_csv(file_path: str, image_id: str, modus: str, data: Optional[Dict[st
         for col in existing_columns:
             row.setdefault(col, None)
 
-    with open(file_path, mode='w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=existing_columns, delimiter=';')
-        writer.writeheader()
-        writer.writerows(rows)
+    # Use a temporary file to safely write data
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+
+    try:
+        with open(temp_file.name, 'w', newline='') as tf:
+            writer = csv.DictWriter(tf, fieldnames=existing_columns, delimiter=';')
+            writer.writeheader()
+            writer.writerows(rows)
+
+        # Replace the original file with the updated one
+        shutil.move(temp_file.name, file_path)
+
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
 
     return None

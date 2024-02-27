@@ -131,7 +131,8 @@ class GeorefSatellite:
         image_bounds = approx_footprint.bounds
 
         # load the initial satellite image and transform
-        sat, sat_transform = ls.load_satellite(image_bounds, month=month)
+        sat, sat_transform = ls.load_satellite(image_bounds, month=month,
+                                               return_empty_sat=True)
 
         # get the initial sat bounds
         sat_bounds = list(approx_footprint.bounds)
@@ -396,7 +397,8 @@ class GeorefSatellite:
                 sat_bounds_tile[3] = sat_bounds_tile[3] + tile[1]
 
                 # get the satellite image
-                sat_tile, sat_transform_tile = ls.load_satellite(sat_bounds_tile)
+                sat_tile, sat_transform_tile = ls.load_satellite(sat_bounds_tile,
+                                                                 return_empty_sat=True)
 
                 if sat_tile is None:
                     print("  No satellite image could be found for this tile")
@@ -520,7 +522,8 @@ class GeorefSatellite:
             tweaked_sat_bounds[3] = tweaked_sat_bounds[3] + step_y
 
             # get the tweaked satellite image
-            tweaked_sat, tweaked_sat_transform = ls.load_satellite(tweaked_sat_bounds)
+            tweaked_sat, tweaked_sat_transform = ls.load_satellite(tweaked_sat_bounds,
+                                                                   return_empty_sat=True)
 
             if tweaked_sat is None:
                 print("  Tweaked satellite image is not available")

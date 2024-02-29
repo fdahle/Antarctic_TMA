@@ -15,6 +15,7 @@ DEFAULT_RESAMPLED_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded_resample
 DEFAULT_MASK_FLD = "/data_1/ATM/data_1/aerial/TMA/masked"
 DEFAULT_RESAMPLED_MASK_FLD = "/data_1/ATM/data_1/aerial/TMA/masked_resampled"
 DEFAULT_XML_FLD = "/data_1/ATM/data_1/sfm/xml/images/"
+DEFAULT_TRANSFORM_FLD = "/data_1/ATM/data_1/georef/sat/"
 
 # constant for the default camera folder
 DEFAULT_CAM_FLD = "/data_1/ATM/data_1/sfm/xml/camera"
@@ -39,6 +40,10 @@ class SFMProject(object):
             "desc": "",
             "file": "mm_cmd.GCPConvert"
         },
+        "GCPCustom": {
+            "desc": "",
+            "file": "mm_cmd.GCPCustom"
+        },
         "HomolFilterMasq": {
             "desc": "filter tie-points",
             "file": "mm_cmd.HomolFilterMasq"
@@ -60,7 +65,7 @@ class SFMProject(object):
             "file": "mm_cmd.ReSampFid"
         },
         "Tapas": {
-            "desc": "compute relative orientation",
+            "desc": "compute the relative orientation",
             "file": "mm_cmd.Tapas"
         },
         "Tapioca": {
@@ -130,6 +135,7 @@ class SFMProject(object):
         self.image_ids = []
         self.camera_name = ""
 
+        # create the project structure
         self._create_project_structure()
 
     def set_camera(self, camera_name, camera_folder=None):
@@ -162,6 +168,7 @@ class SFMProject(object):
                    copy_resampled: bool = False, resampled_image_folder: Optional[str] = None,
                    copy_resampled_masks: bool = False, resampled_mask_folder = None,
                    copy_xml: bool = False, xml_folder: Optional[str] = None,
+                   copy_transform: bool = False, transform_folder: Optional[str] = None,
                    overwrite: bool = False, skip_missing: bool = False) -> None:
         """
         Sets the images for the project by copying them from source folders to the project folder,
@@ -195,6 +202,7 @@ class SFMProject(object):
         mask_folder = mask_folder or DEFAULT_MASK_FLD
         resampled_image_folder = resampled_image_folder or DEFAULT_RESAMPLED_IMAGE_FLD
         resampled_mask_folder = resampled_mask_folder or DEFAULT_RESAMPLED_MASK_FLD
+        transform_folder = transform_folder or DEFAULT_TRANSFORM_FLD
         xml_folder = xml_folder or DEFAULT_XML_FLD
 
         # copy images to the project (Iterate over a copy of list to allow removal during iteration)
@@ -268,6 +276,16 @@ class SFMProject(object):
                 else:
                     raise FileNotFoundError(f"No XML file found at {old_xml_path}")
 
+            if copy_transform:
+                old_transform_path = os.path.join(transform_folder, image_id + "_transform.txt")
+                new_transform_path = os.path.join(self.project_path, "transforms", image_id + ".txt")
+
+                if os.path.isfile(old_transform_path):
+                    if not (os.path.isfile(old_transform_path) and overwrite is False):
+                        shutil.copyfile(old_transform_path, new_transform_path)
+                else:
+                    raise FileNotFoundError(f"No transform found at {old_transform_path}")
+
         self.image_ids = image_ids
 
     def start(self, mode: str, commands: None,
@@ -298,7 +316,7 @@ class SFMProject(object):
 
         # check if there are enough images
         if len(self.image_ids) < 3:
-            raise Exception("Need at least 3 images for SfM")
+            raise ValueError("Need at least 3 images for SfM")
 
         # check if every image is existing and has an image xml
         missing_images = []
@@ -352,6 +370,10 @@ class SFMProject(object):
         if os.path.isdir(self.project_path + "/masks_orig") is False:
             os.mkdir(self.project_path + "/masks_orig")
 
+        # create folder for transforms
+        if os.path.isdir(self.project_path + "/transforms") is False:
+            os.mkdir(self.project_path + "/transforms")
+
         # create folder for resampled masks
         if os.path.isdir(self.project_path + "/masks") is False:
             os.mkdir(self.project_path + "/masks")
@@ -377,15 +399,24 @@ class SFMProject(object):
             # Get the class from the imported module
             mm_class = getattr(module, command_name)
 
+            # check if there are custom args for the command
+            if command_name in micmac_args:
+                mm_args = micmac_args[command_name]
+            else:
+                mm_args = {}
+
             # Create an instance of the class
             mm_command = mm_class(self.project_path,
-                                  mm_args=micmac_args[command_name],
+                                  mm_args=mm_args,
                                   print_all_output=print_all_output,
                                   stat_folder=stat_folder, raw_folder=raw_folder)
 
         except (ImportError, AttributeError) as e:
             # Handle the error if the module or class is not found
-            raise ImportError(f"Could not find a command named '{command_name}'. Error: {e}")
+            if e is ImportError:
+                raise ImportError(f"Could not find a command named '{command_name}'")
+            else:
+                raise e
 
         if command_name.endswith("Custom"):
             mm_command.execute_custom_cmd()

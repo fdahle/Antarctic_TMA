@@ -209,7 +209,8 @@ if __name__ == "__main__":
                   "projects/final_test"
 
     img_pat = "OIS*.*tif"
-    homol_in = "MasqFiltered"
+    homol_in = "" \
+               ""
     exp_txt = 1
 
     args = {

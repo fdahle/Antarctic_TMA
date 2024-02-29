@@ -1,13 +1,15 @@
 import os
 import glob
-
 import numpy as np
 
+#
 import src.base.find_overlapping_images as foi
 import src.base.find_tie_points as ftp
 
+#
 import src.load.load_image as li
 
+#
 from src.sfm.mm_commands._base_command import BaseCommand
 
 
@@ -60,7 +62,6 @@ class TapiocaCustom(BaseCommand):
 
             if len(missing_masks) > 0:
                 raise ValueError(f"{len(missing_masks)} masks are missing: {missing_masks}")
-
 
     def _create_tie_point_structure(self):
 
@@ -161,5 +162,5 @@ class TapiocaCustom(BaseCommand):
 
                 print(path_key_folder + "/" + key_id + "tif.txt")
 
-                np.savetxt(path_key_folder + "/" + other_id + "tif.txt", tps_c,
+                np.savetxt(path_key_folder + "/" + other_id + ".tif.txt", tps_c,
                            fmt=['%i', '%i', '%.i', '%.i', '%.3f'], delimiter=" ")

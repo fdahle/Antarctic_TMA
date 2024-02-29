@@ -1,6 +1,7 @@
 import geopandas as gpd
-import os;
+import os
 os.environ['PROJ_LIB'] = '/home/fdahle/miniconda3/envs/conda_antarctic/share/proj'
+
 
 def load_shape_data(path_to_file: str, verbose: bool = False) -> gpd.GeoDataFrame:
     """

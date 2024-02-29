@@ -72,6 +72,7 @@ def modify_csv(file_path: str, image_id: str, modus: str, data: Optional[Dict[st
     temp_file = tempfile.NamedTemporaryFile(delete=False)
 
     try:
+        # write data to the temporary file
         with open(temp_file.name, 'w', newline='') as tf:
             writer = csv.DictWriter(tf, fieldnames=existing_columns, delimiter=';')
             writer.writeheader()

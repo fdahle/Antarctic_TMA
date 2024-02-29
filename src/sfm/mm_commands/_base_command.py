@@ -1,16 +1,18 @@
 import glob
+import json
 import os.path
 import subprocess
 import shutil
 
+from abc import ABC, abstractmethod
 from datetime import datetime
-from tqdm import tqdm
 
-class BaseCommand():
 
+class BaseCommand(ABC):
     # specifications defined in the child class
     required_args = []
     allowed_args = []
+    additional_args = []
 
     def __init__(self, project_folder,
                  mm_args,
@@ -23,6 +25,10 @@ class BaseCommand():
         self.project_folder = project_folder
         self.mm_args = mm_args
 
+        # does this command has additional arguments?
+        if len(self.additional_args) > 0:
+            self.extend_additional_args()
+
         # already validate the input arguments
         self.validate_mm_args()
 
@@ -32,6 +38,10 @@ class BaseCommand():
         self.raw_folder = raw_folder
         self.clean_up = clean_up
         self.overwrite = overwrite
+
+    @abstractmethod
+    def build_shell_string(self):
+        pass
 
     def execute_shell_cmd(self, mm_path=None):
 
@@ -67,41 +77,77 @@ class BaseCommand():
 
                 raw_output.append(stdout_line)
 
-            print(f"{self.__class__.__name__} finished")
-
+        # save the raw output
         if self.raw_folder is not None:
-
             # Format the current date and time as desired
             timestamp = start_time.strftime("%Y_%m_%d_%H_%M_%S")
 
             filename = f"{self.project_folder}/stats/" \
                        f"{timestamp}_{self.__class__.__name__}_raw.txt"
             with open(filename, "w") as f:
-
                 f.write(f"{shell_string}\n")
                 f.write("************\n")
 
                 f.writelines(raw_output)
 
+        # check if the command was successful
+        if "Sorry, the following FATAL ERROR happened" in str(raw_output):
+
+            error_obj = self._handle_error(raw_output)
+
+            raise MicMacError(self.__class__.__name__, error_obj)
+
+        else:
+            print(f"{self.__class__.__name__} finished successfully.")
+
         if self.clean_up:
-            self.clean_up_files()
+            self._clean_up_files()
 
-    def clean_up_files(self):
+    # method is not abstract as only prevalent in some files
+    def extend_additional_args(self):
+        raise AssertionError("This method should only be called in child classes")
 
+    def _clean_up_files(self):
+        """Remove the temporary files created by MicMac."""
+
+        # define the file patterns to be removed
         file_patterns = ["Tmp-MM-Dir", "mm3d-LogFile.txt", "WarnApero.txt", "MM-Error*.txt", "MkStdMM*"]
+
+        # iterate all patterns
         for pattern in file_patterns:
             full_path = os.path.join(self.project_folder, pattern)
             if "*" in pattern:  # For wildcard patterns
                 for file in glob.glob(full_path):
                     os.remove(file)
+            # remove directories
             elif os.path.isdir(full_path):
                 shutil.rmtree(full_path)
+            # remove files
             elif os.path.isfile(full_path):
                 os.remove(full_path)
 
-    def validate_mm_args(self):
+    def _handle_error(self, raw_output):
 
-        print("Validate mm args")
+        # get the error dict
+        # Get the directory of the current Python file
+        current_directory = os.path.dirname(os.path.abspath(__file__))
+        path_error_json = os.path.join(current_directory, "_error_dict.json")
+        with open(path_error_json, "r") as file:
+            error_dict = json.load(file)
+
+        # filter the error messages to this command
+        error_dict = error_dict[self.__class__.__name__]
+
+        # iterate over the raw output and find the error message
+        for line in raw_output:
+
+            # iterate over the error dict to find the equivalent error object
+            for error_obj in error_dict:
+
+                if error_obj['MMErrorMsg'] in line:
+                    return error_obj
+
+    def validate_mm_args(self):
 
         # check if we have the required arguments
         for r_arg in self.required_args:
@@ -112,3 +158,31 @@ class BaseCommand():
         for arg in self.mm_args:
             if arg not in self.allowed_args:
                 raise ValueError(f"{arg} is not an allowed argument")
+
+    @abstractmethod
+    def validate_required_files(self):
+        pass
+
+
+class MicMacError(Exception):
+    """
+    Exception raised for MicMac errors.
+    """
+
+    def __init__(self, class_name: str, error_obj: dict):
+        """
+        Args:
+            class_name (str): The name of the class where the error occurred.
+            error_obj (dict): A dictionary with keys 'MMErrorMsg', 'ErrorMsg', and 'Fix',
+                providing details of the MicMac error, a general error message, and a possible fix, respectively.
+        """
+
+        # get the error details from the object
+        mm_error_msg = error_obj['MMErrorMsg']
+        error_msg = error_obj['ErrorMsg']
+        fix = error_obj['Fix']
+
+        # call the Exception constructor
+        super().__init__(f"{class_name} failed with the following error: "
+                         f"'{mm_error_msg}'. ({error_msg}). "
+                         f"For a (possible) fix follow these instructions: {fix}")

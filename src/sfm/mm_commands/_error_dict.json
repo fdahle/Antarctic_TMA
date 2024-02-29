@@ -1,0 +1,21 @@
+{
+  "Schnaps": [
+    {
+      "MMErrorMsg": "Name is not a correct homologue prefix",
+      "ErrorMsg": "Schnaps cannot find the Homol folder",
+      "Fix": "Check if the path to the Homol folder is correct."
+    },
+    {
+      "MMErrorMsg": "ERROR: No image found!",
+      "ErrorMsg": "No images can be found in the specified folder",
+      "Fix": "Check if images are existing and they're in the main folder."
+    }
+  ],
+  "Tapas": [
+    {
+      "MMErrorMsg": "Not Enouh Equation in ElSeg3D::L2InterFaisceaux",
+      "ErrorMsg": "Lack of tie points that are usable",
+      "Fix": "Is ExpTxt enabled? Otherwise check if the images have enough distinct points."
+    }
+  ]
+}

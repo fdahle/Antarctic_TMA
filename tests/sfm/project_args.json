@@ -8,12 +8,21 @@
     "use_masks": true
   },
   "Schnaps": {
-    "ImagePattern": "*.*tif",
+    "ImagePattern": "OIS.*tif",
     "ExpTxt": 1
   },
   "Tapas": {
     "ImagePattern": "OIS.*tif",
+    "DistortionModel": "RadialBasic",
     "ExpTxt": 1,
-    "LibFoc": 0
+    "LibFoc": 0,
+    "Out": "Relative",
+    "SH": "Homol_mini"
+  },
+  "AperiCloud": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1,
+    "Orientation": "Relative",
+    "SH": "Homol_mini"
   }
 }

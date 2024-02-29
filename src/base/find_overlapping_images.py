@@ -35,6 +35,14 @@ def find_overlapping_images(
     if working_modes is None:
         working_modes = ["ids", "footprints"]
 
+    # verify the working modes
+    for mode in working_modes:
+        if mode not in ["ids", "footprints"]:
+            raise ValueError(f"working_modes must only contain 'ids' or 'footprints', not {mode}")
+
+    if type(image_ids) is not list:
+        raise ValueError("image_ids must be a list")
+
     if "ids" in working_modes and max_id_range <= 0:
         raise ValueError("max_id_range must be a positive integer")
 
@@ -63,7 +71,12 @@ def find_overlapping_images(
             # Extract flight path and number ID from the image ID
             flight_path1, num_id1 = id1[2:6], int(id1[-4:])
 
-            for j in range(i + 1, len(image_ids)):
+            if important_id:
+                start_idx = 0
+            else:
+                start_idx = i + 1
+
+            for j in range(start_idx, len(image_ids)):
 
                 id2 = image_ids[j]
 
@@ -73,6 +86,8 @@ def find_overlapping_images(
 
                 # Extract flight path and number ID from the image ID
                 flight_path2, num_id2 = id2[2:6], int(id2[-4:])
+
+                print(flight_path1, flight_path2)
 
                 # Check if the flight paths are the same and the number IDs are within the max_id_range
                 if flight_path1 == flight_path2 and abs(num_id1 - num_id2) <= max_id_range:
@@ -113,7 +128,8 @@ def find_overlapping_images(
                         overlap_dict[image_ids[i]].append(image_ids[j])
                         overlap_dict[image_ids[j]].append(image_ids[i])
 
-    if important_id:
+    # filter dict for important_id
+    if important_id and important_id in overlap_dict.keys():
         overlap_dict = {important_id: overlap_dict[important_id]}
 
     return overlap_dict

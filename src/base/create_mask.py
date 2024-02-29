@@ -70,6 +70,6 @@ def create_mask(image: np.ndarray,
     if ignore_boxes is not None:
         for box in ignore_boxes:
             x1, y1, x2, y2 = box
-            mask[y1:y2, x1:x2] = 0
+            mask[int(y1):int(y2), int(x1):int(x2)] = 0
 
     return mask

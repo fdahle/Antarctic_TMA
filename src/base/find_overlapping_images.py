@@ -87,8 +87,6 @@ def find_overlapping_images(
                 # Extract flight path and number ID from the image ID
                 flight_path2, num_id2 = id2[2:6], int(id2[-4:])
 
-                print(flight_path1, flight_path2)
-
                 # Check if the flight paths are the same and the number IDs are within the max_id_range
                 if flight_path1 == flight_path2 and abs(num_id1 - num_id2) <= max_id_range:
                     overlap_dict[id1].append(id2)

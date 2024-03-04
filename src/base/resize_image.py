@@ -28,6 +28,7 @@ def resize_image(input_img: np.ndarray, new_size: Union[Tuple[int, int], float],
     if size == "size":
         height, width = new_size
     elif size == "proportion":
+
         height = int(input_img.shape[0] * new_size)
         width = int(input_img.shape[1] * new_size)
     else:

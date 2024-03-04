@@ -1,15 +1,22 @@
+import copy
+
 import cv2
 import numpy as np
 
+from rasterio.transform import Affine
 from typing import Optional, Tuple
 
 # import base functions
 import src.base.enhance_image as eh
 import src.base.find_tie_points as ftp
 
+# import display functions
+import src.display.display_images as di
+
 # import georef snippet functions
 import src.georef.snippets.calc_transform as ct
 
+debug_display_steps = True
 
 class GeorefImage:
 
@@ -70,7 +77,7 @@ class GeorefImage:
             conf (np.ndarray): The confidence scores associated with the tie points as a NumPy array.
         """
         tps = np.empty([0, 4])
-        conf = np.empty([0, 1])
+        conf = np.empty([0])
 
         if self.enhance_image:
             image = eh.enhance_image(image, mask)
@@ -95,24 +102,42 @@ class GeorefImage:
             tps_img, conf_img = self.tp_finder.find_tie_points(georeferenced_image, image,
                                                                georeferenced_mask, mask)
 
+            # check if georef transform is a numpy array
+            if isinstance(georeferenced_transform, np.ndarray):
+                a, b, c = georeferenced_transform[0]
+                d, e, f = georeferenced_transform[1]
+
+                # Create the Rasterio affine transform
+                georeferenced_transform = Affine(a, b, c, d, e, f)
+
+            # backup copy for display
+            tps_display = copy.deepcopy(tps_img)
+
             # convert tie-points to absolute values
             absolute_points = np.array([georeferenced_transform * tuple(point) for point in tps_img[:, 0:2]])
             tps_img[:, 0:2] = absolute_points
 
+            # last filtering of the tie-points
+            if self.filter_outliers:
+                _, filtered = cv2.findHomography(tps_img[:, 0:2], tps_img[:, 2:4], cv2.RANSAC, 5.0)
+                filtered = filtered.flatten()
+
+                # 1 means outlier
+                tps_img = tps_img[filtered == 0]
+                tps_display = tps_display[filtered == 0]
+                conf_img = conf_img[filtered == 0]
+
+                print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC")
+
+            print(f"{tps_img.shape[0]} tie points found between the input image and the {i+1}th geo-referenced image")
+
+            if debug_display_steps:
+                di.display_images([georeferenced_image, image],
+                                  tie_points=tps_display, tie_points_conf=conf_img)
+
             # add tps and conf to global list
             tps = np.concatenate([tps, tps_img])
             conf = np.concatenate([conf, conf_img])
-
-        # last filtering of the tie-points
-        if self.filter_outliers:
-            _, filtered = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, 5.0)
-            filtered = filtered.flatten()
-
-            # 1 means outlier
-            tps = tps[filtered == 0]
-            conf = conf[filtered == 0]
-
-            print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC")
 
         # calculate the transformation-matrix
         transform, residuals = ct.calc_transform(image, tps,

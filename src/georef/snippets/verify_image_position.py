@@ -4,6 +4,10 @@ from shapely.geometry import LineString, Polygon
 from shapely.wkt import loads
 from typing import List, Union
 
+import src.display.display_shapes as ds
+
+debug_plot_shapes = True
+debug_print_distance = True
 
 def verify_image_position(footprint: Union[Polygon, str],
                           line_footprints: List[Union[Polygon, str]],
@@ -56,8 +60,27 @@ def verify_image_position(footprint: Union[Polygon, str],
     # Create a shapely LineString from the fitted line
     fitted_line = LineString(zip(x_long, y_long))
 
+    # get all distances from the footprints to the fitted line
+    distances = [l_footprint.centroid.distance(fitted_line) for l_footprint in line_footprints]
+
+    # get average distance
+    avg_distance = sum(distances) / len(distances)
+
     # Get the distance between the footprint's center and the fitted line
     distance = footprint_center.distance(fitted_line)
+
+    print(avg_distance, distance)
+
+    if debug_print_distance:
+        print(f"Distance from footprint to line: {distance}")
+
+    style_config={
+        "title": "Distance: {:.2f}".format(distance),
+        "colors": ["green", "red", "gray"]
+    }
+    if debug_plot_shapes:
+        ds.display_shapes([footprint, line_footprints, fitted_line],
+                          style_config=style_config)
 
     # Check if the distance is below the threshold
     return distance <= distance_threshold

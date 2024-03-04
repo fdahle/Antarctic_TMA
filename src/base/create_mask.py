@@ -6,7 +6,8 @@ from typing import Optional, Dict, Tuple, List
 def create_mask(image: np.ndarray,
                 fid_marks: Optional[Dict[str, Tuple[int, int]]] = None,
                 ignore_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
-                default_fid_position: int = 500) -> np.ndarray:
+                default_fid_position: int = 500,
+                min_border_width: int = None) -> np.ndarray:
     """
     This function generates a mask for an image based on provided fiducial marks (everything outside
     these marks is masked). If no marks are provided, default positions are used. Additionally,
@@ -27,6 +28,7 @@ def create_mask(image: np.ndarray,
                       (x1, y1, x2, y2) representing the top left (x1, y1) and bottom right (x2, y2) corners.
         default_fid_position: An optional integer defining the default position for fiducial marks
                               if none are provided. Defaults to 500.
+        min_border_width: An optional integer defining the minimum border width to apply to the mask.
     Returns:
         A numpy array representing the masked image, where regions outside the specified fiducial
         marks and ignore boxes are set to zero.
@@ -56,6 +58,13 @@ def create_mask(image: np.ndarray,
     max_x = min(fid_marks["2"][0], fid_marks["4"][0])
     min_y = max(fid_marks["3"][1], fid_marks["2"][1])
     max_y = min(fid_marks["1"][1], fid_marks["4"][1])
+
+    # Apply the min_border_width if specified
+    if min_border_width is not None:
+        min_x = max(min_x, min_border_width)
+        max_x = min(max_x, mask.shape[1] - min_border_width)
+        min_y = max(min_y, min_border_width)
+        max_y = min(max_y, mask.shape[0] - min_border_width)
 
     # mask the borders
     # Set top and bottom regions to 0

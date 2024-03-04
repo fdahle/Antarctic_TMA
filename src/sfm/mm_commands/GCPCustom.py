@@ -23,7 +23,7 @@ class GCPCustom(BaseCommand):
         self.kwargs = kwargs
 
     def build_shell_string(self):
-        raise AssertionError("This class does not have a shell command.")
+        raise AssertionError("This custom class does not have a shell command.")
 
     def execute_custom_cmd(self):
 
@@ -109,9 +109,9 @@ class GCPCustom(BaseCommand):
 
                 # check if image already has a xml element
                 if image_id not in image_xml_dict.keys():
-                    image_xml_element = etree.SubElement(root, "MesureAppuiFlottantIm")
+                    image_xml_element = etree.SubElement(root, "MesureAppuiFlottant1Im")
                     image_name = etree.SubElement(image_xml_element, "NameIm")
-                    image_name.text = image_id
+                    image_name.text = "OIS-Reech_" + image_id + ".tif"
                     image_xml_dict[image_id] = image_xml_element  # Save the reference
                 else:
                     image_xml_element = image_xml_dict[image_id]

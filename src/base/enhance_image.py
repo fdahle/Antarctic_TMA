@@ -54,8 +54,10 @@ def enhance_image(image: np.ndarray,
         max_val = np.nanquantile(filtered, max(scale))
         min_val = np.nanquantile(filtered, min(scale))
     else:
-        max_val = np.nanquantile(filtered[mask], max(scale))
-        min_val = np.nanquantile(filtered[mask], min(scale))
+        # Apply the mask - this replaces non-masked values with NaN
+        masked_filtered = np.where(mask, filtered, np.nan)
+        max_val = np.nanquantile(masked_filtered, max(scale))
+        min_val = np.nanquantile(masked_filtered, min(scale))
 
     # Clip the filtered image to the calculated max and min values
     filtered[filtered > max_val] = max_val

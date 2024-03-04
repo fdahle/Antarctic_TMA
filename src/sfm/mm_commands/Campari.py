@@ -5,8 +5,10 @@ import shutil
 from src.sfm.mm_commands._base_command import BaseCommand
 class Campari(BaseCommand):
 
-    required_args = []
-    allowed_args = []
+    required_args = ["ImagePattern", "InputOrientation", "OutputOrientation"]
+    allowed_args = ["ImagePattern", "InputOrientation", "OutputOrientation", "GCP", "EmGPS", "GpsLa",
+                    "SigmaTieP", "FactElimTieP", "CPI1", "CPI2", "FocFree", "PPFree", "AffineFree", "AllFree",
+                    "DetGCP", "Visc", "ExpTxt", "ImMinMax", "DegAdd", "DegFree", "DRMax", "PoseFigee"]
 
     def __init__(self, *args, **kwargs):
         # Initialize the base class

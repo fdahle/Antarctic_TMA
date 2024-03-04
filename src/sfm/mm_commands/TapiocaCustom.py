@@ -12,6 +12,7 @@ import src.load.load_image as li
 #
 from src.sfm.mm_commands._base_command import BaseCommand
 
+debug = True
 
 class TapiocaCustom(BaseCommand):
 
@@ -29,6 +30,9 @@ class TapiocaCustom(BaseCommand):
 
         # validate the input arguments
         self.validate_mm_parameters()
+
+    def build_shell_string(self):
+        raise AssertionError("This custom class does not have a shell command.")
 
     def execute_custom_cmd(self):
 
@@ -56,12 +60,12 @@ class TapiocaCustom(BaseCommand):
             for file in tif_files:
                 base_name = os.path.basename(file)
                 base_name = base_name[:-4]
-                mask_file = self.project_folder + "/mask/" + base_name + ".tif"
-                if os.path.isfile(mask_file) is False:
+                mask_path = self.project_folder + "/masks/" + base_name + ".tif"
+                if os.path.isfile(mask_path) is False:
                     missing_masks.append(base_name)
 
             if len(missing_masks) > 0:
-                raise ValueError(f"{len(missing_masks)} masks are missing: {missing_masks}")
+                raise FileNotFoundError(f"{len(missing_masks)} masks are missing: {missing_masks}")
 
     def _create_tie_point_structure(self):
 
@@ -86,6 +90,13 @@ class TapiocaCustom(BaseCommand):
                 short_file_name = file_name
             short_file_names.append(short_file_name)
 
+        if len(short_file_names) < 2:
+            raise ValueError(f"{len(short_file_names)} images are available in the images folder. "
+                             f"At least 2 images are required for tie-point matching.")
+
+        if debug:
+            print(f"{len(short_file_names)} images are tested for overlap")
+
         # find overlapping images
         # todo: add support for footprints
         short_overlap_dict = foi.find_overlapping_images(short_file_names, working_modes=["ids"])
@@ -99,6 +110,9 @@ class TapiocaCustom(BaseCommand):
 
         # init the tie point detector
         tpd = ftp.TiePointDetector("lightglue", catch=False)
+
+        # store checked combinations of images
+        combinations = {}
 
         # find tie points between overlapping images
         for key_id, other_ids in overlap_dict.items():

@@ -40,23 +40,23 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str]],
     style_config = {**base_style_config, **style_config}
 
     # check if the number of labels is equal to the number of shapes
-    if style_config['labels'] and len(style_config['labels']) != len(shapes):
-        raise ValueError("The number of labels must be equal to the number of shapes")
+    if style_config['labels']:
+        if len(style_config['labels']) != len(shapes):
+            raise ValueError("The number of labels must be equal to the number of shapes")
+
+        # some shapes are lists, so check if the number of labels in this list is equal
+        for i, shape in enumerate(shapes):
+            if isinstance(shape, list):
+                if len(style_config['labels'][i]) != len(shape):
+                    raise ValueError("The number of labels must be equal to the number of elements "
+                                     f"in the the {i}-th list")
+            else:
+                # put label in list so that displaying later is more straightforward
+                style_config['labels'][i] = [style_config['labels'][i]]
 
     # check if the number of colors is equal to the number of shapes
     if style_config['colors'] and len(style_config['colors']) != len(shapes):
         raise ValueError("The number of colors must be equal to the number of shapes")
-
-    # some shapes are lists, so check if the number of labels is equal
-    for i, shape in enumerate(shapes):
-        if isinstance(shape, list):
-            if style_config['labels'][i] is not None and \
-                    len(style_config['labels'][i]) != len(shape):
-                raise ValueError("The number of labels must be equal to the number of elements "
-                                 f"in the the {i}-th list")
-        else:
-            # put label in list so that displaying later is more straightforward
-            style_config['labels'][i] = [style_config['labels'][i]]
 
     # convert all input data to geo-series but also save the geoms for normalizing
     geoms = []
@@ -70,9 +70,9 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str]],
         # Convert elements to plottable geo-series
         if isinstance(shape, BaseGeometry):
             geoms.append(shape)
-            gs_shapes[i] = gpd.GeoSeries([shape])  # noqa
+            gs_shapes.append(gpd.GeoSeries([shape]))  # noqa
         elif isinstance(shape, list):
-            gs_shapes[i] = gpd.GeoSeries(shape)  # noqa
+            gs_shapes.append(gpd.GeoSeries(shape))  # noqa
             for item in shape:
                 geoms.append(item)
         else:

@@ -25,6 +25,8 @@ def display_images(images: List[Any],
                    lines: Optional[List[List[Tuple[int, int, int, int]]]] = None,
                    tie_points: Optional[np.ndarray] = None,
                    tie_points_conf: Optional[List[float]] = None,
+                   reduce_tie_points: bool = False,
+                   num_reduced_tie_points: int = 100,
                    style_config: Optional[Dict[str, Any]] = None,
                    save_path: Optional[str] = None,
                    save_type: str = "png") -> None:
@@ -77,6 +79,17 @@ def display_images(images: List[Any],
     else:
         plot_shape = style_config['plot_shape']
 
+    # reduce tie-points if specified
+    if reduce_tie_points and tie_points is not None:
+        # random sample rows from tie_points and tie_points_conf
+        idx = np.random.choice(tie_points.shape[0], num_reduced_tie_points, replace=False)
+        new_tps = tie_points[idx]
+        if tie_points_conf is not None:
+            new_conf = [tie_points_conf[i] for i in idx]
+    else:
+        new_tps = tie_points
+        new_conf = tie_points_conf
+
     # create the plot
     fig, axarr = plt.subplots(plot_shape[0], plot_shape[1], squeeze=False)
     fig.subplots_adjust(hspace=0.3, wspace=0.3)  # Adjust space between plots
@@ -127,13 +140,13 @@ def display_images(images: List[Any],
 
         # Optionally draw tie-points
         if tie_points is not None and idx == 0:  # Draw tie-points only from the context of the first image
-            for tp_idx, point in enumerate(tie_points):
+            for tp_idx, point in enumerate(new_tps):
                 p1 = (point[0], point[1])  # Coordinates in the first image
                 p2 = (point[2], point[3])  # Corresponding coordinates in the second image
 
                 # Determine color for tie points
                 if tie_points_conf is not None:
-                    conf = tie_points_conf[tp_idx]
+                    conf = new_conf[tp_idx]
                     # Interpolate color from red (low confidence) to green (high confidence)
                     color = (1 - conf, conf, 0)  # Red to green, based on conf
                 else:

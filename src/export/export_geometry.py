@@ -63,7 +63,7 @@ def export_geometry(geometry: Union[str, shape],
     # raise an error for file conflict
     if os.path.isfile(output_path) and not overwrite_file and not overwrite_entry and \
             not attach:
-        raise ValueError(f"'{output_path}' already exists.")
+        raise FileExistsError(f"'{output_path}' already exists.")
 
     # raise error for file extension
     file_extension = os.path.splitext(output_path)[1].lower()
@@ -104,7 +104,7 @@ def export_geometry(geometry: Union[str, shape],
             raise ValueError(f"Key field '{key_field}' not found in the file.")
 
         # check if key field value already exists
-        if attributes[key_field].iloc[0] in existing_gdf[key_field].values:
+        if any(attr in existing_gdf[key_field].values for attr in attributes[key_field]):
 
             # remove existing entry if overwrite is True
             if overwrite_entry:

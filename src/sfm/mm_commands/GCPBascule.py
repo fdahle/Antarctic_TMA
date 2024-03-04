@@ -4,13 +4,14 @@ import shutil
 
 from src.sfm.mm_commands._base_command import BaseCommand
 
+class GCPBascule(BaseCommand):
 
-class AperiCloud(BaseCommand):
-
-    required_args = ["ImagePattern", "Orientation"]
-    allowed_args = ["ImagePattern", "Orientation", "ExpTxt", "Out", "Bin",
-                    "RGB", "SeuilEc", "LimBsH", "WithPoints", "CalPerIm",
-                    "Focs", "WithCam", "ColCadre", "ColRay", "SH"]
+    required_args = ["ImagePattern", "InputOrientation", "OutputOrientation",
+                     "FileGroundControlPoints", "FileImageMeasurements"]
+    allowed_args = ["ImagePattern", "InputOrientation", "OutputOrientation",
+                    "FileGroundControlPoints", "FileImageMeasurements", "L1", "CPI",
+                    "ShowU", "ShowD", "PatNLD", "NLDDegX", "NLDDegY", "NLDDegZ", "NLFR",
+                    "NLShow"]
 
     def __init__(self, *args, **kwargs):
         # Initialize the base class
@@ -26,7 +27,10 @@ class AperiCloud(BaseCommand):
     def build_shell_string(self):
 
         # build the basic shell command
-        shell_string = f'AperiCloud {self.mm_args["ImagePattern"]} {self.mm_args["Orientation"]}'
+        shell_string = f'GCPBascule {self.mm_args["ImagePattern"]} ' \
+                       f'{self.mm_args["InputOrientation"]} {self.mm_args["OutputOrientation"]} ' \
+                       f'{self.mm_args["FileGroundControlPoints"]} ' \
+                       f'{self.mm_args["FileImageMeasurements"]}'
 
         # add the optional arguments to the shell string
         for key, val in self.mm_args.items():
@@ -46,11 +50,6 @@ class AperiCloud(BaseCommand):
 
     def validate_required_files(self):
 
-        # check the orientation folder
-        orientation_folder = self.project_folder + "/Ori-" + self.mm_args["Orientation"]
-        if os.path.isdir(orientation_folder) is False:
-            raise FileNotFoundError(f"'{orientation_folder}' is not a valid path to a folder")
-
         # check all tif files in images-subfolder and copy them to the project folder if not already there
         homol_files = glob.glob(self.project_folder + "/images/*.tif")
         for file in homol_files:
@@ -58,8 +57,3 @@ class AperiCloud(BaseCommand):
 
             if os.path.isfile(self.project_folder + "/" + base_name) is False:
                 shutil.copy(file, self.project_folder + "/" + base_name)
-
-        if "SH" in self.mm_args:
-            if os.path.isdir(self.project_folder + "/" + self.mm_args["SH"]) is False:
-                raise FileNotFoundError(f"'{self.project_folder + '/' + self.mm_args['SH']}' "
-                                        f"is not a valid path to a folder")

@@ -133,7 +133,7 @@ class TiePointDetector:
                                       style_config=style_config)
 
                 if tps.shape[0] < self.min_resized_points:
-                    print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})")
+                    # print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})")
                     return np.empty((0, 4)), np.empty((0, 1))
 
                 # optional additional matching
@@ -832,6 +832,7 @@ class TiePointDetector:
 
             # try to detect tie-points
             try:
+
                 # Convert images to PyTorch tensors and normalize
                 sg_img1 = torch.from_numpy(sg_img1)[None, None].float() / 255.0
                 sg_img2 = torch.from_numpy(sg_img2)[None, None].float() / 255.0
@@ -891,7 +892,9 @@ class TiePointDetector:
             # catch error and check for oom
             except RuntimeError as e:
 
-                if "out of memory" in str(e):
+                print(e)
+
+                if "out of memory" in str(e) or "OutOfMemoryError" in str(e):
                     # free the gpu
                     torch.cuda.empty_cache()
 
@@ -905,8 +908,11 @@ class TiePointDetector:
                     resize_factor1 = OOM_REDUCE_VALUE * resize_factor1
                     resize_factor2 = OOM_REDUCE_VALUE * resize_factor2
 
-                    sg_img_1 = ri.resize_image(input_img1, (img_height1, img_width1), "proportion")  # noqa
-                    sg_img_2 = ri.resize_image(input_img2, (img_height2, img_width2), "proportion")  # noqa
+                    sg_img1 = ri.resize_image(input_img1, (img_height1, img_width1), "size")  # noqa
+                    sg_img2 = ri.resize_image(input_img2, (img_height2, img_width2), "size")  # noqa
+
+                else:
+                    raise e
 
         # adapt the tie points to account for resizing
         pts0[:, 0] = pts0[:, 0] * 1 / resize_factor1

@@ -6,19 +6,19 @@ from typing import Optional
 DEFAULT_TRANSFORM_FLD = "C:/Users/Felix/Documents/GitHub/Antarctic_TMA/data/transformation"
 
 
-def load_transform(transform_id: str, transform_path: Optional[str] = None) -> np.ndarray:
+def load_transform(transform_id: str, transform_fld: Optional[str] = None) -> np.ndarray:
     """
     Loads a transformation matrix from a specified file.
     Args:
         transform_id: A string identifier for the transform. This can be a path to a file or just an ID.
-        transform_path: An optional path to a directory containing the transformation files.
+        transform_fld: An optional path to a directory containing the transformation files.
                         If None, uses the default transformation folder.
     Returns:
         A 3x3 numpy array representing the transformation matrix.
     """
 
     # define the absolute path to the transform file
-    absolute_transform_path = _create_absolute_path(transform_id, transform_path)
+    absolute_transform_path = _create_absolute_path(transform_id, transform_fld)
 
     # load the matrix
     data_arr = np.loadtxt(absolute_transform_path)

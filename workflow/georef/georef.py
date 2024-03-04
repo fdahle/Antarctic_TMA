@@ -589,12 +589,14 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
 
     # save the transform
     path_transform = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_transform.txt"
+
     # noinspection PyTypeChecker
     np.savetxt(path_transform, transform.reshape(3, 3), fmt='%.5f')
 
     # save the points, conf and residuals
     path_points = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_points.txt"
     tps_conf = np.concatenate([tps, conf.reshape(-1, 1), residuals.reshape((-1, 1))], axis=1)
+
     # noinspection PyTypeChecker
     np.savetxt(path_points, tps_conf, fmt=['%i', '%i', '%.2f', '%.2f', '%.3f', '%.3f'])
 
@@ -614,9 +616,11 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
     }
     attributes = pd.DataFrame.from_dict(attributes, orient='index').T
 
+    # convert the image to a footprint
+    footprint = citf.convert_image_to_footprint(image, transform)
+
     # save footprint to shp file
     path_shp_file = f"{DEFAULT_SAVE_FOLDER}/{georef_type}.shp"
-    footprint = citf.convert_image_to_footprint(image, transform)
     eg.export_geometry(footprint, path_shp_file,
                        attributes=attributes, key_field="image_id",
                        overwrite_file=False,

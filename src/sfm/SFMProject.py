@@ -101,35 +101,35 @@ class SFMProject(object):
 
         # check project settings
         if len(project_name) == 0:
-            raise Exception("Project name cannot be empty")
+            raise ValueError("Project name cannot be empty")
         if os.path.isdir(project_folder) is False:
-            raise Exception("Path to project folder is invalid")
+            raise ValueError("Path to project folder is invalid")
 
         # check resume and overwrite
         if resume and overwrite:
-            raise Exception("Cannot resume and overwrite at the same time")
+            raise ValueError("Cannot resume and overwrite at the same time")
 
         # print settings if debug
         if debug:
             print("Resume: " + str(resume), "; Overwrite: " + str(overwrite))
 
-        # check if the project folder exists
-        if os.path.isdir(self.project_path):
-            if resume:
-                if self.debug:
-                    print(f"Resuming project at {self.project_path}")
+        if resume and os.path.isdir(self.project_path) and self.debug:
+            print(f"Resuming project at {self.project_path}")
 
-            elif overwrite is False:
-                raise Exception(f"Project folder at '{self.project_path}' already exists")
-            else:
-                # remove folder and all its content
-                shutil.rmtree(self.project_path)
-
-        # otherwise create the project folder and create the project structure
+        # check overwrite settings
         if resume is False:
-            os.mkdir(self.project_path)
-            if self.debug:
-                print(f"Project folder created at {self.project_path}")
+            if os.path.isdir(self.project_path):
+                if overwrite is False:
+                    raise FileExistsError(f"Project folder at '{self.project_path}' already exists")
+                else:
+                    # remove folder and all its content
+                    shutil.rmtree(self.project_path)
+
+            # otherwise create the project folder and create the project structure
+            else:
+                os.mkdir(self.project_path)
+                if self.debug:
+                    print(f"Project folder created at {self.project_path}")
 
         # already init some variables required for matching
         self.image_ids = []
@@ -138,7 +138,7 @@ class SFMProject(object):
         # create the project structure
         self._create_project_structure()
 
-    def set_camera(self, camera_name, camera_folder=None):
+    def set_camera(self, camera_name, camera_folder=None, overwrite=False):
 
         # define the camera folder
         if camera_folder is None:
@@ -153,12 +153,17 @@ class SFMProject(object):
         new_mc_path = self.project_path + "/Ori-InterneScan/MeasuresCamera.xml"
 
         # check if the camera xml files are existing
-        if os.path.isfile(old_lcd_path) is False or os.path.isfile(old_mc_path) is False:
-            raise Exception(f"Camera xml for {camera_name} is missing")
+        if os.path.isfile(old_lcd_path) is False:
+            raise FileNotFoundError(f"LocalChantierDescripteur for {camera_name} is missing")
+
+        if os.path.isfile(old_mc_path) is False:
+            raise FileNotFoundError(f"MeasuresCamera for {camera_name} is missing")
 
         # copy the camera xml files
-        shutil.copyfile(old_lcd_path, new_lcd_path)
-        shutil.copyfile(old_mc_path, new_mc_path)
+        if os.path.isfile(new_lcd_path) is False or overwrite:
+            shutil.copyfile(old_lcd_path, new_lcd_path)
+        if os.path.isfile(new_mc_path) is False or overwrite:
+            shutil.copyfile(old_mc_path, new_mc_path)
 
         # save the camera name
         self.camera_name = camera_name
@@ -239,7 +244,10 @@ class SFMProject(object):
                     if not (os.path.isfile(new_img_path) and overwrite is False):
                         shutil.copyfile(old_mask_path, new_mask_path)
                 else:
-                    raise FileNotFoundError(f"No mask found at {old_mask_path}")
+                    if skip_missing:
+                        print(f"No mask found at {old_mask_path}")
+                    else:
+                        raise FileNotFoundError(f"No mask found at {old_mask_path}")
 
             # Resampled images
             if copy_resampled:
@@ -251,7 +259,10 @@ class SFMProject(object):
                     if not (os.path.isfile(new_img_path) and overwrite is False):
                         shutil.copyfile(old_resampled_img_path, new_resampled_img_path)
                 else:
-                    raise FileNotFoundError(f"No resampled image found at {old_resampled_img_path}")
+                    if skip_missing:
+                        print(f"No resampled image found at {old_resampled_img_path}")
+                    else:
+                        raise FileNotFoundError(f"No resampled image found at {old_resampled_img_path}")
 
             # Resampled masks
             if copy_resampled_masks:
@@ -263,7 +274,10 @@ class SFMProject(object):
                     if not (os.path.isfile(new_resampled_mask_path) and overwrite is False):
                         shutil.copyfile(old_resampled_mask_path, new_resampled_mask_path)
                 else:
-                    raise FileNotFoundError(f"No resampled mask found at {old_resampled_mask_path}")
+                    if skip_missing:
+                        print(f"No resampled mask found at {old_resampled_mask_path}")
+                    else:
+                        raise FileNotFoundError(f"No resampled mask found at {old_resampled_mask_path}")
 
             # XML files
             if copy_xml:
@@ -274,7 +288,10 @@ class SFMProject(object):
                     if not (os.path.isfile(old_xml_path) and overwrite is False):
                         shutil.copyfile(old_xml_path, new_xml_path)
                 else:
-                    raise FileNotFoundError(f"No XML file found at {old_xml_path}")
+                    if skip_missing:
+                        print(f"No XML file found at {old_xml_path}")
+                    else:
+                        raise FileNotFoundError(f"No XML file found at {old_xml_path}")
 
             if copy_transform:
                 old_transform_path = os.path.join(transform_folder, image_id + "_transform.txt")
@@ -284,7 +301,10 @@ class SFMProject(object):
                     if not (os.path.isfile(old_transform_path) and overwrite is False):
                         shutil.copyfile(old_transform_path, new_transform_path)
                 else:
-                    raise FileNotFoundError(f"No transform found at {old_transform_path}")
+                    if skip_missing:
+                        print(f"No transform found at {old_transform_path}")
+                    else:
+                        raise FileNotFoundError(f"No transform found at {old_transform_path}")
 
         self.image_ids = image_ids
 

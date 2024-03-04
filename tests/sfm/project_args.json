@@ -1,11 +1,37 @@
 {
+  "AperiCloud": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1,
+    "Orientation": "Relative",
+    "SH": "Homol_mini"
+  },
+  "Campari": {
+    "ImagePattern": "OIS.*tif",
+    "InputOrientation": "Ground",
+    "OutputOrientation": "Final",
+    "ExpTxt": 1
+  },
+  "GCPCustom": {},
+  "GCPBascule": {
+    "ImagePattern": "OIS.*tif",
+    "InputOrientation": "Relative",
+    "OutputOrientation": "Ground",
+    "FileGroundControlPoints": "Ground-Pts3D.xml",
+    "FileImageMeasurements": "GroundMeasure.xml"
+  },
+  "Malt": {
+    "Mode": "Ortho",
+    "ImagePattern": "OIS*.*tif",
+    "Orientation": "Relative",
+    "NbVI": 2,
+    "ZoomF": 8,
+    "DefCor": 0,
+    "CostTrans": 1,
+    "EZA": 1
+  },
   "ReSampFid": {
     "ImagePattern": "images_orig/.*.tif",
     "ScanResolution": 0.025
-  },
-  "TapiocaCustom": {
-    "use_footprints": false,
-    "use_masks": true
   },
   "Schnaps": {
     "ImagePattern": "OIS.*tif",
@@ -14,15 +40,18 @@
   "Tapas": {
     "ImagePattern": "OIS.*tif",
     "DistortionModel": "RadialBasic",
-    "ExpTxt": 1,
     "LibFoc": 0,
     "Out": "Relative",
-    "SH": "Homol_mini"
+    "SH": "Homol_mini",
+    "ExpTxt": 1
   },
-  "AperiCloud": {
+  "TapiocaCustom": {
+    "use_footprints": false,
+    "use_masks": true
+  },
+  "Tarama": {
     "ImagePattern": "OIS.*tif",
-    "ExpTxt": 1,
     "Orientation": "Relative",
-    "SH": "Homol_mini"
+    "ExpTxt": 1
   }
 }

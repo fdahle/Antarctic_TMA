@@ -62,7 +62,7 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
 
     # last check if we have the right folder
     if os.path.isdir(sat_folder) is False:
-        raise ValueError(f"'{sat_folder}' is not a valid folder")
+        raise FileNotFoundError(f"'{sat_folder}' is not a valid folder")
 
     # convert bounds to shapely polygon if not already polygon
     if isinstance(bounds, shapely.geometry.base.BaseGeometry) is False:

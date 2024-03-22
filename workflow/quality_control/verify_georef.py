@@ -59,7 +59,7 @@ def verify_georef(path_georef_fld, check_geometry=True, check_position=True):
                 filtered_data = filtered_data[filtered_data['image_id'] != image_id]
                 flight_geoms = filtered_data['geometry'].values.tolist()
 
-                if len(flight_geoms) < 2:
+                if len(flight_geoms) < 3:
                     valid_position = True
                 else:
                     valid_position = vip.verify_image_position(image_geom, flight_geoms, DISTANCE_THRESHOLD)

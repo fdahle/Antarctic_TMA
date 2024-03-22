@@ -51,7 +51,7 @@ MIN_COMPLEXITY = 0.05
 VERIFY_IMAGE_POSITIONS = False
 
 # settings for verifying
-DISTANCE_THRESHOLD = 100
+DISTANCE_THRESHOLD = 100 # TODO UPDATE THIS!
 
 # settings for calc
 CALC_TYPES = ["sat", "img"]

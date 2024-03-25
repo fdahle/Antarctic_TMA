@@ -25,39 +25,39 @@ class SFMProject(object):
     # list of supported commands
     valid_commands = {
         "AperiCloud": {
-            "desc": "visualize relative orientation",
+            "desc": "Visualize relative orientation",
             "file": "mm_cmd.AperiCloud"
         },
         "Campari": {
-            "desc": "",
+            "desc": "Adjust camera calibration and orientation by bundle adjustment",
             "file": "mm_cmd.Campari"
         },
         "GCPBascule": {
-            "desc": "",
+            "desc": "Georeference model using Ground Control Points (GCPs)",
             "file": "mm_cmd.GCPBascule"
         },
         "GCPConvert": {
-            "desc": "",
+            "desc": "Convert GCP file formats",
             "file": "mm_cmd.GCPConvert"
         },
         "GCPCustom": {
-            "desc": "",
+            "desc": "Custom GCP finding",
             "file": "mm_cmd.GCPCustom"
         },
         "HomolFilterMasq": {
-            "desc": "filter tie-points",
+            "desc": "Filter tie-points",
             "file": "mm_cmd.HomolFilterMasq"
         },
         "Malt": {
-            "desc": "compute DEM",
+            "desc": "Compute DEM",
             "file": "mm_cmd.Malt"
         },
         "Nuage2Ply": {
-            "desc": "",
+            "desc": "Convert dense cloud to PLY format",
             "file": "mm_cmd.Nuage2Ply"
         },
         "Schnaps": {
-            "desc": "reduce tie-points",
+            "desc": "Reduce tie-points",
             "file": "mm_cmd.Schnaps"
         },
         "ReSampFid": {
@@ -69,19 +69,19 @@ class SFMProject(object):
             "file": "mm_cmd.Tapas"
         },
         "Tapioca": {
-            "desc": "",
+            "desc": "Generate tie points between images",
             "file": "mm_cmd.Tapioca"
         },
         "TapiocaCustom": {
-            "desc": "",
+            "desc": "Custom tie points generation",
             "file": "mm_cmd.TapiocaCustom",
         },
         "Tarama": {
-            "desc": "",
+            "desc": "Optimize image matching for dense reconstruction",
             "file": "mm_cmd.Tarama"
         },
         "Tawny": {
-            "desc": "",
+            "desc": "Radiometric equalization of images",
             "file": "mm_cmd.Tawny"
         }
     }
@@ -171,7 +171,7 @@ class SFMProject(object):
     def set_images(self, image_ids: list[str], image_folder: Optional[str] = None,
                    copy_masks: bool = False, mask_folder: Optional[str] = None,
                    copy_resampled: bool = False, resampled_image_folder: Optional[str] = None,
-                   copy_resampled_masks: bool = False, resampled_mask_folder = None,
+                   copy_resampled_masks: bool = False, resampled_mask_folder=None,
                    copy_xml: bool = False, xml_folder: Optional[str] = None,
                    copy_transform: bool = False, transform_folder: Optional[str] = None,
                    overwrite: bool = False, skip_missing: bool = False) -> None:
@@ -221,7 +221,7 @@ class SFMProject(object):
             if os.path.isfile(old_img_path):
 
                 # do not copy if images are already in the images-orig folder
-                if not(os.path.isfile(new_img_path) and overwrite is False):
+                if not (os.path.isfile(new_img_path) and overwrite is False):
                     shutil.copyfile(old_img_path, new_img_path)
 
             # image is not existing
@@ -267,9 +267,9 @@ class SFMProject(object):
             # Resampled masks
             if copy_resampled_masks:
                 old_resampled_mask_path = os.path.join(resampled_mask_folder,
-                                                         "OIS-Reech_" + image_id + ".tif")
+                                                       "OIS-Reech_" + image_id + ".tif")
                 new_resampled_mask_path = os.path.join(self.project_path, "masks",
-                                                         "OIS-Reech_" + image_id + ".tif")
+                                                       "OIS-Reech_" + image_id + ".tif")
                 if os.path.isfile(old_resampled_mask_path):
                     if not (os.path.isfile(new_resampled_mask_path) and overwrite is False):
                         shutil.copyfile(old_resampled_mask_path, new_resampled_mask_path)
@@ -316,7 +316,9 @@ class SFMProject(object):
         """
         Starts the processing of the project by executing a list of MicMac commands.
         Args:
+            mode (str):
             commands:
+            micmac_args:
             use_custom_matching:
             save_stats:
             stats_folder:

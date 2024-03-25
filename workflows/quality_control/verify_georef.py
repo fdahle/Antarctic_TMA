@@ -10,14 +10,13 @@ import src.load.load_transform as lt
 import src.georef.snippets.verify_image_geometry as vig
 import src.georef.snippets.verify_image_position as vip
 
-
 georef_folder = "/data_1/ATM/data_1/georef"
 georef_type = "sat"
 
 DISTANCE_THRESHOLD = 100
 
-def verify_georef(path_georef_fld, check_geometry=True, check_position=True):
 
+def verify_georef(path_georef_fld, check_geometry=True, check_position=True):
     # get all tifs in the folder
     pattern = os.path.join(path_georef_fld + "/" + georef_type, '*.tif')
     tif_files = glob.glob(pattern)
@@ -75,6 +74,6 @@ def verify_georef(path_georef_fld, check_geometry=True, check_position=True):
     print(f"{len(invalid_images)} of {len(tif_files)} are invalid.")
     print(invalid_images)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     verify_georef(georef_folder)

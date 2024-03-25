@@ -10,7 +10,6 @@ from typing import Tuple, Optional
 DEFAULT_REMA_FLD = "/data_1/ATM/data_1/DEM/REMA/mosaic"
 DEFAULT_REMA_SHP = "/data_1/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
 
-
 def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,
               rema_shape_file: str = DEFAULT_REMA_SHP,
               rema_folder: str = DEFAULT_REMA_FLD,
@@ -47,8 +46,11 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     if isinstance(bounds, shapely.geometry.base.BaseGeometry) is False:
         bounds = shapely.geometry.box(*bounds)
 
+    print(rema_shape_file)
+    print(str(zoom_level))
+
     # load the mosaic tiles from shape file
-    mosaic_data = gpd.read_file(rema_shape_file + f"_v{zoom_level}m.shp")
+    mosaic_data = gpd.read_file(rema_shape_file + f"_{str(zoom_level)}m.shp")
 
     # find which mosaic tiles are intersecting with the polygon
     intersects = mosaic_data.intersects(bounds)
@@ -56,7 +58,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     tiles = mosaic_data["dem_id"].iloc[indices].tolist()
 
     # adapt rema-folder to zoom level
-    zoom_rema_folder = rema_folder + f"/{zoom_level}m"
+    zoom_rema_folder = rema_folder + f"/{str(zoom_level)}m"
 
     # here we save all rema files we want to merge
     mosaic_files = []
@@ -98,13 +100,13 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     with rasterio.io.MemoryFile() as mem_file:
         with mem_file.open(
                 driver="GTiff",
-                height=merged.shape[1],
-                width=merged.shape[2],
-                count=merged.shape[0],
+                height=merged.shape[0],
+                width=merged.shape[1],
+                count=1,
                 dtype=merged.dtype,
                 transform=transform_merged,
         ) as dataset:
-            dataset.write(merged)
+            dataset.write(merged, 1)
         with mem_file.open() as dataset:
             cropped, transform_cropped = rasterio.mask.mask(dataset, [bounds], crop=True)
 

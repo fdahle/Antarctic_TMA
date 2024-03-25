@@ -1,12 +1,21 @@
 import math
 import numpy as np
 
+from shapely import geometry
 from vector3d.vector import Vector
 
 import src.load.load_rema as lr
 
+
 def calc_approximate_footprint(center, azimuth, view_direction, altitude, focal_length,
                                adapt_with_rema=False):
+
+    if view_direction not in ["L", "V", "R"]:
+        raise ValueError("View direction must be either 'L' (left), 'V' (vertical), or 'R' (right)")
+    if altitude is None:
+        raise ValueError("Altitude is required to calculate the approximate footprint")
+    if focal_length is None:
+        raise ValueError("Focal length is required to calculate the approximate footprint")
 
     # get gamma
     gamma = 0
@@ -32,26 +41,32 @@ def calc_approximate_footprint(center, azimuth, view_direction, altitude, focal_
         "py": -0.001  # / 1000,
     }
 
-    polygon, origin = _get_bounds(camera_params)
+    # convert altitude from feet to meter & save
+    altitude = int(altitude / 3.281)
+    camera_params["zPos"] = altitude
+
+    # calculate an initial approx_footprint based on camera_params
+    polygon = _get_bounds(camera_params)
 
     if adapt_with_rema:
-
         # get average elevation data for this initial approx_footprint based on rema data
-        rema_data = lr.load_rema_data(polygon.bounds)
+        rema_data = lr.load_rema(polygon, zoom_level=32)
         avg_ground_height = np.average(rema_data)
+
+        # convert to feet
+        avg_ground_height = avg_ground_height * 3.281
 
         # recalculate the height of camera (in relation to the ground)
         altitude = altitude - avg_ground_height
-
-        # convert altitude from feet to meter & save
-        altitude = int(altitude / 3.281)
+        print(camera_params["zPos"], avg_ground_height, altitude)
         camera_params["zPos"] = altitude
 
-        polygon, origin = get_bounds(camera_params)
+        polygon = _get_bounds(camera_params)
+
+    return polygon
 
 
 def _get_bounds(cam_params):
-
     # convert to radians
     alpha_r = math.radians(cam_params["alpha"])
     beta_r = math.radians(cam_params["beta"])
@@ -97,36 +112,64 @@ def _get_bounds(cam_params):
     # convert bbox to absolute coordinate points
     points = []
     for p in bbox:  # noqa
-        points.append([p.x + camera_params["xPos"], p.y + camera_params["yPos"]])
+        points.append((p.x + cam_params["xPos"], p.y + cam_params["yPos"]))
 
-    # get center of list of points
+    # sort points
+    points = _sort_points(points)
+
+    # create polygon from points
+    polygon = geometry.Polygon(points)
+
+    return polygon
+
+
+def _sort_points(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """
+    Sorts a list of points in 2D space in a counter-clockwise direction starting from the upward direction,
+    relative to the centroid of all points. If two points form the same angle with the centroid,
+    the one closer to the centroid comes first.
+    Args:
+        points: A list of points (tuples) where each point is represented as (x, y).
+    Returns:
+        The sorted list of points based on their angle and distance relative to the centroid.
+    """
+
+    # Calculate the centroid of the points
     all_x = [po[0] for po in points]
     all_y = [po[1] for po in points]
-    ori = (sum(all_x) / len(points), sum(all_y) / len(points))
-    ref_vector = [0, 1]
+    centroid = (sum(all_x) / len(points), sum(all_y) / len(points))
 
+    # Function to calculate angle and distance of a point from the centroid
+    def __calc_angle_and_distance(point: tuple[float, float]) -> tuple[float, float]:
 
-def _clockwise_angle_and_distance(point):
-    
-    # Vector between point and the origin: v = p - o
-    vector = [point[0] - ori[0], point[1] - ori[1]]
-    # Length of vector: ||v||
-    len_vector = math.hypot(vector[0], vector[1])
-    # If length is zero there is no angle
-    if len_vector == 0:
-        return -math.pi, 0
-    # Normalize vector: v/||v||
-    normalized = [vector[0] / len_vector, vector[1] / len_vector]
-    dot_product = normalized[0] * ref_vector[0] + normalized[1] * ref_vector[1]  # x1*x2 + y1*y2
-    diff_product = ref_vector[1] * normalized[0] - ref_vector[0] * normalized[1]  # x1*y2 - y1*x2
-    angle = math.atan2(diff_product, dot_product)
-    # Negative angles represent counter-clockwise angles, so we need to subtract them
-    # from 2*pi (360 degrees)
-    if angle < 0:
-        return 2 * math.pi + angle, len_vector
-    # I return first the angle because that's the primary sorting criterium
-    # but if two vectors have the same angle then the shorter distance should come first.
-    return angle, len_vector
+        # Vector from point to centroid
+        vector = [point[0] - centroid[0], point[1] - centroid[1]]
+        len_vector = math.hypot(vector[0], vector[1])  # Length of vector
+
+        # Avoid division by zero
+        if len_vector == 0:
+            return -math.pi, 0
+
+        # Normalize vector
+        normalized = [vector[0] / len_vector, vector[1] / len_vector]
+        # Reference vector for upward direction
+        ref_vector = [0, 1]
+
+        # Dot product and determinant (for angle calculation)
+        dot_product = normalized[0] * ref_vector[0] + normalized[1] * ref_vector[1]
+        diff_product = ref_vector[1] * normalized[0] - ref_vector[0] * normalized[1]
+        angle = math.atan2(diff_product, dot_product)
+
+        # Adjust angles to ensure counter-clockwise sorting
+        if angle < 0:
+            angle = 2 * math.pi + angle
+
+        return angle, len_vector
+
+    # Sort points based on angle and distance from the centroid
+    sorted_points = sorted(points, key=__calc_angle_and_distance)
+
+    return sorted_points
 
 
 class CameraCalculator:
@@ -343,4 +386,3 @@ class CameraCalculator:
 
         # Substitute t in the original parametric equations to get points of intersection
         return Vector(x_vec.x + x_vec.y * t, y_vec.x + y_vec.y * t, z_vec.x + z_vec.y * t)
-

@@ -1,11 +1,11 @@
 import os
 import warnings
 
-from PIL import Image
+from PIL import Image, TiffTags
 from tqdm import tqdm
 from typing import NoReturn
 
-INPUT_FLD = "/data_1/ATM/data_1/georef/sat/"
+INPUT_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 METHOD = "lzw"
 QUALITY = 100
 
@@ -46,18 +46,32 @@ def compress_tif_files(folder_path: str, compression_method: str = 'lzw', qualit
 
                     # Open the TIF file
                     with Image.open(file_path) as img:
-                        # Determine the compression method
-                        if compression_method.lower() == 'lzw':
 
-                            # Use LZW compression
-                            img.save(file_path, compression='tiff_lzw')
+                        # Check the compression method used in the TIFF file
+                        if 'compression' in img.tag_v2:
+                            current_compression = img.tag_v2['compression']
+                        else:
+                            current_compression = None
 
-                        elif compression_method.lower() == 'jpeg':
-                            # Use JPEG compression within the TIFF format
-                            # This option can introduce loss but retains the TIFF format
-                            img.save(file_path, compression='jpeg', quality=quality)  # Adjust quality as needed
+                        # Determine if compression is needed based on the compression method and
+                        # current file compression
+                        compression_needed = True
+                        if compression_method.lower() == 'lzw' and current_compression == TiffTags.COMPRESSION.TIFF_LZW:
+                            compression_needed = False
+                        elif compression_method.lower() == 'jpeg' and current_compression == TiffTags.COMPRESSION.JPEG:
+                            compression_needed = False
 
-                        pbar.set_postfix_str(f"{filename} compressed")
+                        # compress the image
+                        if compression_needed:
+                            if compression_method.lower() == 'lzw':
+                                img.save(file_path, compression='tiff_lzw')
+                            elif compression_method.lower() == 'jpeg':
+                                img.save(file_path, compression='jpeg', quality=quality)
+
+                        if compression_needed:
+                            pbar.set_postfix_str(f"{filename} compressed")
+                        else:
+                            pbar.set_postfix_str(f"{filename} already compressed")
 
                 except (Exception,) as _:
                     pbar.set_postfix_str(f"{filename} failed")

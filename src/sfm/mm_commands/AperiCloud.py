@@ -49,7 +49,7 @@ class AperiCloud(BaseCommand):
         # check the orientation folder
         orientation_folder = self.project_folder + "/Ori-" + self.mm_args["Orientation"]
         if os.path.isdir(orientation_folder) is False:
-            raise FileNotFoundError(f"'{orientation_folder}' is not a valid path to a folder")
+            raise FileNotFoundError(f"No Orientation folder found at '{orientation_folder}'.")
 
         # check all tif files in images-subfolder and copy them to the project folder if not already there
         homol_files = glob.glob(self.project_folder + "/images/*.tif")
@@ -61,5 +61,5 @@ class AperiCloud(BaseCommand):
 
         if "SH" in self.mm_args:
             if os.path.isdir(self.project_folder + "/" + self.mm_args["SH"]) is False:
-                raise FileNotFoundError(f"'{self.project_folder + '/' + self.mm_args['SH']}' "
-                                        f"is not a valid path to a folder")
+                raise FileNotFoundError(f"'No SH-folder found at "
+                                        f"{self.project_folder + '/' + self.mm_args['SH']}' ")

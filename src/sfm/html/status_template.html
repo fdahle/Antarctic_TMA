@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{PROJECT_NAME}</title>
+</head>
+<body>
+    <h1>{PROJECT_NAME}</h1>
+    <p>Created by: {PROJECT_AUTHOR}</p>
+    <p>Created on: {PROJECT_CREATION_DATE}</p>
+
+    <h2>Project images</h2>
+    <div class="images-container">
+        {PROJECT_IMAGES}
+    </div>
+
+    <h2>Project Camera</h2>
+    <div class="camera-container">
+        {PROJECT_CAMERA}
+    </div>
+
+    <h2>MicMac Steps</h2>
+    <div class="steps-container">
+        {MICMAC_STEPS}
+    </div>
+
+    <h2>Tie-points</h2>
+    <div class="tie-points-container">
+        {TIE_POINTS}
+    </div>
+
+    <h2>Output</h2>
+    <div class="output-container">
+        <div>
+            <div>Pseudo Orthoimage</div>
+            <div>{PSEUDO_ORTHOIMAGE}</div>
+        </div>
+        <div>
+            <div>DEM</div>
+            <div>{DEM}</div>
+        </div>
+        <div>
+            <div>Orthoimage</div>
+            <div>{ORTHOIMAGE}</div>
+        </div>
+        <div>
+            <div>Point cloud</div>
+            <div>{POINT_CLOUD}</div>
+        </div>
+    </div>
+</body>
+</html>
+
+<style>
+        .images-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px; /* Adjust the gap between items */
+        }
+        .image-block {
+            flex-basis: 250px; /* Adjust based on your thumbnail size and desired spacing */
+            text-align: center;
+        }
+        .image-block img {
+            width: 100%;
+            max-width: 250px; /* Your setting.image_size width */
+            height: auto;
+        }
+        .presence-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .presence-list li {
+            font-size: 14px;
+        }
+        .check {
+            color: green;
+        }
+        .cross {
+            color: red;
+        }
+    </style>

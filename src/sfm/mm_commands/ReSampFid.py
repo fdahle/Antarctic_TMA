@@ -1,5 +1,7 @@
 import glob
+import json
 import os.path
+import re
 
 from src.sfm.mm_commands._base_command import BaseCommand
 
@@ -37,6 +39,53 @@ class ReSampFid(BaseCommand):
 
         return shell_string
 
+    def extract_stats(self, raw_output):
+
+        # Initialize statistics dictionary
+        stats = {
+            "total_images_processed": 0,
+            "images": []
+        }
+
+        # Extract total number of images processed
+        matches_line = re.search(r'".*\.tif": (\d+) matches.', raw_output)
+        if matches_line:
+            stats["total_images_processed"] = int(matches_line.group(1))
+
+        # Iterate over each line to extract and organize information
+        for line in raw_output:
+            if line.startswith("==="):
+                image_info = re.search(r"=== RESAMPLE EPIP (.+?) Ker=(\d+) Step=(\d+) SzRed=\[(\d+),(\d+)]======",
+                                       line)
+                if image_info:
+                    image_name = image_info.group(1)
+                    ker = int(image_info.group(2))
+                    step = int(image_info.group(3))
+                    szred = [int(image_info.group(4)), int(image_info.group(5))]
+
+            if line.startswith("FOR"):
+                residu_time_info = re.search(r"FOR (.+?) RESIDU (.+?) Time (.+?) ", line)
+                if residu_time_info:
+                    residu = float(residu_time_info.group(2))
+                    time = float(residu_time_info.group(3))
+                    # Ensure the image name matches between sections
+                    if residu_time_info.group(1) == image_name:  # noqa
+                        stats["images"].append({
+                            "name": image_name,
+                            "ker": ker,  # noqa
+                            "step": step,  # noqa
+                            "szred": szred,  # noqa
+                            "residu": residu,  # noqa
+                            "time": time,
+                        })
+
+        # Serialize the dictionary to a JSON string
+        json_output = json.dumps(stats, indent=4)
+
+        # save json_output to a file
+        with open(f"{self.project_folder}/stats/schnaps_stats.json", "w") as file:
+            file.write(json_output)
+
     def validate_mm_parameters(self):
 
         # adapt the image pattern for glob
@@ -57,4 +106,3 @@ class ReSampFid(BaseCommand):
             raise FileNotFoundError("MicMac-LocalChantierDescripteur.xml is missing")
         if os.path.isfile(self.project_folder + "/Ori-InterneScan/MeasuresCamera.xml") is False:
             raise FileNotFoundError("MeasuresCamera.xml is missing")
-

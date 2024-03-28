@@ -1,8 +1,14 @@
+from datetime import datetime
+from tqdm import tqdm
+
 import src.base.connect_to_database as ctd
+import src.load.load_image as li
 import src.fid_marks.extract_subset as es
 
-def extract_subsets():
+overwrite = False
 
+
+def extract_subsets():
     # establish connection to psql
     conn = ctd.establish_connection()
 
@@ -16,31 +22,61 @@ def extract_subsets():
                  "FROM images_fid_points"
     data = ctd.execute_sql(sql_string, conn)
 
+    # shuffle the data
+    data = data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    # save how many entries are updated
+    updated_entries = 0
+
     # loop over all images
-    for idx, row in data.iterrows():
+    for idx, row in (pbar := tqdm(data.iterrows(), total=data.shape[0])):
 
         # get the image id
         image_id = row['image_id']
 
-        # loop over all subsets
-        for subset in ['n', 'e', 's', 'w']:
+        # reset the image variable
+        image = None
 
-            # get the subset values
-            subset_x = row[f'subset_{subset}_x']
-            subset_y = row[f'subset_{subset}_y']
-            subset_estimated = row[f'subset_{subset}_estimated']
-            subset_extraction_date = row[f'subset_{subset}_extraction_date']
+        # loop over all subsets
+        for key in ['n', 'e', 's', 'w']:
+
+            pbar.set_postfix_str(f"Extract subset {key} for {image_id} "
+                                 f"({updated_entries} already updated)")
+
+            # get existing subset information
+            subset_estimated = row[f'subset_{key}_estimated']
+            subset_extraction_date = row[f'subset_{key}_extraction_date']
 
             # if subset is not estimated and has an extraction date
-            if not subset_estimated and subset_extraction_date is not None:
+            if overwrite or subset_estimated or subset_extraction_date is None:
+
+                # load the image
+                if image is None:
+                    try:
+                        image = li.load_image(image_id)
+                    except (Exception,):
+                        continue
+
+                # extract the subset
+                bbox = es.extract_subset(image, key)
+
+                # skip if no bbox is found
+                if bbox is None:
+                    continue
+
+                # Get the current date
+                current_date = datetime.now()
 
                 # update the subset values
                 sql_string = f"UPDATE images_fid_points " \
-                             f"SET subset_{subset}_x = NULL, " \
-                             f"subset_{subset}_y = NULL, " \
-                             f"subset_{subset}_estimated = True " \
-                             f"WHERE image_id = '{image_id}'"
+                             f"SET subset_{key}_x={bbox[0]}, " \
+                             f"subset_{key}_y={bbox[2]}, " \
+                             f"subset_width=250, subset_height=250, " \
+                             f"subset_{key}_extraction_date='{current_date}', " \
+                             f"subset_{key}_estimated=False " \
+                             f"WHERE image_id='{image_id}'"
                 ctd.execute_sql(sql_string, conn)
+                updated_entries += 1
 
 
 if __name__ == "__main__":

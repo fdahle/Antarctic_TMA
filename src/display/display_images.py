@@ -1,5 +1,7 @@
 import copy
 import math
+#import matplotlib
+#matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -23,6 +25,7 @@ base_style_config = {
 def display_images(images: List[Any],
                    points: Optional[List[List[Tuple[int, int]]]] = None,
                    lines: Optional[List[List[Tuple[int, int, int, int]]]] = None,
+                   bounding_boxes: Optional[List[List[Tuple[int, int, int, int]]]] = None,
                    tie_points: Optional[np.ndarray] = None,
                    tie_points_conf: Optional[List[float]] = None,
                    reduce_tie_points: bool = False,
@@ -37,6 +40,9 @@ def display_images(images: List[Any],
         images (List[np.ndarray]): A list of images to display.
         points (Optional[List[List[Tuple[int, int]]]], optional): Points to mark on the images. Defaults to None.
         lines (Optional[List[List[Tuple[int, int, int, int]]]], optional): Lines to draw on the images.
+            Defaults to None.
+        bounding_boxes (Optional[List[List[Tuple[int, int, int, int]]]], optional): Bounding boxes to
+            draw on the images. Each bounding box is represented as a tuple (x_min, y_min, x_max, y_max).
             Defaults to None.
         tie_points (Optional[np.ndarray], optional): Array of tie-points connecting two images. Defaults to None.
         tie_points_conf (Optional[List[float]], optional): Confidence values for tie-points, affecting their appearance.
@@ -137,6 +143,15 @@ def display_images(images: List[Any],
             for line in lines[idx]:
                 ax.plot([line[0], line[2]], [line[1], line[3]], color=style_config['line_color'],
                         linewidth=style_config['line_width'])
+
+        # Optionally draw bounding boxes on the image
+        if bounding_boxes and idx < len(bounding_boxes):
+            for bbox in bounding_boxes[idx]:
+                rect = plt.Rectangle((bbox[0], bbox[1]), bbox[2] - bbox[0], bbox[3] - bbox[1],
+                                     linewidth=style_config['line_width'],
+                                     edgecolor=_normalize_color(style_config['line_color']),
+                                     facecolor='none')
+                ax.add_patch(rect)
 
         # Optionally draw tie-points
         if tie_points is not None and idx == 0:  # Draw tie-points only from the context of the first image

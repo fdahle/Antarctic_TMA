@@ -1,3 +1,6 @@
+import json
+import re
+
 from src.sfm.mm_commands._base_command import BaseCommand
 
 class Tapas(BaseCommand):
@@ -64,6 +67,50 @@ class Tapas(BaseCommand):
         elif self.mm_args["DistortionModel"] == "HemiEqui":
             self.allowed_args = self.allowed_args + self.additional_args + self.additional_args_hemi_equi
 
+    def extract_stats(self, raw_output):
+        stats = {
+            "general_info": {
+                "total_images": 0,
+                "matches": 0,
+            },
+            "calibration": {},
+            "image_processing": [],
+            "statistical_summary": [],
+            "warnings": {
+                "total_warnings": 0,
+                "types": []
+            }
+        }
+
+        lines = raw_output.split("\n")
+        for line in lines:
+            if '"OIS.*tif":' in line:
+                stats["general_info"]["total_images"] = int(re.search(r'(\d+) matches', line).group(1))
+            if "MdPppppF=" in line:
+                stats["calibration"] = {
+                    "FocMm": float(re.search(r'FocMm(\d+\.\d+)', line).group(1)),
+                    "XSZ": [int(x) for x in re.findall(r'XSZ=\[(\d+),(\d+)\]', line)[0]],
+                }
+            if "RES:" in line:
+                image_name = re.search(r'RES:\[(.+?)\]\[C\]', line).group(1)
+                residu = float(re.search(r'ER2 ([\d\.-]+)', line).group(1))
+                time = float(re.search(r'Time ([\d\.]+)', line).group(1))
+                stats["image_processing"].append({"name": image_name, "residu": residu, "time": time})
+            if "Stat on type of point" in line or "Perc=" in line:
+                match = re.search(r'Perc=(\d+\.\d+)% ;  Nb=(\d+) for (\w+)', line)
+                if match:
+                    stats["statistical_summary"].append({
+                        "type": match.group(3),
+                        "percentage": float(match.group(1)),
+                        "number": int(match.group(2)),
+                    })
+            if "warnings of" in line:
+                stats["warnings"]["total_warnings"] = int(re.search(r'There were (\d+) warnings', line).group(1))
+
+        # Serialize and save the extracted stats
+        json_output = json.dumps(stats, indent=4)
+        with open("tapas_stats.json", "w") as file:
+            file.write(json_output)
 
     def validate_mm_parameters(self):
 

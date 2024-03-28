@@ -5,7 +5,7 @@ import subprocess
 import shutil
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+# from datetime import datetime
 
 
 class BaseCommand(ABC):
@@ -17,8 +17,8 @@ class BaseCommand(ABC):
     def __init__(self, project_folder,
                  mm_args,
                  print_all_output=False,
-                 stat_folder=None,
-                 raw_folder=None,
+                 save_stats=False,
+                 save_raw=False,
                  clean_up=True,
                  overwrite=False):
 
@@ -34,8 +34,8 @@ class BaseCommand(ABC):
 
         # save the optional arguments
         self.print_all_output = print_all_output
-        self.stat_folder = stat_folder
-        self.raw_folder = raw_folder
+        self.save_stats = save_stats
+        self.save_raw = save_raw
         self.clean_up = clean_up
         self.overwrite = overwrite
 
@@ -46,7 +46,7 @@ class BaseCommand(ABC):
     def execute_shell_cmd(self, mm_path=None):
 
         # Get the current date and time
-        start_time = datetime.now()
+        # start_time = datetime.now()
 
         # validate the required files
         self.validate_required_files()
@@ -61,6 +61,7 @@ class BaseCommand(ABC):
         raw_output = []
 
         if self.print_all_output:
+            print(self.project_folder)
             print(shell_string)
             print("********")
 
@@ -78,12 +79,12 @@ class BaseCommand(ABC):
                 raw_output.append(stdout_line)
 
         # save the raw output
-        if self.raw_folder is not None:
+        if self.save_raw:
             # Format the current date and time as desired
-            timestamp = start_time.strftime("%Y_%m_%d_%H_%M_%S")
+            # timestamp = start_time.strftime("%Y_%m_%d_%H_%M_%S")
 
             filename = f"{self.project_folder}/stats/" \
-                       f"{timestamp}_{self.__class__.__name__}_raw.txt"
+                       f"{self.__class__.__name__}_raw.txt"
             with open(filename, "w") as f:
                 f.write(f"{shell_string}\n")
                 f.write("************\n")
@@ -99,6 +100,9 @@ class BaseCommand(ABC):
 
         else:
             print(f"{self.__class__.__name__} finished successfully.")
+
+        if self.save_stats:
+            self.extract_stats(raw_output)
 
         if self.clean_up:
             self._clean_up_files()
@@ -161,6 +165,10 @@ class BaseCommand(ABC):
 
     @abstractmethod
     def validate_required_files(self):
+        pass
+
+    @abstractmethod
+    def extract_stats(self, raw_output):
         pass
 
 

@@ -7,7 +7,7 @@ import src.prepare.create_table_entry as cte
 
 PATH_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 
-tables_for_adding = ["images"]
+tables_for_adding = ["images_fid_points"]
 
 
 def add_images_to_psql(lst_images, tables):

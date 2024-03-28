@@ -35,7 +35,7 @@ def create_table_entry(image_id: str, table: str,
         return
 
     # insert the image_id into the database
-    sql_string = f"INSERT INTO images (image_id) VALUES ('{image_id}')"
+    sql_string = f"INSERT INTO {table} (image_id) VALUES ('{image_id}')"
 
     # add optionally the values from the value_dict
     if value_dict is not None:

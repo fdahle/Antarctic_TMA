@@ -32,6 +32,7 @@ def execute_sql(sql_string: str, conn: psycopg2.extensions.connection, add_times
     DataFrame for SELECT queries, or commits the action for non-SELECT queries without
     returning data. Optionally, updates 'last_change' column with the current timestamp
     when adding or editing a row.
+
     Args:
         sql_string (str): The SQL query string to be executed.
         conn (psycopg2.extensions.connection): The database connection object.

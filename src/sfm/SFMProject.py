@@ -112,9 +112,12 @@ class SFMProject(object):
         # print settings if debug
         if debug:
             print("Resume: " + str(resume), "; Overwrite: " + str(overwrite))
+            if resume and os.path.isdir(self.project_path):
+                print(f"Resuming project at {self.project_path}")
 
-        if resume and os.path.isdir(self.project_path) and self.debug:
-            print(f"Resuming project at {self.project_path}")
+        # set resume to false if the project folder does not exist
+        if os.path.isdir(self.project_path) is False:
+            resume = False
 
         # check overwrite settings
         if resume is False:
@@ -182,16 +185,21 @@ class SFMProject(object):
             image_ids (List[str]): List of image IDs to process.
             image_folder (Optional[str]): Folder where original images are stored.
                 Defaults to DEFAULT_IMAGE_FLD.
-            copy_masks (bool): Whether to copy mask files.
-                Defaults to False.
+            copy_masks (bool): Whether to copy mask files. Defaults to False.
             mask_folder (Optional[str]): Folder where mask files are stored.
                 Defaults to DEFAULT_MASK_FLD.
             copy_resampled (bool): Whether to copy resampled images. Defaults to False.
             resampled_image_folder (Optional[str]): Folder where resampled images are stored.
                 Defaults to DEFAULT_RESAMPLED_IMAGE_FLD.
+            copy_resampled_masks (bool): Whether to copy resampled mask files. Defaults to False.
+            resampled_mask_folder (Optional[str]): Folder where resampled mask files are stored.
+                Defaults to DEFAULT_RESAMPLED_MASK_FLD.
             copy_xml (bool): Whether to copy XML files. Defaults to False.
             xml_folder (Optional[str]): Folder where XML files are stored.
                 Defaults to DEFAULT_XML_FLD.
+            copy_transform (bool): Whether to copy transform files. Defaults to False.
+            transform_folder (Optional[str]): Folder where transform files are stored.
+                Defaults to DEFAULT_TRANSFORM_FLD.
             overwrite (bool): Whether to overwrite existing files at the destination. Defaults to False.
             skip_missing (bool): Whether to skip missing files without raising an exception. Defaults to False.
 
@@ -311,18 +319,17 @@ class SFMProject(object):
     def start(self, mode: str, commands: None,
               micmac_args: dict = None,
               print_all_output: bool = False,
-              stat_folder: Optional[str] = None,
-              raw_folder: Optional[str] = None) -> None:
+              save_stats: bool = False,
+              save_raw: bool = False) -> None:
         """
         Starts the processing of the project by executing a list of MicMac commands.
         Args:
             mode (str):
             commands:
             micmac_args:
-            use_custom_matching:
-            save_stats:
-            stats_folder:
-
+            print_all_output (bool): Whether to print all output to the console. Defaults to False.
+            stat_folder:
+            raw_folder:
         Returns:
 
         """
@@ -336,29 +343,32 @@ class SFMProject(object):
         else:
             raise ValueError(f"Mode '{mode}' is not supported")
 
+        if mode == "manual" and commands is None:
+            raise ValueError("Commands must be provided in manual mode")
+
         # check if there are enough images
-        if len(self.image_ids) < 3:
-            raise ValueError("Need at least 3 images for SfM")
+        #if len(self.image_ids) < 3:
+        #    raise ValueError("Need at least 3 images for SfM")
 
         # check if every image is existing and has an image xml
-        missing_images = []
-        missing_xml = []
-        for image_id in self.image_ids:
-            if os.path.isfile(self.project_path + "/" + image_id + ".tif") is False and \
-                    os.path.isfile(self.project_path + "/images_orig/" + image_id + ".tif") is False:
-                missing_images.append(image_id)
-            if os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresIm-" + image_id + ".tif.xml") is False:
-                missing_images.append(image_id)
+        #missing_images = []
+        #missing_xml = []
+        #for image_id in self.image_ids:
+        #    if os.path.isfile(self.project_path + "/" + image_id + ".tif") is False and \
+        #            os.path.isfile(self.project_path + "/images_orig/" + image_id + ".tif") is False:
+         #       missing_images.append(image_id)
+         #   if os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresIm-" + image_id + ".tif.xml") is False:
+         #       missing_images.append(image_id)
 
-        if len(missing_images) > 0:
-            raise Exception("Image is missing for following image ids: " + str(missing_images))
-        if len(missing_xml) > 0:
-            raise Exception("Image xml is missing for following image ids: " + str(missing_xml))
+        #if len(missing_images) > 0:
+        #    raise Exception("Image is missing for following image ids: " + str(missing_images))
+        #if len(missing_xml) > 0:
+        #    raise Exception("Image xml is missing for following image ids: " + str(missing_xml))
 
         # check if there's a camera xml
-        if os.path.isfile(self.project_path + "/MicMac-LocalChantierDescripteur.xml") is False or \
-                os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresCamera.xml") is False:
-            raise Exception("Camera xml is missing")
+        #if os.path.isfile(self.project_path + "/MicMac-LocalChantierDescripteur.xml") is False or \
+        #        os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresCamera.xml") is False:
+        #    raise Exception("Camera xml is missing")
 
         # execute the commands in order of the list
         for command in commands:
@@ -368,7 +378,7 @@ class SFMProject(object):
                 raise Exception(f"Command '{command}' is not supported")
 
             # execute the command
-            self._execute_command(command, micmac_args, print_all_output, stat_folder, raw_folder)
+            self._execute_command(command, micmac_args, print_all_output, save_stats, save_raw)
 
     def _create_project_structure(self):
 
@@ -412,7 +422,8 @@ class SFMProject(object):
         if os.path.isdir(self.project_path + "/Ori-Tapas") is False:
             os.mkdir(self.project_path + "/Ori-Tapas")
 
-    def _execute_command(self, command_name, micmac_args, print_all_output=False, stat_folder=None, raw_folder=None):
+    def _execute_command(self, command_name, micmac_args, print_all_output=False,
+                         save_stats=False, save_raw=False):
 
         try:
             # Dynamically import the module (file)
@@ -431,7 +442,7 @@ class SFMProject(object):
             mm_command = mm_class(self.project_path,
                                   mm_args=mm_args,
                                   print_all_output=print_all_output,
-                                  stat_folder=stat_folder, raw_folder=raw_folder)
+                                  save_stats=save_stats, save_raw=save_raw)
 
         except (ImportError, AttributeError) as e:
             # Handle the error if the module or class is not found

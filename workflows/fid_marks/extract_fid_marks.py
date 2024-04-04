@@ -85,7 +85,7 @@ def extract_fid_marks():
 
                 # get bounding box of the subset
                 subset_bounds = (int(subset_x), int(subset_y),
-                                int(subset_x + subset_width), int(subset_y + subset_height))
+                                 int(subset_x + subset_width), int(subset_y + subset_height))
 
                 # extract the fid mark
                 try:
@@ -109,6 +109,7 @@ def extract_fid_marks():
                              f"WHERE image_id='{image_id}'"
                 ctd.execute_sql(sql_string, conn)
                 updated_entries += 1
+
 
 if __name__ == "__main__":
     extract_fid_marks()

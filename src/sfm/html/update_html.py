@@ -6,7 +6,8 @@ from datetime import datetime
 from PIL import Image
 
 settings = {
-    "image_size": (250, 250)
+    "image_size": (250, 250),
+    "image_prefix": "OIS-Reech_"
 }
 
 template_path = "/home/fdahle/Documents/GitHub/Antarctic_TMA/src/sfm/html/status_template.html"
@@ -76,6 +77,9 @@ def update_html(project_folder):
     # get tie-points html
     html_content = html_content.replace("{TIE_POINTS}", _generate_tie_points_html(homol_folder))
 
+    # get the output html
+    html_content = html_content.replace("{OUTPUT_FILES}", _generate_output_html(project_folder))
+
     # save the updated html
     with open(html_path, 'w') as file:
         file.write(html_content)
@@ -89,6 +93,7 @@ def _check_image_presence(image_id, folder):
 
 
 def _create_or_update_thumbnail(original_path, thumbnail_path, size):
+    print(thumbnail_path, os.path.exists(thumbnail_path))
     if os.path.exists(thumbnail_path):
         with Image.open(thumbnail_path) as img:
             if img.size == size:
@@ -109,25 +114,72 @@ def _generate_presence_html(image_id, project_folder):
 
     html_content = '<ul class="presence-list">'
     for label, dir_name in directories.items():
-        present = _check_image_presence(image_id, os.path.join(project_folder, dir_name))
+
+        if "resampled" in label:
+            adapted_image_id = settings["image_prefix"] + image_id
+        else:
+            adapted_image_id = image_id
+
+        present = _check_image_presence(adapted_image_id, os.path.join(project_folder, dir_name))
         class_name = "check" if present else "cross"
         symbol = "✔️" if present else "❌"
         html_content += f'<li class="{class_name}">{label}: {symbol}</li>'
     html_content += '</ul>'
     return html_content
 
+
+def _generate_output_html(project_folder):
+
+    # define which results are checked (name:file)
+    results = {
+        "Point cloud relative": "AperiCloud_Relative.ply",
+        "Point cloud absolute": "AperiCloud_TerrainFinal.ply",
+        "Point cloud Final": "PointCloud.ply",
+        "DEM": "MEC-Malt/Z_Num7_DeZoom2_STD-MALT.tif",
+        "Pseudo Orthoimage": "TerrainFinal.tif",
+        "Orthoimage": "Orthophotomosaic.tif",
+    }
+
+    html_content = ''
+    for key, val in results.items():
+
+        # Check if the file exists
+        if os.path.isfile(os.path.join(project_folder, val)):
+            status_message = "existing"
+            status_html = f"{key} {status_message}"
+        else:
+            status_message = "not existing"
+            # Apply gray color for "not existing" message
+            status_html = f'<span style="color: gray;">{key} {status_message}</span>'
+
+        # Append the result's HTML block to the overall content
+        html_content += f'''
+        <div>
+            <h3>{key}</h3>
+            <div>{status_html}</div>
+        </div>\n'''
+
+    return html_content
+
+
 def _update_steps_html(project_folder):
+
+    # define which steps are checked
     steps = ["AperiCloud", "GCPConvert", "Malt", "Nuage2Ply", "ReSampFid", "Schnaps", "Tarama", "Tapas", "Tawny"]
+
+    # where are the stats saved
     stats_folder = os.path.join(project_folder, "stats")
 
     html_content = ''
     for step in steps:
-        json_file_path = os.path.join(stats_folder, f"{step}_stats.json")
+        json_file_path = os.path.join(stats_folder, f"{step.lower()}_stats.json")
+
+        print(json_file_path, os.path.isfile(json_file_path))
 
         # Check if the JSON file exists
         if os.path.isfile(json_file_path):
             status_message = "existing"
-            status_html = f"{step} {status_message}"
+            status_html = f'<span style="color: green;">{step} {status_message}</span>'
         else:
             status_message = "not existing"
             # Apply gray color for "not existing" message
@@ -141,6 +193,7 @@ def _update_steps_html(project_folder):
         </div>\n'''
 
     return html_content
+
 
 def _generate_tie_points_html(homol_folder):
     connections = _parse_homol_directory(homol_folder)
@@ -167,12 +220,13 @@ def _generate_tie_points_html(homol_folder):
     for row_id in sorted(image_ids):
         html_content += f"<tr><td>{row_id}</td>"
         for col_id in sorted(image_ids):
-            tie_points =tie_points_matrix[row_id][col_id]
+            tie_points = tie_points_matrix[row_id][col_id]
             html_content += f"<td>{tie_points}</td>"
         html_content += "</tr>\n"
     html_content += "</table>\n"
 
     return html_content
+
 
 def _parse_homol_directory(homol_folder):
     """

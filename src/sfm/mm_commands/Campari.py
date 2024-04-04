@@ -27,7 +27,8 @@ class Campari(BaseCommand):
     def build_shell_string(self):
 
             # build the basic shell command
-            shell_string = f'Campari'
+            shell_string = f'Campari "{self.mm_args["ImagePattern"]}" ' \
+                           f'{self.mm_args["InputOrientation"]} {self.mm_args["OutputOrientation"]}'
 
             # add the optional arguments to the shell string
             for key, val in self.mm_args.items():
@@ -39,6 +40,9 @@ class Campari(BaseCommand):
                 shell_string = shell_string + " " + str(key) + "=" + str(val)
 
             return shell_string
+
+    def extract_stats(self, raw_output):
+        pass
 
     def validate_mm_parameters(self):
 

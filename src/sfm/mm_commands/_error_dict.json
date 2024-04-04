@@ -1,9 +1,16 @@
 {
+  "Campari": [
+    {
+      "MMErrorMsg": "Ori name is not a valid existing directory",
+      "ErrorMsg": "The directory for 'Input Orientation' does not exist",
+      "Fix": "Check the correct path to the folder"
+    }
+  ],
   "GCPBascule": [
     {
       "MMErrorMsg": "Bad Nb Value in xml_init (double)",
       "ErrorMsg": "A bad value was found in the XML file",
-      "Fix": "Check if the Measures.xml has 3 values for each point."
+      "Fix": "Check if the Measures.xml has 3 values for each point"
     },
     {
       "MMErrorMsg": "Exit XML Matching Specif Error",
@@ -14,6 +21,11 @@
       "MMErrorMsg": "Not enough samples (Min 3) in cRansacBasculementRigide",
       "ErrorMsg": "",
       "Fix": ""
+    },
+    {
+      "MMErrorMsg": "Empty list for StdGetListOfFile",
+      "ErrorMsg": "The file for Ground control Points is not found",
+      "Fix": "Check if the file is existing at the specified path"
     }
   ],
   "Schnaps": [

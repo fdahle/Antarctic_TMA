@@ -1,8 +1,9 @@
+# Package imports
 from tqdm import tqdm
 
+# Custom imports
 import src.base.connect_to_database as ctd
 import src.load.load_shape_data as lsd
-
 
 # Constants
 PATH_SHP_FILE = "/data_1/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
@@ -13,7 +14,7 @@ _overwrite = False  # overwrite existing entries
 _catch = False  # catch exceptions
 
 
-def add_tma_shp_data(path_shp_file, overwrite=False, catch=False):
+def add_tma_shp_data(path_shp_file: str, overwrite: bool = False, catch: bool = False):
     """
     Updates database entries with data loaded from a TMA shapefile.
 
@@ -44,8 +45,10 @@ def add_tma_shp_data(path_shp_file, overwrite=False, catch=False):
     image_data = ctd.execute_sql(sql_string, conn)
     image_ids = image_data['image_id'].values.tolist()
 
+    # iterate over all image_ids
     for image_id in (pbar := tqdm(image_ids)):
 
+        # update the progress bar
         pbar.set_postfix_str(f"update {image_id}")
 
         # get the entity image_id from the image image_id (it's almost the same,
@@ -125,12 +128,17 @@ def add_tma_shp_data(path_shp_file, overwrite=False, catch=False):
             "point": [point, "geom"]
         }
 
+        # this list will contain the update strings (e.g. 'XXX=YYY')
         set_clauses = []
 
+        # iterate over the update_dict and construct the update strings
         for key, (value, value_type) in update_dict.items():
 
+            # Skip null updates
             if value is None:
-                continue  # Skip null updates
+                continue
+
+            # add quotes for string values
             if value_type == "string":
                 value = f"'{value}'"
             else:
@@ -141,11 +149,15 @@ def add_tma_shp_data(path_shp_file, overwrite=False, catch=False):
                 set_clause = f"{key} = {value}"
             else:
                 set_clause = f"{key} = COALESCE({key}, {value})"
+
+            # save set clause
             set_clauses.append(set_clause)
 
+        # construct the update sql string
         set_clause_str = ", ".join(set_clauses)
         sql_string = f"UPDATE images SET {set_clause_str} WHERE image_id = '{image_id}'"
 
+        # execute the sql string
         try:
             ctd.execute_sql(sql_string, conn)
         except (Exception,) as e:
@@ -153,9 +165,11 @@ def add_tma_shp_data(path_shp_file, overwrite=False, catch=False):
                 pbar.set_postfix_str(f"{image_id} failed")
             else:
                 raise e
+
+        # update the progress bar
         pbar.set_postfix_str(f"{image_id} updated")
 
 
+# Skip null updates
 if __name__ == "__main__":
-
     add_tma_shp_data(PATH_SHP_FILE, _overwrite, _catch)

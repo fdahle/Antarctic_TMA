@@ -1,9 +1,10 @@
+# Package imports
 import math
 import numpy as np
-
 from shapely import geometry
 from vector3d.vector import Vector
 
+# Custom imports
 import src.load.load_rema as lr
 
 
@@ -48,7 +49,9 @@ def calc_approximate_footprint(center, azimuth, view_direction, altitude, focal_
     # calculate an initial approx_footprint based on camera_params
     polygon = _get_bounds(camera_params)
 
+    # if true a new polygon is calculated based on the average elevation data from rema
     if adapt_with_rema:
+
         # get average elevation data for this initial approx_footprint based on rema data
         rema_data = lr.load_rema(polygon, zoom_level=32)
         avg_ground_height = np.average(rema_data)
@@ -61,6 +64,7 @@ def calc_approximate_footprint(center, azimuth, view_direction, altitude, focal_
         print(camera_params["zPos"], avg_ground_height, altitude)
         camera_params["zPos"] = altitude
 
+        # recalculate the approx_footprint based on the new camera_params
         polygon = _get_bounds(camera_params)
 
     return polygon

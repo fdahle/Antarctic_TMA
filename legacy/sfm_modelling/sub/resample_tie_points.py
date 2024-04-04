@@ -4,11 +4,6 @@ import numpy as np
 
 from skimage import transform as tf
 
-import base.load_image_from_file as liff
-import base.print_v as p
-
-import display.display_tiepoints as dt
-
 debug_show_transformed_points = False
 
 def resample_tie_points(project_folder, img_id, points, scan_res = 0.025, catch=True):

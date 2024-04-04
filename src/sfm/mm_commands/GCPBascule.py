@@ -43,6 +43,9 @@ class GCPBascule(BaseCommand):
 
         return shell_string
 
+    def extract_stats(self, raw_output):
+        pass
+
     def validate_mm_parameters(self):
 
         if "/" in self.mm_args["ImagePattern"]:

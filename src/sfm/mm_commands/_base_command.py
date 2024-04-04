@@ -186,9 +186,15 @@ class MicMacError(Exception):
         """
 
         # get the error details from the object
-        mm_error_msg = error_obj['MMErrorMsg']
-        error_msg = error_obj['ErrorMsg']
-        fix = error_obj['Fix']
+        try:
+            mm_error_msg = error_obj['MMErrorMsg']
+            error_msg = error_obj['ErrorMsg']
+            fix = error_obj['Fix']
+        # that means the error is not yet defined in the error_dict
+        except (Exception,):
+            mm_error_msg = "Unknown error"
+            error_msg = "An unknown error occurred. Please check the raw output for more details"
+            fix = ""
 
         # call the Exception constructor
         super().__init__(f"{class_name} failed with the following error: "

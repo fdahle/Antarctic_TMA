@@ -1,12 +1,13 @@
 import copy
 import math
-#import matplotlib
-#matplotlib.use('TkAgg')
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from matplotlib.patches import ConnectionPatch
-from typing import List, Tuple, Optional, Dict, Any
+from matplotlib.patches import ConnectionPatch, Polygon
+from shapely.geometry.polygon import Polygon as ShapelyPolygon
+from typing import List, Tuple, Optional, Dict, Any, Union
 
 base_style_config = {
     "axis_marker": True,
@@ -22,10 +23,11 @@ base_style_config = {
 }
 
 
-def display_images(images: List[Any],
+def display_images(images: Union[np.ndarray, List[np.ndarray]],
                    points: Optional[List[List[Tuple[int, int]]]] = None,
                    lines: Optional[List[List[Tuple[int, int, int, int]]]] = None,
-                   bounding_boxes: Optional[List[List[Tuple[int, int, int, int]]]] = None,
+                   bounding_boxes: Optional[List[List[Union[Tuple[int, int, int, int], List[int]]]]] = None,
+                   polygons: Optional[List[List[ShapelyPolygon]]] = None,
                    tie_points: Optional[np.ndarray] = None,
                    tie_points_conf: Optional[List[float]] = None,
                    reduce_tie_points: bool = False,
@@ -44,9 +46,12 @@ def display_images(images: List[Any],
         bounding_boxes (Optional[List[List[Tuple[int, int, int, int]]]], optional): Bounding boxes to
             draw on the images. Each bounding box is represented as a tuple (x_min, y_min, x_max, y_max).
             Defaults to None.
+        polygons (Optional[List[List[ShapelyPolygon]]], optional): Polygons to draw on the images. Defaults to None.
         tie_points (Optional[np.ndarray], optional): Array of tie-points connecting two images. Defaults to None.
         tie_points_conf (Optional[List[float]], optional): Confidence values for tie-points, affecting their appearance.
             Defaults to None.
+        reduce_tie_points (bool, optional): Whether to reduce the number of tie-points displayed. Defaults to False.
+        num_reduced_tie_points (int, optional): Number of tie-points to display if `reduce_tie_points` is True.
         style_config (Optional[Dict[str, Any]], optional): Configuration for styling the annotations. Defaults to None.
         save_path (Optional[str], optional): Path to save the figure instead of displaying. Defaults to None.
         save_type (str, optional): The file format for saving the figure ('png' or 'svg'). Defaults to "png".
@@ -173,6 +178,17 @@ def display_images(images: List[Any],
                                       color=color,  # Append alpha to normalized color
                                       linewidth=style_config['line_width'])
                 fig.add_artist(con)
+
+        # Optionally draw polygons on the image
+        if polygons and idx < len(polygons):
+            for poly in polygons[idx]:
+                if not isinstance(poly, ShapelyPolygon):
+                    continue  # Skip if not a ShapelyPolygon
+                exterior_coords = np.array(poly.exterior.coords)
+                polygon_patch = Polygon(exterior_coords, linewidth=style_config['line_width'],
+                                        edgecolor=_normalize_color(style_config['line_color']),
+                                        facecolor='none')
+                ax.add_patch(polygon_patch)
 
         # Set subtitles for each subplot if specified
         if style_config.get('titles_sup') and idx < len(style_config['titles_sup']):

@@ -3,8 +3,8 @@ import re
 
 from src.sfm.mm_commands._base_command import BaseCommand
 
-class Tapas(BaseCommand):
 
+class Tapas(BaseCommand):
     required_args = ["DistortionModel", "ImagePattern"]
     allowed_args = ["DistortionModel", "ImagePattern", "ExpTxt", "Out", "InCal", "InOri", "DoC",  # noqa
                     "ForCalib", "Focs", "VitesseInit", "PPRel", "Decentre", "PropDiag", "SauvAutom",  # noqa
@@ -92,12 +92,12 @@ class Tapas(BaseCommand):
                     "XSZ": [int(x) for x in re.findall(r'XSZ=\[(\d+),(\d+)\]', line)[0]],
                 }
             if "RES:" in line:
-                image_name = re.search(r'RES:\[(.+?)\]\[C\]', line).group(1)
-                residu = float(re.search(r'ER2 ([\d\.-]+)', line).group(1))
-                time = float(re.search(r'Time ([\d\.]+)', line).group(1))
+                image_name = re.search(r'RES:\[(.+?)]\[C]', line).group(1)
+                residu = float(re.search(r'ER2 ([\d.-]+)', line).group(1))
+                time = float(re.search(r'Time ([\d.]+)', line).group(1))
                 stats["image_processing"].append({"name": image_name, "residu": residu, "time": time})
             if "Stat on type of point" in line or "Perc=" in line:
-                match = re.search(r'Perc=(\d+\.\d+)% ;  Nb=(\d+) for (\w+)', line)
+                match = re.search(r'Perc=(\d+\.\d+)% ; {2}Nb=(\d+) for (\w+)', line)
                 if match:
                     stats["statistical_summary"].append({
                         "type": match.group(3),
@@ -119,5 +119,3 @@ class Tapas(BaseCommand):
 
     def validate_required_files(self):
         pass
-
-

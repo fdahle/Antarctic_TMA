@@ -6,12 +6,16 @@
     "SH": "Homol_mini"
   },
   "Campari": {
-    "ImagePattern": "OIS.*tif",
+    "ImagePattern": "OIS-.*tif",
     "InputOrientation": "Ground",
     "OutputOrientation": "Final",
+    "AllFree": 1,
+    "SH": "Homol_mini",
     "ExpTxt": 1
   },
-  "GCPCustom": {},
+  "GCPCustom": {
+    "ALLTransformsReq": false
+  },
   "GCPBascule": {
     "ImagePattern": "OIS.*tif",
     "InputOrientation": "Relative",

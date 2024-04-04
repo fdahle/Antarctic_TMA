@@ -6,12 +6,13 @@ from typing import Optional, Dict, Tuple, List
 def create_mask(image: np.ndarray,
                 fid_marks: Optional[Dict[str, Tuple[int, int]]] = None,
                 ignore_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
+                use_default_fiducials: bool = False,
                 default_fid_position: int = 500,
                 min_border_width: int = None) -> np.ndarray:
     """
     This function generates a mask for an image based on provided fiducial marks (everything outside
-    these marks is masked). If no marks are provided, default positions are used. Additionally,
-    specific boxes within the image can be ignored by setting them to zero in the mask.
+    these marks is masked). If no marks are provided, it is possible to use default positions.
+    Additionally, specific boxes within the image can be ignored by setting them to zero in the mask.
     Masked areas are set to 0, unmasked areas are set to 1.
 
     3 ## 7 ## 2
@@ -26,12 +27,15 @@ def create_mask(image: np.ndarray,
                    and values as tuples representing positions (x, y). If None, default positions are used.
         ignore_boxes: An optional list of boxes to ignore, each specified as a tuple of four integers
                       (x1, y1, x2, y2) representing the top left (x1, y1) and bottom right (x2, y2) corners.
+        use_default_fiducials: A boolean flag to use default fiducial marks if no fiducial marks are provided.
         default_fid_position: An optional integer defining the default position for fiducial marks
                               if none are provided. Defaults to 500.
         min_border_width: An optional integer defining the minimum border width to apply to the mask.
     Returns:
         A numpy array representing the masked image, where regions outside the specified fiducial
         marks and ignore boxes are set to zero.
+    Raises:
+        ValueError: If `use_default_fiducials` is False and any required fiducial mark is missing.
     """
 
     # create base mask
@@ -47,11 +51,18 @@ def create_mask(image: np.ndarray,
 
     # Initialize fid_marks if None, or fill in missing/default for existing keys
     if fid_marks is None:
-        fid_marks = default_positions
+        if fid_marks is None:
+            if use_default_fiducials:
+                fid_marks = default_positions
+            else:
+                raise ValueError("Fiducial marks are required when use_default_fiducials is False.")
     else:
+        if not use_default_fiducials:
+            missing_marks = [key for key in default_positions if key not in fid_marks]
+            if missing_marks:
+                raise ValueError(f"Missing fiducial marks: {missing_marks}.")
         for key, default_position in default_positions.items():
-            # If key doesn't exist in fid_marks or value is None, set to default position
-            fid_marks[key] = fid_marks.get(key, default_position)
+            fid_marks.setdefault(key, default_position)
 
     # get the min and max x/y values from the fid marks
     min_x = max(fid_marks["3"][0], fid_marks["1"][0])

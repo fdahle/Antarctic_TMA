@@ -1,21 +1,33 @@
+# Package imports
 import os
-
 from tqdm import tqdm
 
+# Custom imports
 import src.base.connect_to_database as ctd
 import src.prepare.create_table_entry as cte
 
+# Constants
 PATH_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 
-tables_for_adding = ["images_fid_points"]
+# Variables
+tables_for_adding = ["images_extracted"]
 
 
-def add_images_to_psql(lst_images, tables):
+def add_images_to_psql(lst_images: list[str], tables: list[str]) -> None:
+    """
+    Adds images to PostgreSQL database tables if they don't already exist.
+    Args:
+        lst_images: A list of image names (strings) to be added.
+        tables: A list of table names (strings) in the database to add the images to.
+    """
 
+    # establish connection to psql
     conn = ctd.establish_connection()
 
+    # iterate over all tables
     for table in tables:
 
+        # get all existing images from the table
         sql_string = f"SELECT image_id FROM {table}"
         data = ctd.execute_sql(sql_string, conn)
         existing_images = data['image_id'].values.tolist()
@@ -23,9 +35,13 @@ def add_images_to_psql(lst_images, tables):
         # remove existing images from list of images
         lst_images_new = [image for image in lst_images if image not in existing_images]
 
+        # iterate over all images
         for image_id in (pbar := tqdm(lst_images_new)):
 
+            # update the progress bar
             pbar.set_postfix_str(f"Add {image_id} to {table}")
+
+            # add image to psql
             cte.create_table_entry(image_id, table, conn=conn)
 
 

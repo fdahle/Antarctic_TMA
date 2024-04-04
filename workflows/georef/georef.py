@@ -1,4 +1,3 @@
-import logging
 import os.path
 import numpy as np
 import pandas as pd
@@ -17,7 +16,7 @@ import src.base.modify_csv as mc
 import src.export.export_geometry as eg
 
 # import extract function
-import src.extract.extract_ids as ei
+import src.other.misc.extract_ids as ei
 
 # import georef functions
 import src.georef.georef_sat as gs

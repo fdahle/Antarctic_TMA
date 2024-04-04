@@ -177,7 +177,7 @@ class SFMProject(object):
                    copy_resampled_masks: bool = False, resampled_mask_folder=None,
                    copy_xml: bool = False, xml_folder: Optional[str] = None,
                    copy_transform: bool = False, transform_folder: Optional[str] = None,
-                   overwrite: bool = False, skip_missing: bool = False) -> None:
+                   skip_missing: bool = False, overwrite: bool = False,) -> None:
         """
         Sets the images for the project by copying them from source folders to the project folder,
         with options for copying associated masks, resampled images, and XML files.
@@ -202,7 +202,6 @@ class SFMProject(object):
                 Defaults to DEFAULT_TRANSFORM_FLD.
             overwrite (bool): Whether to overwrite existing files at the destination. Defaults to False.
             skip_missing (bool): Whether to skip missing files without raising an exception. Defaults to False.
-
         Returns:
             None
         """
@@ -249,7 +248,7 @@ class SFMProject(object):
 
                 # check if mask is existing in the original folder
                 if os.path.isfile(old_mask_path):
-                    if not (os.path.isfile(new_img_path) and overwrite is False):
+                    if not (os.path.isfile(new_mask_path) and overwrite is False):
                         shutil.copyfile(old_mask_path, new_mask_path)
                 else:
                     if skip_missing:
@@ -264,7 +263,7 @@ class SFMProject(object):
                 new_resampled_img_path = os.path.join(self.project_path, "images",
                                                       "OIS-Reech_" + image_id + ".tif")
                 if os.path.isfile(old_resampled_img_path):
-                    if not (os.path.isfile(new_img_path) and overwrite is False):
+                    if not (os.path.isfile(new_resampled_img_path) and overwrite is False):
                         shutil.copyfile(old_resampled_img_path, new_resampled_img_path)
                 else:
                     if skip_missing:

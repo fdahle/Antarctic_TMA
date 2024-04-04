@@ -1,7 +1,9 @@
+# Package imports
 import cv2
 import numpy as np
 import math
 
+# Constants
 MAX_GAP_LINE = 25
 MIN_LENGTH_LINE = 25
 RHO = 1

@@ -1,19 +1,21 @@
+# Package imports
 import copy
 import cv2 as cv2
 import numpy as np
 import pandas as pd
 import shapely
 from numpy import ndarray
-
 from paddleocr import PaddleOCR, draw_ocr  # noqa
 from typing import Optional, Any
 
+# Display imports
 import src.display.display_images as di
 
+# Constants
 USE_GPU = False
 
+# Debug display parameters
 debug_keys: list[str] = ["n", "e", "s", "w"]  # for which direction should debug plots/data be shown
-
 debug_show_image: bool = False  # show the complete input image
 debug_show_small_subsets: bool = False  # show the initial small subsets
 debug_show_small_subsets_polygons: bool = False  # show the polygons on the small subsets
@@ -22,6 +24,7 @@ debug_show_all_polygons: bool = False  # show the polygons on the complete image
 debug_show_all_merged_polygons: bool = False  # show the text results on the images with merged polygons already
 debug_show_final_polygons: bool = False  # show the final text results on the images
 
+# Debug print parameters
 debug_print_raw_final_data: bool = False
 
 

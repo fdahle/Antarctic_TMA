@@ -1,13 +1,16 @@
+# Package imports
 import pandas as pd
-
 from tqdm import tqdm
 
+# Custom imports
 import src.base.connect_to_database as ctd
 import src.load.load_image as li
 import src.prepare.correct_image_orientation as cio
 
+# Display imports
 import src.display.display_images as di
 
+# Debug parameters
 debug_display_images = False
 
 

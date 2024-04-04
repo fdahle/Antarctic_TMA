@@ -1,9 +1,10 @@
+# Package imports
 import cv2
 import dlib
 import numpy as np
-
 from typing import Optional
 
+# Constants
 DETECTOR_PATH = "/data_1/ATM/data_1/machine_learning/dlib/subsets"
 MODEL_NAME = "detector"
 FID_TYPE = 1

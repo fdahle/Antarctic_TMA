@@ -1,7 +1,9 @@
+# Package imports
 import os
 import glob
 import shutil
 
+# Custom imports
 from src.sfm.mm_commands._base_command import BaseCommand
 
 
@@ -38,6 +40,9 @@ class AperiCloud(BaseCommand):
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
         return shell_string
+
+    def extract_stats(self, raw_output):
+        pass
 
     def validate_mm_parameters(self):
 

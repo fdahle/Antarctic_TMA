@@ -1,9 +1,12 @@
+# Package imports
 import copy
 import cv2
 import math
 import numpy as np
 
+# Display imports
 import src.display.display_images as di
+
 
 MAX_GAP_LINE = 25
 MIN_LENGTH_LINE = 25

@@ -1,7 +1,9 @@
+# Package imports
 import os
 import glob
 import shutil
 
+# Custom imports
 from src.sfm.mm_commands._base_command import BaseCommand
 
 class GCPBascule(BaseCommand):

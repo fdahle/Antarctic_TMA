@@ -1,5 +1,6 @@
-
+# Custom imports
 from src.sfm.mm_commands._base_command import BaseCommand
+
 
 class Tawny(BaseCommand):
 
@@ -33,3 +34,12 @@ class Tawny(BaseCommand):
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
         return shell_string
+
+    def extract_stats(self, raw_output):
+        pass
+
+    def validate_mm_parameters(self):
+        pass
+
+    def validate_required_files(self):
+        pass

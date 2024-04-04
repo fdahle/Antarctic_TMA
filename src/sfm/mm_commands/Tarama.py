@@ -1,4 +1,6 @@
+# Custom imports
 from src.sfm.mm_commands._base_command import BaseCommand
+
 
 class Tarama(BaseCommand):
 
@@ -32,3 +34,14 @@ class Tarama(BaseCommand):
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
         return shell_string
+
+    def extract_stats(self, raw_output):
+        pass
+
+    def validate_mm_parameters(self):
+
+        if "/" in self.mm_args["ImagePattern"]:
+            raise ValueError("ImagePattern cannot contain '/'. Use a pattern like '*.tif' instead.")
+
+    def validate_required_files(self):
+        pass

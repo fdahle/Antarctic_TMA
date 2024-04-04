@@ -1,15 +1,17 @@
+# Required for streamlit
 import sys
 from pathlib import Path
 src_path = (Path(__file__).parent.parent / 'src').resolve()
-
 if str(src_path) not in sys.path:
     sys.path.append(str(src_path))
 
+# Package imports
 import math
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import streamlit as st
 
+# Custom imports
 import base.connect_to_database as ctd  # noqa
 
 tables_to_check = ["All tables", "images", "images_extracted", "images_fid_points"]
@@ -111,6 +113,7 @@ def plot_results():
     cols_in_grid = 5  # Number of columns in the grid
     rows_in_grid = math.ceil(n / cols_in_grid)
 
+    # Create the figure and axes
     fig, axs = plt.subplots(rows_in_grid, cols_in_grid, figsize=(15, rows_in_grid * 3))
     fig.subplots_adjust(hspace=0.4, wspace=0.4)  # Adjust space between plots
 
@@ -140,7 +143,6 @@ def plot_results():
                             textcoords="offset points",
                             ha='center', va='bottom')
             i = i + 1
-
 
     # content for specific table
     else:
@@ -187,6 +189,7 @@ def plot_results():
         ax.set_visible(False)
 
     st.pyplot(fig)
+
 
 if __name__ == "__main__":
     plot_results()

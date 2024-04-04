@@ -1,7 +1,8 @@
+# Package imports
 import sqlite3
-
 from typing import Any, Optional
 
+# Custom imports
 import src.base.connect_to_database as ctd
 
 

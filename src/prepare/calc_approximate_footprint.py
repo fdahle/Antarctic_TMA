@@ -2,14 +2,37 @@
 import math
 import numpy as np
 from shapely import geometry
+from typing import Union
 from vector3d.vector import Vector
 
 # Custom imports
 import src.load.load_rema as lr
 
 
-def calc_approximate_footprint(center, azimuth, view_direction, altitude, focal_length,
-                               adapt_with_rema=False):
+def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimuth: float,
+                               view_direction: str, altitude: Union[int, float],
+                               focal_length: Union[int, float],
+                               adapt_with_rema: bool = False) -> geometry.Polygon:
+
+    """
+    Calculates the approximate footprint of an image based on the camera parameters like center,
+    azimuth & view_direction. Note that the ground elevation data is not considered in this calculation.
+    However, it is possible to adjust the footprint based on REMA elevation data.
+    Args:
+        center: The center point of the camera's view. This can be a shapely.geometry.Point
+                or a tuple of floats representing the X and Y coordinates.
+        azimuth: The azimuth angle of the camera, in degrees.
+        view_direction: The direction the camera is facing, represented as a single character.
+                        'L' for left, 'V' for vertical, and 'R' for right.
+        altitude: The altitude of the camera, in feet.
+        focal_length: The focal length of the camera, in millimeters.
+        adapt_with_rema: A boolean indicating whether to adjust the calculation based on REMA data.
+    Returns:
+        A shapely.geometry.Polygon representing the approximate footprint of the camera's view.
+    Raises:
+        ValueError: If `view_direction` is not one of the expected values,
+                    if `altitude` is None, or if `focal_length` is None.
+    """
 
     if view_direction not in ["L", "V", "R"]:
         raise ValueError("View direction must be either 'L' (left), 'V' (vertical), or 'R' (right)")
@@ -70,7 +93,19 @@ def calc_approximate_footprint(center, azimuth, view_direction, altitude, focal_
     return polygon
 
 
-def _get_bounds(cam_params):
+def _get_bounds(cam_params: dict) -> geometry.Polygon:
+    """
+    Calculates a bounding polygon based on camera parameters.
+    Args:
+        cam_params: A dictionary containing camera parameters including
+                    alpha (rotation angle), beta, gamma (viewing angles),
+                    fovV (vertical field of view), fovH (horizontal field of view),
+                    xPos, yPos, zPos (camera position), fx, fy (focal lengths),
+                    px, py (pixel size).
+    Returns:
+        A shapely.geometry.Polygon representing the calculated bounding area.
+    """
+
     # convert to radians
     alpha_r = math.radians(cam_params["alpha"])
     beta_r = math.radians(cam_params["beta"])

@@ -1,12 +1,15 @@
+# Package imports
 import cv2 as cv2
 import numpy as np
 import mahotas as mht
 
 
 def correct_image_orientation(image, image_path):
+
     # first check if we need to rotate the image
     rotation_required = _check_sidebar(image)
 
+    # image must be rotated
     if rotation_required:
         # rotate the image
         image = np.rot90(image, 2)

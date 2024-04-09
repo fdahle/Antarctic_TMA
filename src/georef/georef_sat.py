@@ -1,28 +1,32 @@
+# Package imports
 import copy
 import cv2
 import numpy as np
 import scipy
-
 from typing import Optional, Tuple, Union
 from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
-# import base functions
+# Custom imports
 import src.base.enhance_image as ei
 import src.base.find_tie_points as ftp
 import src.base.rotate_image as ri
 import src.base.rotate_points as rp
-
-# import display functions
-import src.display.display_images as di
-
-# import georef snippet functions
+import src.load.load_satellite as ls
 import src.georef.snippets.calc_transform as ct
 
-# import loading functions
-import src.load.load_satellite as ls
+# Display imports
+import src.display.display_images as di
 
-debug_display_steps = False
+# debug settings
+debug_display_steps = True
+debug_display_axes = False
+
+# debug plots
+debug_display_initial = False
+debug_display_located = False
+debug_display_tweaked = False
+debug_display_final = False
 
 
 class GeorefSatellite:
@@ -161,8 +165,9 @@ class GeorefSatellite:
         # initial tie-point matching
         tps, conf = self.tp_finder.find_tie_points(sat, image, None, mask)
 
-        if debug_display_steps:
-            style_config = {"title": "Initial tie-points for geo-referencing"}
+        if debug_display_steps and debug_display_initial:
+            style_config = {"title": "Initial tie-points for geo-referencing",
+                            "axis_marker": debug_display_axes}
             di.display_images([sat, image], tie_points=tps, tie_points_conf=conf, style_config=style_config)
 
         # locate the image around the approx footprint
@@ -170,8 +175,9 @@ class GeorefSatellite:
             sat, sat_bounds, sat_transform, tps, conf = self._perform_locate_image(image, mask, sat, sat_bounds,
                                                                                    sat_transform, tps, conf)
 
-            if debug_display_steps:
-                style_config = {"title": "Located tie-points for geo-referencing"}
+            if debug_display_steps and debug_display_located:
+                style_config = {"title": "Located tie-points for geo-referencing",
+                                "axis_marker": debug_display_axes}
                 di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
         # tweak the image coordinates for maximum tie-points (minimum of 2 points required)
@@ -179,8 +185,9 @@ class GeorefSatellite:
             sat, sat_bounds, sat_transform, tps, conf = self._perform_tweak_image(image, mask, sat, sat_bounds,
                                                                                   sat_transform, tps, conf)
 
-            if debug_display_steps:
-                style_config = {"title": "Tweaked tie-points for geo-referencing"}
+            if debug_display_steps and debug_display_tweaked:
+                style_config = {"title": "Tweaked tie-points for geo-referencing",
+                                "axis_marker": debug_display_axes}
                 di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
         # final check if there are enough tie-points
@@ -198,6 +205,11 @@ class GeorefSatellite:
             conf = conf[filtered == 0]
 
             print(f"{np.count_nonzero(filtered)} outliers removed with RANSAC")
+
+        if debug_display_steps and debug_display_final:
+            style_config = {"title": "Final tie-points for geo-referencing",
+                            "axis_marker": debug_display_axes}
+            di.display_images([sat, image], tie_points=tps, tie_points_conf=list(conf), style_config=style_config)
 
         # adjust points for the adapted image resolution
         tps[:, 2] = tps[:, 2] * (1 / adjust_factors[0])
@@ -263,7 +275,7 @@ class GeorefSatellite:
         resampled_img2 = scipy.ndimage.zoom(img2, (zoom_factor_y, zoom_factor_x))
 
         print(f"Adjusted image resolution with "
-              f"zoom-factor ({round(zoom_factor_y, 4) }, {round(zoom_factor_x, 4)})")
+              f"zoom-factor ({round(zoom_factor_y, 4)}, {round(zoom_factor_x, 4)})")
 
         return resampled_img2, (zoom_factor_x, zoom_factor_y)
 
@@ -418,7 +430,6 @@ class GeorefSatellite:
                 if tps_tile.shape[0] > best_tps.shape[0] or \
                         (tps_tile.shape[0] == best_tps.shape[0] and
                          np.mean(conf_tile) > np.mean(best_conf)):
-
                     # save best tie-points and conf
                     best_tps = copy.deepcopy(tps_tile)
                     best_conf = copy.deepcopy(conf_tile)

@@ -3,10 +3,10 @@ import copy
 import cv2
 import math
 import numpy as np
+from typing import Optional
 
 # Display imports
 import src.display.display_images as di
-
 
 MAX_GAP_LINE = 25
 MIN_LENGTH_LINE = 25
@@ -18,7 +18,35 @@ THRESHOLD = 15
 TWEAK_VALS = [-20, 30, 10]
 
 
-def extract_fid_mark(image, key, subset_bounds, display=False):
+def extract_fid_mark(image: np.ndarray, key: str,
+                     subset_bounds: tuple[int, int, int, int],
+                     display: bool = False) -> Optional[list[int]]:
+    """
+    Extracts a fiducial mark from a given image, based on the specified key.
+    This function applies a series of image processing steps (e.g., blurring, thresholding,
+    canny edge detection) to extract lines and ultimately the fiducial marks at N, E, S, W positions
+    from a specified subset of the input image.
+
+    # Position of fid marks:
+    # 3 7 2
+    # 5   6
+    # 1 8 4
+
+    Args:
+        image (np.ndarray): The input image from which the fiducial mark is to be extracted.
+        key (str): A single character ('n', 'e', 's', 'w') indicating the direction (north, east,
+            south, west) relative to which the fiducial mark is to be found.
+        subset_bounds (Tuple[int, int, int, int]): A tuple containing the bounds
+            (min_x, min_y, max_x, max_y) for the subset of the image to be processed.
+        display (bool, optional): If True, the function will display the subset of the image used
+            for fiducial  mark extraction. Defaults to False.
+    Returns:
+        Optional[List[int]]: A list containing the x and y coordinates of the detected fiducial
+            mark within the entire image. Returns None if no fiducial mark is detected.
+    Raises:
+        ValueError: If the provided `key` is not one of the expected values ('n', 'e', 's', 'w').
+    """
+
     if key not in ["n", "e", "s", "w"]:
         raise ValueError("Key must be one of 'n', 'e', 's', 'w'.")
 
@@ -117,10 +145,11 @@ def extract_fid_mark(image, key, subset_bounds, display=False):
     if key in ["n", "s"]:
         min_x_sm = min_x + avg_line_x - extra_search_width
         max_x_sm = min_x + avg_line_x + extra_search_width
-
     elif key in ["e", "w"]:
         min_y_sm = min_y + avg_line_y - extra_search_width
         max_y_sm = min_y + avg_line_y + extra_search_width
+    else:
+        raise ValueError("Key must be one of 'n', 'e', 's', 'w'.")
 
     for tweak_val in range(TWEAK_VALS[0], TWEAK_VALS[1], TWEAK_VALS[2]):
 
@@ -157,6 +186,8 @@ def extract_fid_mark(image, key, subset_bounds, display=False):
 
             min_x_sm = min_x_sm - tweak_val
             max_x_sm = max_x_sm - tweak_val
+        else:
+            raise ValueError("Key must be one of 'n', 'e', 's', 'w'.")
 
         min_x_sm = max(0, min_x_sm)
         min_y_sm = max(0, min_y_sm)
@@ -261,4 +292,3 @@ def extract_fid_mark(image, key, subset_bounds, display=False):
         di.display_images(subset, points=[[[fid_mark_subset_x, fid_mark_subset_y]]])
 
     return fid_mark
-

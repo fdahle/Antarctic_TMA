@@ -1,7 +1,7 @@
+# Package imports
+import copy
 import numpy as np
 import rasterio.transform
-
-from typing import Tuple
 
 debug_print_values = False
 
@@ -9,7 +9,7 @@ debug_print_values = False
 def verify_image_geometry(image: np.ndarray, transform: np.ndarray,
                           length_difference: float = 15.0, pixel_difference: float = 25.0,
                           min_pixel_size: float = 0.1, max_pixel_size: float = 2.0,
-                          angle_threshold: float = 10) -> Tuple[bool, str]:
+                          angle_threshold: float = 10) -> tuple[bool, str]:
     """
     Verifies the geometric integrity of a geo-referenced image based on specified thresholds for length difference,
     maximum pixel size, and angle threshold.
@@ -34,8 +34,16 @@ def verify_image_geometry(image: np.ndarray, transform: np.ndarray,
     rows, cols = image.shape[0], image.shape[1]
     corners = np.array([(0, 0), (0, rows), (cols, rows), (cols, 0)])
 
+    # copy transform to avoid changing the original
+    transform = copy.deepcopy(transform)
+
+    # flatten transform if it is a 3x3 matrix
     if transform.shape[0] == 3:
         transform = transform.flatten()
+
+    # remove last row if it is [0, 0, 1]
+    if transform.shape[0] == 9 and np.allclose(transform[-3:], [0, 0, 1]):
+        transform = transform[:-3]
 
     # convert np-array to rasterio transform
     t_transform = rasterio.transform.Affine(*transform)

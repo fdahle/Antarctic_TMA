@@ -46,9 +46,6 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     if isinstance(bounds, shapely.geometry.base.BaseGeometry) is False:
         bounds = shapely.geometry.box(*bounds)
 
-    print(rema_shape_file)
-    print(str(zoom_level))
-
     # load the mosaic tiles from shape file
     mosaic_data = gpd.read_file(rema_shape_file + f"_{str(zoom_level)}m.shp")
 

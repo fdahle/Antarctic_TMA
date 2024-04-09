@@ -4,7 +4,7 @@ import numpy as np
 import base.load_shape_data as lsd
 import base.connect_to_db as ctd
 
-import paper.convert_to_latex as ctl
+import misc.convert_to_latex as ctl
 
 shape_path = "/data_1/ATM/data_1/papers/paper_georef/tma_points_aoi_small.shp"
 data = lsd.load_shape_data(shape_path)

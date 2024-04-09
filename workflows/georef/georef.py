@@ -1,9 +1,10 @@
+# Package imports
 import os.path
 import numpy as np
 import pandas as pd
 import shutil
 import time
-
+from datetime import datetime
 from tqdm import tqdm
 
 # import base functions
@@ -50,7 +51,7 @@ MIN_COMPLEXITY = 0.05
 VERIFY_IMAGE_POSITIONS = False
 
 # settings for verifying
-DISTANCE_THRESHOLD = 100 # TODO UPDATE THIS!
+DISTANCE_THRESHOLD = 100  # TODO UPDATE THIS!
 
 # settings for calc
 CALC_TYPES = ["sat", "img"]
@@ -164,10 +165,14 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
             # try to geo-reference the image
             try:
 
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                 # ignore images with a too low complexity
                 if data_extracted.loc[data_extracted['image_id'] == image_id]['complexity'].iloc[0] < min_complexity:
                     processed_images_sat[image_id] = {"method": "sat", "status": "failed",
-                                                      "reason": "complexity"}
+                                                      "reason": "complexity", "date": date_time_str}
                     continue
 
                 print(f"Geo-reference {image_id} with satellite")
@@ -190,18 +195,25 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
                 month = data_images.loc[
                     data_images['image_id'] == image_id]['date_month'].iloc[0]
 
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                 # check if all required data is there
                 if approx_footprint is None:
                     processed_images_sat[image_id] = {"method": "sat", "status": "missing_data",
-                                                      "reason": "approx_footprint", "time": ""}
+                                                      "reason": "approx_footprint", "time": "",
+                                                      "date": date_time_str}
                     continue
                 elif mask is None:
                     processed_images_sat[image_id] = {"method": "sat", "status": "missing_data",
-                                                      "reason": "mask", "time": ""}
+                                                      "reason": "mask", "time": "",
+                                                      "date": date_time_str}
                     continue
                 elif azimuth is None:
                     processed_images_sat[image_id] = {"method": "sat", "status": "missing_data",
-                                                      "reason": "azimuth", "time": ""}
+                                                      "reason": "azimuth", "time": "",
+                                                      "date": date_time_str}
                     continue
 
                 # we need to adapt the azimuth to account for EPSG:3031
@@ -216,15 +228,20 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                     georef_time = round(time.time() - start)
 
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                     # images failed due to exception
                     if tps is None:
                         processed_images_sat[image_id] = {"method": "sat", "status": "failed",
-                                                          "reason": "exception", "time": georef_time}
+                                                          "reason": "exception", "time": georef_time,
+                                                          "date": date_time_str}
                     # too few tps
                     else:
                         processed_images_sat[image_id] = {"method": "sat", "status": "failed",
                                                           "reason": f"too_few_tps:{tps.shape[0]}",
-                                                          "time": georef_time}
+                                                          "time": georef_time, "date": date_time_str}
                     continue
 
                 # verify the geo-referenced image
@@ -232,16 +249,23 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                 georef_time = round(time.time() - start)
 
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                 # save valid images
                 if valid_image:
+
                     _save_results("sat", image_id, image, transform, residuals, tps, conf, month)
                     processed_images_sat[image_id] = {"method": "sat", "status": "georeferenced",
-                                                      "reason": "", "time": georef_time}
+                                                      "reason": "", "time": georef_time,
+                                                      "date": date_time_str}
 
                 # set image to invalid if position is wrong
                 else:
                     processed_images_sat[image_id] = {"method": "sat", "status": "invalid",
-                                                      "reason": reason, "time": georef_time}
+                                                      "reason": reason, "time": georef_time,
+                                                      "date": date_time_str}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -252,8 +276,14 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
             # that means something in the geo-referencing process fails
             except (Exception,) as e:
 
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                 processed_images_sat[image_id] = {"method": "sat", "status": "failed",
-                                                  "reason": "exception", "time": round(time.time() - start)}
+                                                  "reason": "exception",
+                                                  "time": round(time.time() - start),
+                                                  "date": date_time_str}
 
                 if catch is False:
                     raise e
@@ -285,9 +315,15 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                 # set image to invalid if position is wrong
                 if not valid_image:
+
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                     # TODO FIX TIMER
                     processed_images_sat[image_id] = {"method": "sat", "status": "invalid",
-                                                      "reason": "position"}
+                                                      "reason": "position",
+                                                      "date": date_time_str}
                     mc.modify_csv(csv_path_sat, image_id, "add", processed_images_sat[image_id], overwrite=True)
 
     # geo-reference with image
@@ -343,8 +379,14 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                 # check if all required data is there
                 if mask is None:
+
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                     processed_images_img[image_id] = {"method": "img", "status": "missing_data",
-                                                      "reason": "mask", "time": ""}
+                                                      "reason": "mask", "time": "",
+                                                      "date": date_time_str}
                     continue
 
                 # the actual geo-referencing
@@ -356,12 +398,23 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
                 # skip images we can't geo-reference
                 if transform is None:
                     # TODO DIFFERENTIATE BETWEEN FAILED AN TOO FEW TPS
+
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                     processed_images_img[image_id] = {"method": "img", "status": "failed",
-                                                      "reason": "no_transform", "time": round(time.time() - start)}
+                                                      "reason": "no_transform",
+                                                      "time": round(time.time() - start),
+                                                      "date": date_time_str}
                     continue
 
                 # verify the geo-referenced image
                 valid_image, reason = vig.verify_image_geometry(image, transform)
+
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
 
                 # save valid images
                 if valid_image:
@@ -372,12 +425,12 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                     _save_results("img", image_id, image, transform, residuals, tps, conf, month)
                     processed_images_img[image_id] = {"method": "img", "status": "georeferenced",
-                                                      "reason": ""}
+                                                      "reason": "", "date": date_time_str}
 
                 # set image to invalid if position is wrong
                 else:
                     processed_images_img[image_id] = {"method": "img", "status": "invalid",
-                                                      "reason": reason}
+                                                      "reason": reason, "date": date_time_str}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -388,8 +441,13 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
             # that means something in the geo-referencing process fails
             except (Exception,) as e:
 
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                 processed_images_img[image_id] = {"method": "img", "status": "failed",
-                                                  "reason": "exception", "time": ""}
+                                                  "reason": "exception", "time": "",
+                                                  "date": date_time_str}
 
                 if catch is False:
                     raise e
@@ -474,12 +532,22 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                 # skip images we can't geo-reference
                 if transform is None:
+
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                     processed_images_calc[image_id] = {"method": "calc", "status": "failed",
-                                                       "reason": "no_transform"}
+                                                       "reason": "no_transform",
+                                                       "date": date_time_str}
                     continue
 
                 # verify the geo-referenced image
                 valid_image, reason = vig.verify_image_geometry(image, transform)
+
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
 
                 # save valid images
                 if valid_image:
@@ -490,12 +558,12 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                     _save_results("calc", image_id, image, transform, residuals, tps, conf, month)
                     processed_images_calc[image_id] = {"method": "calc", "status": "georeferenced",
-                                                       "reason": ""}
+                                                       "reason": "", "date": date_time_str}
 
                 # set image to invalid if position is wrong
                 else:
                     processed_images_calc[image_id] = {"method": "calc", "status": "invalid",
-                                                       "reason": reason}
+                                                       "reason": reason, "date": date_time_str}
 
                 print(f"Geo-referencing of {image_id} finished")
 
@@ -506,8 +574,12 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
             # that means something in the geo-referencing process fails
             except (Exception,) as e:
 
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
                 processed_images_calc[image_id] = {"method": "calc", "status": "failed",
-                                                   "reason": "exception"}
+                                                   "reason": "exception", "date": date_time_str}
 
                 if catch is False:
                     raise e
@@ -557,7 +629,7 @@ def _prepare_mask(image_id: str, image: np.ndarray,
     text_boxes = [tuple(group) for group in eval(text_string.replace(";", ","))]
 
     # load the mask
-    mask = cm.create_mask(image, fid_dict, text_boxes)
+    mask = cm.create_mask(image, fid_dict, text_boxes, use_default_fiducials=True)
 
     return mask
 

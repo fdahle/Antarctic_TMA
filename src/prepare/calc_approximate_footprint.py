@@ -48,6 +48,10 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
     elif view_direction == "R":
         gamma = 330
 
+    # convert center to shapely point if it's a tuple
+    if isinstance(center, tuple):
+        center = geometry.Point(center)
+
     # create camera matrix
     camera_params = {
         # "alpha": 90 + azimuth,
@@ -84,7 +88,6 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
 
         # recalculate the height of camera (in relation to the ground)
         altitude = altitude - avg_ground_height
-        print(camera_params["zPos"], avg_ground_height, altitude)
         camera_params["zPos"] = altitude
 
         # recalculate the approx_footprint based on the new camera_params

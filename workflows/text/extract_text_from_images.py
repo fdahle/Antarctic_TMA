@@ -1,9 +1,12 @@
-import src.base.connect_to_database as ctd
-import src.load.load_image as li
-import src.prepare.extract_text as et
-
+# Package imports
 from tqdm import tqdm
 
+# Custom imports
+import src.base.connect_to_database as ctd
+import src.load.load_image as li
+import src.text.extract_text as et
+
+# Variables
 overwrite = False
 retry = False
 

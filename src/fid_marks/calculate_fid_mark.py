@@ -33,11 +33,11 @@ def calculate_fid_mark(image, key, subset_bounds, display=False):
     subsets = {direction1: None, direction2: None}
     subset_coordinates = {direction1: None, direction2: None}
 
-    # we need to ger vertical lines from the fid marks
+    # we need to get vertical lines from the fid marks
     for i, sub_direction in enumerate([direction1, direction2]):
 
         # get coords from subset_bounds
-        min_x, min_y, max_x, max_y = subset_bounds
+        min_x, min_y, max_x, max_y = subset_bounds[i]
 
         # tweak the subsets so that lines are better recognizable
         if sub_direction in ["n", "s"]:
@@ -51,10 +51,10 @@ def calculate_fid_mark(image, key, subset_bounds, display=False):
             min_y = min_y - 100
             max_y = max_y + 100
 
-        min_y = max(min_y, 0)
-        max_y = min(max_y, image.shape[0])
-        min_x = max(min_x, 0)
-        max_x = min(max_x, image.shape[1])
+        min_y = int(max(min_y, 0))
+        max_y = int(min(max_y, image.shape[0]))
+        min_x = int(max(min_x, 0))
+        max_x = int(min(max_x, image.shape[1]))
 
         # extract the subset from the image
         subset = image[min_y:max_y, min_x:max_x]
@@ -110,6 +110,10 @@ def calculate_fid_mark(image, key, subset_bounds, display=False):
         mid_line_2 = None  #
         min_distance_1 = 2000000  # the distance to the middle (at the beginning set to a high value)
         min_distance_2 = 2000000  # the distance to the middle (at the beginning set to a high value)
+
+        # get the middle of the image
+        mid_of_image_x = int(subset.shape[1] / 2)
+        mid_of_image_y = int(subset.shape[0] / 2)
 
         # get the closest line
         for line in correct_lines:
@@ -197,6 +201,6 @@ def calculate_fid_mark(image, key, subset_bounds, display=False):
     px = int(px)
     py = int(py)
 
-    fid_mark = [px, py]
+    fid_mark = (px, py)
 
     return fid_mark

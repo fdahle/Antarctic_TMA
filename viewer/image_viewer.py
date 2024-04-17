@@ -9,7 +9,8 @@ from tkinter import Tk, Label, Button
 
 import src.load.load_image as li
 
-img_path = "/data_1/ATM/data_1/aerial/TMA/downloaded/"
+#img_path = "/data_1/ATM/data_1/aerial/TMA/downloaded/"
+img_path = "/data_1/ATM/data_1/sfm/projects/EGU/images_orig"
 input_img_type = "tif"
 img_size = (800, 800)
 
@@ -117,6 +118,13 @@ class ImageViewer:
         button_exit.grid(row=6, column=1)
         button_forward.grid(row=6, column=2)
 
+        # Label to show the pixel value
+        self.pixel_value_label = Label(self.root, text="Value: ")
+        self.pixel_value_label.grid(row=7, column=1)
+
+        # add mouse moving event
+        self.img_container.bind('<Motion>', self.on_mouse_move)
+
         # load image
         self.load_image()
 
@@ -170,6 +178,22 @@ class ImageViewer:
             self.img_dict[self.image_id] = np.rot90(self.img_dict[self.image_id], 3)
 
         self.load_image()
+
+    # callback method for mouse move event
+    def on_mouse_move(self, event):
+        # Convert event coordinates to image coordinates
+        x, y = event.x, event.y
+
+        # Check if the coordinates are within the image bounds
+        if 0 <= x < self.size[0] and 0 <= y < self.size[1]:
+            # Retrieve the pixel value at (x, y)
+            pixel_value = self.img_dict[self.image_id][y, x]  # Adjust indexing if necessary
+
+            # Update the label text with the new pixel value
+            self.pixel_value_label.config(text=f"Value: {pixel_value}")
+        else:
+            # If out of bounds, clear the label or display a default message
+            self.pixel_value_label.config(text="Value: Out of bounds")
 
 
 if __name__ == "__main__":

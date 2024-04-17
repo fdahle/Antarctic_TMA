@@ -22,13 +22,24 @@ class AperiCloud(BaseCommand):
         self.args = args
         self.kwargs = kwargs
 
+        # validate the mm_args
+        self.validate_mm_args()
+
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def build_shell_string(self):
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
+    def build_shell_dict(self):
+
+        shell_dict = {}
 
         # build the basic shell command
-        shell_string = f'AperiCloud {self.mm_args["ImagePattern"]} {self.mm_args["Orientation"]}'
+        shell_string = f'AperiCloud "{self.mm_args["ImagePattern"]}" {self.mm_args["Orientation"]}'
 
         # add the optional arguments to the shell string
         for key, val in self.mm_args.items():
@@ -39,9 +50,11 @@ class AperiCloud(BaseCommand):
 
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-        return shell_string
+        shell_dict["AperiCloud"] = shell_string
 
-    def extract_stats(self, raw_output):
+        return shell_dict
+
+    def extract_stats(self, name, raw_output):
         pass
 
     def validate_mm_parameters(self):

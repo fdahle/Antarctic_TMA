@@ -23,10 +23,15 @@ class GCPBascule(BaseCommand):
         self.args = args
         self.kwargs = kwargs
 
+        # validate the mm_args
+        self.validate_mm_args()
+
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def build_shell_string(self):
+    def build_shell_dict(self):
+
+        shell_dict = {}
 
         # build the basic shell command
         shell_string = f'GCPBascule {self.mm_args["ImagePattern"]} ' \
@@ -43,7 +48,9 @@ class GCPBascule(BaseCommand):
 
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-        return shell_string
+        shell_dict["GCPBascule"] = shell_string
+
+        return shell_dict
 
     def extract_stats(self, raw_output):
         pass

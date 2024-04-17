@@ -5,6 +5,8 @@ import pandas as pd
 import shutil
 import time
 from datetime import datetime
+
+import torch.cuda
 from tqdm import tqdm
 
 # import base functions
@@ -37,7 +39,7 @@ import src.load.load_image as li
 DEFAULT_SAVE_FOLDER = "/data_1/ATM/data_1/georef"
 
 # define input bounds or image ids
-INPUT_TYPE = "bounds"  # can be either "bounds" or "ids
+INPUT_TYPE = "all"  # can be either "bounds" or "ids or all
 BOUNDS = [-2618381, 610661, -1630414, 1670625]  # min_x, min_y, max_x, max_y
 IMAGE_IDS = []
 
@@ -178,7 +180,16 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
                 print(f"Geo-reference {image_id} with satellite")
 
                 # load the image
-                image = li.load_image(image_id)
+                image = li.load_image(image_id, catch=True)
+
+                if image is None:
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
+                    processed_images_sat[image_id] = {"method": "sat", "status": "failed",
+                                                      "reason": "image", "date": date_time_str}
+                    continue
 
                 # load the mask
                 mask = _prepare_mask(image_id, image, data_fid_marks, data_extracted)
@@ -296,6 +307,9 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
                 if keyboard_interrupt is False:
                     mc.modify_csv(csv_path_sat, image_id, "add", processed_images_sat[image_id], overwrite=True)
 
+                # clear the memory
+                torch.cuda.empty_cache()
+
         # now that we have more images, verify the images again to check for wrong positions
         if verify_image_positions:
 
@@ -315,7 +329,6 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                 # set image to invalid if position is wrong
                 if not valid_image:
-
                     # get datetime
                     now = datetime.now()
                     date_time_str = now.strftime("%d.%m.%Y %H:%M")
@@ -372,14 +385,23 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
                 print(f"Geo-reference {image_id} with image")
 
                 # load the image
-                image = li.load_image(image_id)
+                image = li.load_image(image_id, catch=True)
+
+                if image is None:
+                    # get datetime
+                    now = datetime.now()
+                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
+                    processed_images_img[image_id] = {"method": "img", "status": "failed",
+                                                      "reason": "mask", "time": "",
+                                                      "date": date_time_str}
+                    continue
 
                 # load the mask
                 mask = _prepare_mask(image_id, image, data_fid_marks, data_extracted)
 
                 # check if all required data is there
                 if mask is None:
-
                     # get datetime
                     now = datetime.now()
                     date_time_str = now.strftime("%d.%m.%Y %H:%M")
@@ -532,7 +554,6 @@ def georef(input_ids, processed_images_sat=None, processed_images_img=None, proc
 
                 # skip images we can't geo-reference
                 if transform is None:
-
                     # get datetime
                     now = datetime.now()
                     date_time_str = now.strftime("%d.%m.%Y %H:%M")
@@ -715,8 +736,18 @@ if __name__ == "__main__":
                                     image_directions=["V"], complete_flightpaths=True)
 
     # image ids are provided
-    else:
+    elif INPUT_TYPE == "ids":
         _input_ids = IMAGE_IDS
+
+    # we just use all ids
+    elif INPUT_TYPE == "all":
+        conn = ctd.establish_connection()
+        sql_string = "SELECT image_id FROM images"
+        _input_ids = ctd.execute_sql(sql_string, conn).image_id.tolist()
+
+    # filter image ids for only vertical images
+    _input_ids = [img_id for img_id in _input_ids if "V" in img_id]
+
 
     # check if there is a status csv and load it
     def _load_processed_images(filename):

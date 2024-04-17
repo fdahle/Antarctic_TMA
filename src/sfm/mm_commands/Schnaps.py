@@ -22,13 +22,24 @@ class Schnaps(BaseCommand):
         self.args = args
         self.kwargs = kwargs
 
+        # validate the mm_args
+        self.validate_mm_args()
+
         # validate the input parameters
         self.validate_mm_parameters()
 
         # validate the required files (e.g. for copying to the main project folder)
         self.validate_required_files()
 
-    def build_shell_string(self):
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
+    def build_shell_dict(self):
+
+        shell_dict = {}
 
         # build the basic shell command
         shell_string = f'Schnaps "{self.mm_args["ImagePattern"]}"'
@@ -42,9 +53,11 @@ class Schnaps(BaseCommand):
 
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-        return shell_string
+        shell_dict["Schnaps"] = shell_string
 
-    def extract_stats(self, raw_output):
+        return shell_dict
+
+    def extract_stats(self, name, raw_output):
 
         # Initialize statistics dictionary
         stats = {
@@ -125,7 +138,7 @@ class Schnaps(BaseCommand):
         json_output = json.dumps(stats, indent=4)
 
         # save json_output to a file
-        with open(f"{self.project_folder}/stats/schnaps_stats.json", "w") as file:
+        with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
             file.write(json_output)
 
     def validate_mm_parameters(self):

@@ -30,7 +30,13 @@ class GCPCustom(BaseCommand):
         if "ALLTransformsReq" not in self.mm_args:
             self.mm_args["ALLTransformsReq"] = True
 
-    def build_shell_string(self):
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
+    def build_shell_dict(self):
         raise AssertionError("This custom class does not have a shell command.")
 
     def execute_custom_cmd(self):
@@ -52,8 +58,30 @@ class GCPCustom(BaseCommand):
         pass
 
     def validate_required_files(self, all_transforms_req):
-        # TODO
-        pass
+
+        # for each image we need a transform file
+        images = glob.glob(self.project_folder + "/images_orig/*.tif")
+
+        missing_transforms = []
+
+        for image in images:
+
+            # get image id from the image path
+            image_id = os.path.basename(image)[:-4]
+
+            # get path to transform file
+            transform_file = self.project_folder + "/transforms/" + image_id + ".xml"
+
+            # check if the transform file exists
+            if not os.path.isfile(transform_file):
+                missing_transforms.append(image_id)
+
+        if len(missing_transforms) == len(images):
+            raise FileNotFoundError(f"No transform files found in '{self.project_folder}/transforms'.")
+
+        # in this case we need all transforms
+        if all_transforms_req and len(missing_transforms) > 0:
+            raise FileNotFoundError(f"{len(missing_transforms)} transforms are missing.")
 
 
     def _get_gcps(self):

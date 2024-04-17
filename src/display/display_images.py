@@ -67,6 +67,11 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
     # we need at least one image
     assert len(images) > 0, "No images to display."
 
+    # validate the images
+    for img in images:
+        if not isinstance(img, np.ndarray):
+            raise ValueError("All input images must be numpy arrays.")
+
     # Validate tie_points and adjust for tie-points scenario
     if tie_points is not None:
         assert tie_points.ndim == 2 and tie_points.shape[1] == 4, \

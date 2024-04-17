@@ -20,7 +20,7 @@ TWEAK_VALS = [-20, 30, 10]
 
 def extract_fid_mark(image: np.ndarray, key: str,
                      subset_bounds: tuple[int, int, int, int],
-                     display: bool = False) -> Optional[list[int]]:
+                     display: bool = False) -> Optional[tuple[int, int]]:
     """
     Extracts a fiducial mark from a given image, based on the specified key.
     This function applies a series of image processing steps (e.g., blurring, thresholding,
@@ -39,9 +39,9 @@ def extract_fid_mark(image: np.ndarray, key: str,
         subset_bounds (Tuple[int, int, int, int]): A tuple containing the bounds
             (min_x, min_y, max_x, max_y) for the subset of the image to be processed.
         display (bool, optional): If True, the function will display the subset of the image used
-            for fiducial  mark extraction. Defaults to False.
+            for fiducial mark extraction. Defaults to False.
     Returns:
-        Optional[List[int]]: A list containing the x and y coordinates of the detected fiducial
+        Optional[tuple[int, int]]: A tuple containing the x and y coordinates of the detected fiducial
             mark within the entire image. Returns None if no fiducial mark is detected.
     Raises:
         ValueError: If the provided `key` is not one of the expected values ('n', 'e', 's', 'w').
@@ -283,7 +283,7 @@ def extract_fid_mark(image: np.ndarray, key: str,
 
         # hurray we found a mark
         if mid_mark is not None:
-            fid_mark = mid_mark
+            fid_mark = tuple(mid_mark)
             break
 
     if display and fid_mark is not None:

@@ -1,10 +1,13 @@
+# Package imports
 from datetime import datetime
 from tqdm import tqdm
 
+# Custom imports
 import src.base.connect_to_database as ctd
 import src.load.load_image as li
 import src.fid_marks.extract_subset as es
 
+# Variables
 overwrite = False
 
 

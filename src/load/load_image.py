@@ -2,16 +2,19 @@ import os
 import numpy as np
 import rasterio
 import warnings
-
 from affine import Affine
 from osgeo import gdal
+from rasterio.transform import Affine as RasterioAffine
+from typing import Union, Optional
 
 # Global constant for default image path
 DEFAULT_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 
 
-def load_image(image_id, image_path=None, image_type="tif",
-               driver='rasterio', return_transform=False):
+def load_image(image_id: str, image_path: Optional[str] = None, image_type: str = "tif",
+               driver: str = 'rasterio', return_transform: bool = False,
+               catch: bool = False) -> Union[np.ndarray, tuple[np.ndarray,
+                                                               Union[RasterioAffine, Affine]], None]:
     """
     Loads an image from the specified path and returns it as a numpy array.
 
@@ -43,7 +46,13 @@ def load_image(image_id, image_path=None, image_type="tif",
 
     absolute_image_path = _create_absolute_path(image_id, image_path, image_type)
 
-    img, transform = _read_image(absolute_image_path, driver)
+    try:
+        img, transform = _read_image(absolute_image_path, driver)
+    except (Exception,) as e:
+        if catch:
+            return (None, None) if return_transform else None
+        else:
+            raise e
 
     return (img, transform) if return_transform else img
 

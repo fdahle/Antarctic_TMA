@@ -1,5 +1,7 @@
+# Package imports
 import re
 
+# Constants
 MIN_HEIGHT = 10000  # in feet
 MAX_HEIGHT = 30000  # in feet
 
@@ -17,3 +19,5 @@ def find_height(text):
 
     if len(matches) == 1:
         return matches[0]
+
+    return None

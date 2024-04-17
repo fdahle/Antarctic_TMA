@@ -18,13 +18,15 @@ class Campari(BaseCommand):
         self.args = args
         self.kwargs = kwargs
 
+        # validate the mm_args
+        self.validate_mm_args()
+
         # validate the input arguments
         self.validate_mm_parameters()
 
-        # validate the required files (e.g for copying to the main project folder)
-        self.validate_required_files()
+    def build_shell_dict(self):
 
-    def build_shell_string(self):
+            shell_dict = {}
 
             # build the basic shell command
             shell_string = f'Campari "{self.mm_args["ImagePattern"]}" ' \
@@ -39,7 +41,9 @@ class Campari(BaseCommand):
 
                 shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-            return shell_string
+            shell_dict["Campari"] = shell_string
+
+            return shell_dict
 
     def extract_stats(self, raw_output):
         pass

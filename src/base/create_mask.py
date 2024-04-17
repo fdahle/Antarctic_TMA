@@ -58,11 +58,26 @@ def create_mask(image: np.ndarray,
                 raise ValueError("Fiducial marks are required when use_default_fiducials is False.")
     else:
         if not use_default_fiducials:
+
+            # check for missing entries
             missing_marks = [key for key in default_positions if key not in fid_marks]
             if missing_marks:
                 raise ValueError(f"Missing fiducial marks: {missing_marks}.")
+
+            # check for None values in the entries
+            for key, value_tuple in fid_marks.items():
+                # Check if 'None' is in the tuple
+                if None in value_tuple:
+                    raise ValueError("There are invalid entries in the fid-marks")
+
+        # fill missing keys with default values
         for key, default_position in default_positions.items():
             fid_marks.setdefault(key, default_position)
+
+        # fill none values with default values
+        for key, default_position in default_positions.items():
+            if None in fid_marks[key]:
+                fid_marks[key] = default_position
 
     # get the min and max x/y values from the fid marks
     min_x = max(fid_marks["3"][0], fid_marks["1"][0])
@@ -85,6 +100,8 @@ def create_mask(image: np.ndarray,
     # Set left and right regions to 0
     mask[:, :min_x] = 0
     mask[:, max_x:] = 0
+
+    print(ignore_boxes)
 
     # Mask the ignore_boxes if any
     if ignore_boxes is not None:

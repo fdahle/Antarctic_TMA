@@ -1,4 +1,11 @@
 {
+  "AperiCloud": [
+    {
+      "MMErrorMsg": "Ori name is not a valid existing directory",
+      "ErrorMsg": "The directory for 'Input Orientation' does not exist",
+      "Fix": "Check the correct path to the folder (Tapas already run?)"
+    }
+  ],
   "Campari": [
     {
       "MMErrorMsg": "Ori name is not a valid existing directory",
@@ -29,12 +36,12 @@
     }
   ],
   "Schnaps": [
-        {
+    {
       "MMErrorMsg": "ERROR: No image found!",
       "ErrorMsg": "No images can be found in the specified folder",
       "Fix": "Check if images are existing and they're in the main folder."
     },
-{
+    {
       "MMErrorMsg": "Name is not a correct homologue prefix",
       "ErrorMsg": "Schnaps cannot find the Homol folder",
       "Fix": "Check if the path to the Homol folder is correct."
@@ -45,6 +52,11 @@
       "MMErrorMsg": "Not Enouh Equation in ElSeg3D::L2InterFaisceaux",
       "ErrorMsg": "Lack of tie points that are usable",
       "Fix": "Is ExpTxt enabled? Otherwise check if the images have enough distinct points."
+    },
+    {
+      "MMErrorMsg": "Cannot compute association",
+      "ErrorMsg": "Cannot find the output folder",
+      "Fix": "Is 'Out' the first named argument?"
     }
   ]
 }

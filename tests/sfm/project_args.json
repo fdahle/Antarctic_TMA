@@ -34,8 +34,9 @@
     "EZA": 1
   },
   "ReSampFid": {
-    "ImagePattern": "images_orig/.*.tif",
-    "ScanResolution": 0.025
+    "ImagePattern": "CA*.*tif",
+    "ScanResolution": 0.025,
+    "ResampleMasks": true
   },
   "Schnaps": {
     "ImagePattern": "OIS.*tif",
@@ -44,8 +45,8 @@
   "Tapas": {
     "ImagePattern": "OIS.*tif",
     "DistortionModel": "RadialBasic",
-    "LibFoc": 0,
     "Out": "Relative",
+    "LibFoc": 0,
     "SH": "Homol_mini",
     "ExpTxt": 1
   },

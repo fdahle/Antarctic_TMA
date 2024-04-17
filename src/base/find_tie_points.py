@@ -788,7 +788,7 @@ class TiePointDetector:
         return pts, np.array(conf)
 
     def _perform_one_match(self, input_img1: np.ndarray,
-                           input_img2: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                           input_img2: np.ndarray, catch=True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Performs feature matching between two input images using either "lightglue" or "superglue"
         matching methods. It returns the matching keypoints in both images along with their
@@ -842,6 +842,7 @@ class TiePointDetector:
                 sg_img2 = sg_img2.to(self.device)
 
                 if self.matching_method == "lightglue":
+
                     # Extract features from both images
                     feats0 = self.extractor.extract(sg_img1)  # noqa
                     feats1 = self.extractor.extract(sg_img2)  # noqa
@@ -890,11 +891,10 @@ class TiePointDetector:
                 break
 
             # catch error and check for oom
-            except RuntimeError as e:
+            except (Exception,) as e:
 
-                print(e)
-
-                if "out of memory" in str(e) or "OutOfMemoryError" in str(e):
+                if isinstance(e, RuntimeError) and \
+                        "out of memory" in str(e) or "OutOfMemoryError" in str(e):
                     # free the gpu
                     torch.cuda.empty_cache()
 
@@ -912,7 +912,10 @@ class TiePointDetector:
                     sg_img2 = ri.resize_image(input_img2, (img_height2, img_width2), "size")  # noqa
 
                 else:
-                    raise e
+                    if catch:
+                        return np.zeros([0, 2]), np.zeros([0, 2]), np.zeros([0])
+                    else:
+                        raise e
 
         # adapt the tie points to account for resizing
         pts0[:, 0] = pts0[:, 0] * 1 / resize_factor1

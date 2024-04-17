@@ -1,79 +1,171 @@
-import glob
-import os
+# Required for streamlit
+import copy
+import sys
+from pathlib import Path
+src_path = (Path(__file__).parent.parent / 'src').resolve()
+if str(src_path) not in sys.path:
+    sys.path.append(str(src_path))
 
-from tqdm import tqdm
+# Package imports
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import pandas as pd
+import streamlit as st
 
-import src.load.load_image as li
-import src.load.load_shape_data as lsd
-import src.load.load_transform as lt
+# Custom imports
+import base.connect_to_database as ctd  # noqa
 
-import src.georef.snippets.verify_image_geometry as vig
-import src.georef.snippets.verify_image_position as vip
-
-georef_folder = "/data_1/ATM/data_1/georef"
-georef_type = "sat"
-
-DISTANCE_THRESHOLD = 100
+BASE_FLD = "/data_1/ATM/data_1/georef"
 
 
-def verify_georef(path_georef_fld, check_geometry=True, check_position=True):
-    # get all tifs in the folder
-    pattern = os.path.join(path_georef_fld + "/" + georef_type, '*.tif')
-    tif_files = glob.glob(pattern)
+def compute_statistics(data):
 
-    invalid_images = []
+    metrics = ["num_tps", "avg_conf", "avg_resi", "complexity"]
+    stats = {}
+    for metric in metrics:
+        print(metric)
+        stats[metric] = {
+            'mean': data[metric].mean(),
+            'median': data[metric].median(),
+            'min': data[metric].min(),
+            'max': data[metric].max()
+        }
 
-    # load the shape file
-    if check_position:
-        shape_data = lsd.load_shape_data(georef_folder + "/" + georef_type + ".shp")
+    # Convert stats dictionary to a DataFrame
+    stats_df = pd.DataFrame(stats)  # Transpose to make metrics the columns
+
+    # Rename columns for clarity in presentation
+    new_column_names = {
+        "num_tps": "Tps",
+        "avg_conf": "Confidence",
+        "avg_resi": "Residuals",
+        "complexity": "Complexity"
+    }
+    stats_df.rename(columns=new_column_names, inplace=True)
+
+    # Change data type of TPs to integer
+    stats_df['Tps'] = stats_df['Tps'].astype(int)
+
+    return stats_df
+
+def compute_flight_statistics(data, flight_path):
+
+    data_fl = copy.deepcopy(data)
+
+    # filter by flight path
+
+
+
+def verify_georef():
+
+    # load the shapefiles with additional information
+    sat_shp_data = gpd.read_file(BASE_FLD + "/" + "sat.shp")
+
+    # load psql data
+    conn = ctd.establish_connection()
+    sql_string = "SELECT image_id, tma_number FROM images"
+    data_images = ctd.execute_sql(sql_string, conn)
+
+    sql_string = "SELECT image_id, complexity FROM images_extracted"
+    data_images_extracted = ctd.execute_sql(sql_string, conn)
+
+    sql_data = data_images.merge(data_images_extracted, on="image_id", how="left")
+
+    # load all csv files with information
+    sat_data = pd.read_csv(BASE_FLD + "/" + "sat_processed_images.csv", delimiter=";")
+    img_data = pd.read_csv(BASE_FLD + "/" + "img_processed_images.csv", delimiter=";")
+    calc_data = pd.read_csv(BASE_FLD + "/" + "calc_processed_images.csv", delimiter=";")
+
+    georef_to_check = ["all", "sat", "img", "calc"]
+
+    st.title("Georef Quality Control")
+
+    # allow selection of different georef types
+    georef_type = st.selectbox("Select georef type", georef_to_check)
+
+    # determine which pandas dataframe to use
+    if georef_type == "all":
+        # append pandas dataframes
+        data = pd.concat([sat_data, img_data, calc_data], ignore_index=True)
+        # TODO ONLY KEEP GEOREF WHEN IDS ARE MULTIPLE TIMES IN THE DATAFRAME
+    elif georef_type == "sat":
+        data = sat_data
+    elif georef_type == "img":
+        data = img_data
+    elif georef_type == "calc":
+        data = calc_data
     else:
-        shape_data = None
+        raise ValueError("Invalid georef type")
 
-    # iterate all geo-referenced images
-    for file in (pbar := tqdm(tif_files)):
+    # replace column name
+    data.rename(columns={"id": "image_id"}, inplace=True)
 
-        image_id = os.path.basename(file)[:-4]
+    # merge data with shapedata
+    data = data.merge(sat_shp_data, on="image_id", how="left")
 
-        pbar.set_postfix_str(f"Check {image_id}")
+    # merge data with sql data
+    data = data.merge(sql_data, on="image_id", how="right")
 
-        if check_geometry:
-            transform_path = georef_folder + "/" + georef_type + "/" + image_id + "_transform.txt"
+    # add nr of tps for the entries "too_few_tps"
+    condition = data['reason'].str.startswith('too_few_tps', na=False)
+    data.loc[condition, 'num_tps'] = data['reason'].str.extract(r'too_few_tps:(\d+)', expand=False).astype(float)
 
-            image = li.load_image(image_id)
-            transform = lt.load_transform(transform_path)
+    # Simplify 'reason' by removing details'
+    data['reason'] = data['reason'].str.replace(r'too_few_tps:\d+', 'too_few_tps', regex=True)
+    data['reason'] = data['reason'].str.replace(r'failed:\d+', 'failed', regex=True)
 
-            valid_geometry, _ = vig.verify_image_geometry(image, transform)
-        else:
-            valid_geometry = True
+    # Create a new column that combines 'status' and 'reason' for the case where status is 'failed'
+    data['status_reason'] = data.apply(
+        lambda x: f"{x['status']} - {x['reason']}" if x['status'] == 'failed' else x['status'], axis=1)
 
-        if check_position:
+    # remove all entries where 'status' is empty
+    data_filled = data.dropna(subset=['status'])
 
-            # get geometry of image_id from shape_data
-            try:
-                image_data = shape_data[shape_data['image_id'] == image_id]
-                image_geom = image_data['geometry'].iloc[0]
+    # count the different status
+    status_count = data_filled['status_reason'].value_counts().to_dict()
 
-                # get geometries of same flight number
-                filtered_data = shape_data[shape_data['image_id'].str[2:6] == image_id[2:6]]
-                filtered_data = filtered_data[filtered_data['image_id'] != image_id]
-                flight_geoms = filtered_data['geometry'].values.tolist()
+    # pie-chart for status
+    st.header("Status")
+    fig, ax = plt.subplots()
+    ax.pie(status_count.values(),
+           labels=status_count.keys(),
+           autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')  # Ensures that pie is drawn as a circle.
 
-                if len(flight_geoms) < 3:
-                    valid_position = True
-                else:
-                    valid_position = vip.verify_image_position(image_geom, flight_geoms, DISTANCE_THRESHOLD)
-                    print(valid_position)
-            except:
-                valid_position = False
-        else:
-            valid_position = True
+    st.pyplot(fig)
 
-        if valid_position is False or valid_geometry is False:
-            invalid_images.append(image_id)
+    # statistical values for the data
+    st.header("Average values")
 
-    print(f"{len(invalid_images)} of {len(tif_files)} are invalid.")
-    print(invalid_images)
+    status_labels = ["All"] + list(status_count.keys())
 
+    status_type = st.selectbox("Select status type", status_labels)
+    if status_type != "All":
+        data_for_statistics = data_filled[data_filled['status_reason'] == status_type]
+    else:
+        data_for_statistics = data_filled
+
+    statistics = compute_statistics(data_for_statistics)
+
+    st.table(pd.DataFrame(statistics))
+
+    st.header("Flight paths")
+
+    # get unique flight paths
+    flight_paths = list(data['tma_number'].unique())
+
+    # sort and convert to strings
+    flight_paths = sorted(flight_paths)
+    flight_paths = [str(int(f)) for f in flight_paths]
+
+    flight_path = st.selectbox("Select flight path", flight_paths)
+
+    st.header("Raw data")
+
+    # remove geometry column
+    raw_data = data.drop(columns=['geometry'])
+    st.dataframe(raw_data)
 
 if __name__ == "__main__":
-    verify_georef(georef_folder)
+
+    verify_georef()

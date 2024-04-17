@@ -8,12 +8,12 @@ import src.text.find_height as fh
 overwrite = False
 
 
-def find_height_in_text():
+def find_heights():
 
     # establish connection to psql
     conn = ctd.establish_connection()
 
-    # get all images with their text from the database
+    # get all images with their text and height from the database
     sql_string = "SELECT image_id, height, height_estimated, " \
                  "text_content FROM images_extracted WHERE text_content IS NOT NULL"
     data = ctd.execute_sql(sql_string, conn)
@@ -57,4 +57,4 @@ def find_height_in_text():
 
 
 if __name__ == "__main__":
-    find_height_in_text()
+    find_heights()

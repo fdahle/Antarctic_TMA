@@ -16,6 +16,7 @@ debug_print_data = False
 debug_print_std = False
 
 def estimate_focal_length(image_id, conn=None):
+
     # establish connection to psql if not provided
     if conn is None:
         conn = ctd.establish_connection()

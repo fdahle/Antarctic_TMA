@@ -13,10 +13,11 @@ import src.base.resize_image as ri
 # Constants
 HIGHSCORE = 2500
 
+
 def calc_complexity(image: np.ndarray, mask: Optional[np.ndarray] = None) -> float:
     """
     Calculates the complexity of an image using the SuperGlue matching algorithm.
-    Complexity is defined by the number of keypoints detected in the image, normalized by a highscore value.
+    Complexity is defined by the number of key-points detected in the image, normalized by a highscore value.
     An optional mask can be provided to specify areas of the image to include in the calculation.
 
     Args:

@@ -220,15 +220,15 @@ class SFMProject(object):
         if self.debug:
             print("Copy images", end='')
 
+        # List to store missing images
+        missing_images = []
+
         # copy images to the project folder
         for image_id in image_ids:
 
             # Image paths
             old_img_path = os.path.join(image_folder, image_id + ".tif")
             new_img_path = os.path.join(self.project_path, "images_orig", image_id + ".tif")
-
-            # List to store missing images
-            missing_images = []
 
             # check if image is existing in the original folder
             if os.path.isfile(old_img_path):
@@ -446,8 +446,10 @@ class SFMProject(object):
             commands:
             micmac_args:
             print_all_output (bool): Whether to print all output to the console. Defaults to False.
-            stat_folder:
-            raw_folder:
+            save_stats (bool): Whether to save stats of the MicMac functions to a json-file in the "stats" folder.
+                Defaults to False.
+            save_raw (bool): Whether to save the raw output of the MicMac functions to a text-file in the "stats"
+                folder. Defaults to false
         Returns:
 
         """
@@ -463,30 +465,6 @@ class SFMProject(object):
 
         if mode == "manual" and (commands is None or len(commands) == 0):
             raise ValueError("Commands must be provided in manual mode")
-
-        # check if there are enough images
-        #if len(self.image_ids) < 3:
-        #    raise ValueError("Need at least 3 images for SfM")
-
-        # check if every image is existing and has an image xml
-        #missing_images = []
-        #missing_xml = []
-        #for image_id in self.image_ids:
-        #    if os.path.isfile(self.project_path + "/" + image_id + ".tif") is False and \
-        #            os.path.isfile(self.project_path + "/images_orig/" + image_id + ".tif") is False:
-         #       missing_images.append(image_id)
-         #   if os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresIm-" + image_id + ".tif.xml") is False:
-         #       missing_images.append(image_id)
-
-        #if len(missing_images) > 0:
-        #    raise Exception("Image is missing for following image ids: " + str(missing_images))
-        #if len(missing_xml) > 0:
-        #    raise Exception("Image xml is missing for following image ids: " + str(missing_xml))
-
-        # check if there's a camera xml
-        #if os.path.isfile(self.project_path + "/MicMac-LocalChantierDescripteur.xml") is False or \
-        #        os.path.isfile(self.project_path + "/Ori-InterneScan/MeasuresCamera.xml") is False:
-        #    raise Exception("Camera xml is missing")
 
         # execute the commands in order of the list
         for command in commands:

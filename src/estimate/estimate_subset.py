@@ -10,10 +10,12 @@ MAX_STD = None
 
 
 def estimate_subset(image_id, key, conn=None):
+
+    # establish connection to psql if not already done
     if conn is None:
         conn = ctd.establish_connection()
 
-    # get the properties of this image (flight path, etc)
+    # get the properties of this image (flight path, etc.)
     sql_string = f"SELECT tma_number, view_direction, cam_id FROM images WHERE image_id='{image_id}'"
     data_img_props = ctd.execute_sql(sql_string, conn)
 

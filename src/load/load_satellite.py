@@ -1,10 +1,10 @@
+# Package imports
 import os
 import numpy as np
 import rasterio
 import shapely
-
 from rasterio import Affine
-from rasterio import mask, merge
+
 from typing import Optional, Tuple
 
 DEFAULT_SAT_FLD = "/data_1/ATM/data_1/satellite"

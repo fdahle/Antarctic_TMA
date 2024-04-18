@@ -10,6 +10,7 @@ from typing import Tuple, Optional
 DEFAULT_REMA_FLD = "/data_1/ATM/data_1/DEM/REMA/mosaic"
 DEFAULT_REMA_SHP = "/data_1/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
 
+
 def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,
               rema_shape_file: str = DEFAULT_REMA_SHP,
               rema_folder: str = DEFAULT_REMA_FLD,

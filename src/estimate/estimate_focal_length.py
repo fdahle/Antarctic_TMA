@@ -13,6 +13,7 @@ use_estimated = False
 
 
 def estimate_focal_length(image_id, conn=None):
+
     # establish connection to psql if not provided
     if conn is None:
         conn = ctd.establish_connection()

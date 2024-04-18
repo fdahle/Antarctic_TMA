@@ -1,8 +1,9 @@
+# Package imports
 import os
 import numpy as np
-
 from typing import Optional
 
+# Constants
 DEFAULT_TRANSFORM_FLD = "C:/Users/Felix/Documents/GitHub/Antarctic_TMA/data/transformation"
 
 

@@ -3,6 +3,7 @@ from tqdm import tqdm
 
 # Custom imports
 import src.base.connect_to_database as ctd
+import src.estimate.estimate_subset as es
 
 overwrite = False
 
@@ -27,6 +28,32 @@ def estimate_subsets():
     # save how many entries are updated
     updated_entries = 0
 
+    # loop over all images
+    for idx, row in (pbar := tqdm(data.iterrows(), total=data.shape[0])):
+
+            # get the image id
+            image_id = row['image_id']
+
+            pbar.set_postfix_str(f"Estimate subsets for {image_id} "
+                                f"({updated_entries} already updated)")
+
+            # estimate the subsets
+            estimated_subsets = estimate_subsets(image_id, conn)
+
+            if estimated_subsets is None:
+                continue
+
+            # update the database
+            sql_string = f"UPDATE images_fid_points SET " \
+                        f"subset_n_x={estimated_subsets['n']['x']}, subset_n_y={estimated_subsets['n']['y']}, " \
+                        f"subset_e_x={estimated_subsets['e']['x']}, subset_e_y={estimated_subsets['e']['y']}, " \
+                        f"subset_s_x={estimated_subsets['s']['x']}, subset_s_y={estimated_subsets['s']['y']}, " \
+                        f"subset_w_x={estimated_subsets['w']['x']}, subset_w_y={estimated_subsets['w']['y']} " \
+                        f"WHERE image_id='{image_id}'"
+
+            ctd.execute_sql(sql_string, conn)
+
+            updated_entries += 1
 
 
 

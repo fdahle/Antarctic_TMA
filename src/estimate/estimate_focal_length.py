@@ -6,11 +6,14 @@ import src.base.connect_to_database as ctd
 
 # Constants
 MIN_NR_OF_IMAGES = 3
-MAX_STD = None
+MAX_STD = 0.005
 
 # variables
 use_estimated = False
 
+# debugging
+debug_print_data = False
+debug_print_std = False
 
 def estimate_focal_length(image_id, conn=None):
     # establish connection to psql if not provided
@@ -54,6 +57,14 @@ def estimate_focal_length(image_id, conn=None):
     focal_length_data = focal_length_data.loc[(focal_length_data['focal_length_estimated'] == False) &  # noqa
                                               pd.notnull(focal_length_data['focal_length'])]
 
+    if debug_print_data:
+        print(focal_length_data)
+
+    # remove estimated if we don't want to use them
+    if not use_estimated:
+        focal_length_data = focal_length_data.loc[
+            focal_length_data['focal_length_estimated'] == False]
+
     # check if there is a minimum number of images
     if MIN_NR_OF_IMAGES is not None:
 
@@ -64,15 +75,17 @@ def estimate_focal_length(image_id, conn=None):
     # check if the standard deviation is below the maximum
     if MAX_STD is not None:
 
+        if debug_print_std:
+            print("std", focal_length_data['focal_length'].std(), MAX_STD)
+
         # check if the standard deviation is below the maximum
         if focal_length_data['focal_length'].std() > MAX_STD:
             return None
 
-    # get the mean value
-    if use_estimated:
-        focal_length = focal_length_data['focal_length'].mean()
-    else:
-        focal_length = focal_length_data.loc[
-            focal_length_data['focal_length_estimated'] == False, 'focal_length'].mean()
+    # get the median value
+    focal_length = focal_length_data['focal_length'].median()
+
+    # round the focal length
+    focal_length = round(focal_length, 3)
 
     return focal_length

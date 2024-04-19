@@ -18,12 +18,30 @@ import base.connect_to_database as ctd  # noqa
 BASE_FLD = "/data_1/ATM/data_1/georef"
 
 
-def compute_statistics(data):
+def compute_pie(data):
+    # remove all entries where 'status' is empty
+    data_filled = data.dropna(subset=['status'])
 
-    metrics = ["num_tps", "avg_conf", "avg_resi", "complexity"]
+    # count the different status
+    status_count = data_filled['status_reason'].value_counts().to_dict()
+
+    return status_count
+
+def compute_statistics(status_type, data):
+
+    # remove all entries where 'status' is empty
+    data_filled = data.dropna(subset=['status'])
+
+    if status_type != "All":
+        data = data_filled[data_filled['status_reason'] == status_type]
+    else:
+        data = data_filled
+
+
+    metrics = ["num_tps", "confidence", "residuals", "complexity"]
     stats = {}
     for metric in metrics:
-        print(metric)
+
         stats[metric] = {
             'mean': data[metric].mean(),
             'median': data[metric].median(),
@@ -37,74 +55,74 @@ def compute_statistics(data):
     # Rename columns for clarity in presentation
     new_column_names = {
         "num_tps": "Tps",
-        "avg_conf": "Confidence",
-        "avg_resi": "Residuals",
+        "confidence": "Confidence",
+        "residuals": "Residuals",
         "complexity": "Complexity"
     }
     stats_df.rename(columns=new_column_names, inplace=True)
 
     # Change data type of TPs to integer
-    stats_df['Tps'] = stats_df['Tps'].astype(int)
+    try:
+        stats_df['Tps'] = stats_df['Tps'].astype(int)
+    except (Exception,):
+        # just do nothing
+        pass
 
     return stats_df
 
 def compute_flight_statistics(data, flight_path):
 
-    data_fl = copy.deepcopy(data)
-
     # filter by flight path
+    data_per_flight = data[data['tma_number'] == int(flight_path)]
+
+    # get matrix of method and status_reason
+    result_pivot = data_per_flight.pivot_table(index='method', columns='status_reason', aggfunc='size', fill_value=0)
+
+    return result_pivot
 
 
-
-def verify_georef():
+def prepare_data():
 
     # load the shapefiles with additional information
-    sat_shp_data = gpd.read_file(BASE_FLD + "/" + "sat.shp")
+    shp_data_sat = gpd.read_file(BASE_FLD + "/" + "sat.shp")
+    #  shp_data_img = gpd.read_file(BASE_FLD + "/" + img.shp)
+    # shp_data_calc = gpd.read_file(BASE_FLD + "/" + "calc.shp")
+    # shp_data = pd.concat([shp_data_sat, shp_data_img, shp_data_calc], ignore_index=True)
+    shp_data = shp_data_sat
 
-    # load psql data
+    # load images sql data
     conn = ctd.establish_connection()
     sql_string = "SELECT image_id, tma_number FROM images"
     data_images = ctd.execute_sql(sql_string, conn)
 
+    # load images_extracted sql data
     sql_string = "SELECT image_id, complexity FROM images_extracted"
     data_images_extracted = ctd.execute_sql(sql_string, conn)
 
+    # merge the sql_data
     sql_data = data_images.merge(data_images_extracted, on="image_id", how="left")
 
-    # load all csv files with information
-    sat_data = pd.read_csv(BASE_FLD + "/" + "sat_processed_images.csv", delimiter=";")
-    img_data = pd.read_csv(BASE_FLD + "/" + "img_processed_images.csv", delimiter=";")
-    calc_data = pd.read_csv(BASE_FLD + "/" + "calc_processed_images.csv", delimiter=";")
+    # load all csv data
+    csv_data_sat = pd.read_csv(BASE_FLD + "/" + "sat_processed_images.csv", delimiter=";")
+    csv_data_img = pd.read_csv(BASE_FLD + "/" + "img_processed_images.csv", delimiter=";")
+    csv_data_calc = pd.read_csv(BASE_FLD + "/" + "calc_processed_images.csv", delimiter=";")
+    csv_data = pd.concat([csv_data_sat, csv_data_img, csv_data_calc], ignore_index=True)
 
-    georef_to_check = ["all", "sat", "img", "calc"]
+    # merge all shp data into one dataframe
+    data = sql_data.merge(shp_data, on="image_id", how="left")
 
-    st.title("Georef Quality Control")
+    # merge all csv data into one dataframe
+    data = data.merge(csv_data, left_on="image_id", right_on='id', how="left")
 
-    # allow selection of different georef types
-    georef_type = st.selectbox("Select georef type", georef_to_check)
+    # remove the id and geom column
+    data.drop(columns=['id', 'geometry'], inplace=True)
 
-    # determine which pandas dataframe to use
-    if georef_type == "all":
-        # append pandas dataframes
-        data = pd.concat([sat_data, img_data, calc_data], ignore_index=True)
-        # TODO ONLY KEEP GEOREF WHEN IDS ARE MULTIPLE TIMES IN THE DATAFRAME
-    elif georef_type == "sat":
-        data = sat_data
-    elif georef_type == "img":
-        data = img_data
-    elif georef_type == "calc":
-        data = calc_data
-    else:
-        raise ValueError("Invalid georef type")
+    # rename some columns
+    data.rename(columns={"avg_conf": "confidence"}, inplace=True)
+    data.rename(columns={"avg_resi": "residuals"}, inplace=True)
 
-    # replace column name
-    data.rename(columns={"id": "image_id"}, inplace=True)
-
-    # merge data with shapedata
-    data = data.merge(sat_shp_data, on="image_id", how="left")
-
-    # merge data with sql data
-    data = data.merge(sql_data, on="image_id", how="right")
+    # remove all images that have no method
+    data = data.dropna(subset=['method'])
 
     # add nr of tps for the entries "too_few_tps"
     condition = data['reason'].str.startswith('too_few_tps', na=False)
@@ -118,36 +136,60 @@ def verify_georef():
     data['status_reason'] = data.apply(
         lambda x: f"{x['status']} - {x['reason']}" if x['status'] == 'failed' else x['status'], axis=1)
 
-    # remove all entries where 'status' is empty
-    data_filled = data.dropna(subset=['status'])
+    # cast tma number to integer
+    data['tma_number'] = data['tma_number'].astype(int)
 
-    # count the different status
-    status_count = data_filled['status_reason'].value_counts().to_dict()
+    return data
+
+def plot_results(data):
+
+    georef_to_check = ["all", "sat", "img", "calc"]
+
+    st.title("Georef Quality Control")
+
+    # allow selection of different georef types
+    georef_type = st.selectbox("Select georef type", georef_to_check)
+
+    # determine which pandas dataframe to use
+    if georef_type == "all":
+        # nothing needs to be done
+        pass
+    elif georef_type == "sat":
+        # filter for status 'sat'
+        data = data[data['status'] == 'sat']
+    elif georef_type == "img":
+        data = data[data['status'] == 'img']
+    elif georef_type == "calc":
+        data = data[data['status'] == 'calc']
+    else:
+        raise ValueError("Invalid georef type")
 
     # pie-chart for status
     st.header("Status")
+
+    # get data for pie-chart
+    pie_plot_data = compute_pie(data)
+
+    # plot the pie-chart
     fig, ax = plt.subplots()
-    ax.pie(status_count.values(),
-           labels=status_count.keys(),
+    ax.pie(pie_plot_data.values(),
+           labels=pie_plot_data.keys(),
            autopct='%1.1f%%', startangle=90)
     ax.axis('equal')  # Ensures that pie is drawn as a circle.
-
     st.pyplot(fig)
 
     # statistical values for the data
     st.header("Average values")
 
-    status_labels = ["All"] + list(status_count.keys())
-
+    # possible to select the status type for which the statistics should be computed
+    status_labels = ["All"] + list(pie_plot_data.keys())
     status_type = st.selectbox("Select status type", status_labels)
-    if status_type != "All":
-        data_for_statistics = data_filled[data_filled['status_reason'] == status_type]
-    else:
-        data_for_statistics = data_filled
 
-    statistics = compute_statistics(data_for_statistics)
+    # calculate statistics for the selected status type
+    status_statistics = compute_statistics(status_type, data)
 
-    st.table(pd.DataFrame(statistics))
+    # display statistics in the table
+    st.table(pd.DataFrame(status_statistics))
 
     st.header("Flight paths")
 
@@ -160,12 +202,18 @@ def verify_georef():
 
     flight_path = st.selectbox("Select flight path", flight_paths)
 
-    st.header("Raw data")
+    # compute statistics for the selected flight path
+    flight_statistics = compute_flight_statistics(data, flight_path)
 
-    # remove geometry column
-    raw_data = data.drop(columns=['geometry'])
-    st.dataframe(raw_data)
+    # display statistics in the table
+    st.table(pd.DataFrame(flight_statistics))
+
+    # show the raw data
+    st.header("Raw data")
+    st.dataframe(data)
 
 if __name__ == "__main__":
 
-    verify_georef()
+    data = prepare_data()
+
+    plot_results(data)

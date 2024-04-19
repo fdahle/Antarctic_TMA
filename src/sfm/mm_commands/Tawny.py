@@ -22,6 +22,12 @@ class Tawny(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
     def build_shell_dict(self):
 
         shell_dict = {}

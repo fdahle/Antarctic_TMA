@@ -1,8 +1,14 @@
 {
-  "AperiCloud": {
+  "AperiCloud_1": {
     "ImagePattern": "OIS.*tif",
     "ExpTxt": 1,
     "Orientation": "Relative",
+    "SH": "Homol_mini"
+  },
+  "AperiCloud_2": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1,
+    "Orientation": "Final",
     "SH": "Homol_mini"
   },
   "Campari": {
@@ -20,15 +26,15 @@
     "ImagePattern": "OIS.*tif",
     "InputOrientation": "Relative",
     "OutputOrientation": "Ground",
-    "FileGroundControlPoints": "Ground-Pts3D.xml",
-    "FileImageMeasurements": "GroundMeasure.xml"
+    "FileGroundControlPoints": "Measures_3d.xml",
+    "FileImageMeasurements": "Measures-S2D.xml"
   },
   "Malt": {
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
-    "Orientation": "Relative",
+    "Orientation": "Final",
     "NbVI": 2,
-    "ZoomF": 8,
+    "ZoomF": 4,
     "DefCor": 0,
     "CostTrans": 1,
     "EZA": 1
@@ -37,6 +43,8 @@
     "ImagePattern": "CA*.*tif",
     "ScanResolution": 0.025,
     "ResampleMasks": true
+  },
+  "SaisieMasq": {
   },
   "Schnaps": {
     "ImagePattern": "OIS.*tif",
@@ -56,7 +64,10 @@
   },
   "Tarama": {
     "ImagePattern": "OIS.*tif",
-    "Orientation": "Relative",
-    "ExpTxt": 1
+    "Orientation": "Final"
+  },
+  "Tawny": {
+    "DataDirectory": "Ortho",
+    "Out": "Orthophotomosaic.tif"
   }
 }

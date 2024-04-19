@@ -16,6 +16,7 @@ class BaseCommand(ABC):
 
     def __init__(self, project_folder,
                  mm_args,
+                 command_name,
                  print_all_output=False,
                  save_stats=False,
                  save_raw=False,
@@ -25,6 +26,7 @@ class BaseCommand(ABC):
 
         self.project_folder = project_folder
         self.mm_args = mm_args
+        self.command_name = command_name
 
         # does this command has additional arguments?
         if len(self.additional_args) > 0:
@@ -96,7 +98,7 @@ class BaseCommand(ABC):
                 # timestamp = start_time.strftime("%Y_%m_%d_%H_%M_%S")
 
                 filename = f"{self.project_folder}/stats/" \
-                           f"{key}_raw.txt"
+                           f"{self.command_name}_raw.txt"
                 with open(filename, "w") as f:
                     f.write(f"{shell_string}\n")
                     f.write("************\n")
@@ -114,7 +116,7 @@ class BaseCommand(ABC):
                 print(f"{key} finished successfully.")
 
             if self.save_stats:
-                self.extract_stats(key, raw_output)
+                self.extract_stats(self.command_name, raw_output)
 
             if self.print_all_output:
                 print("********")

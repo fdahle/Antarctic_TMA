@@ -1,19 +1,17 @@
+# Package imports
 import os
 import glob
-import xml.etree.ElementTree as ET
-
+import numpy as np
 from lxml import etree
 
+# Custom imports
 import src.load.load_image as li
 import src.load.load_transform as lt
-
 import src.sfm.snippets.identify_gpcs as ig
-
 from src.sfm.mm_commands._base_command import BaseCommand
 
 
 class GCPCustom(BaseCommand):
-
     required_args = []
     allowed_args = ["ALLTransformsReq"]
 
@@ -54,6 +52,9 @@ class GCPCustom(BaseCommand):
         self._create_measures_xml(gcp_dict, self.project_folder)
         self._create_measures_2d_xml(gcp_dict, self.project_folder)
 
+        if self.debug:
+            print("GCPCustom command executed successfully.")
+
     def extract_stats(self, raw_output):
         pass
 
@@ -70,10 +71,10 @@ class GCPCustom(BaseCommand):
             image_id = os.path.basename(image)[:-4]
 
             # get path to transform file
-            transform_file = self.project_folder + "/transforms/" + image_id + ".xml"
+            path_transform_file = f"{self.project_folder}/transforms/{image_id}.txt"
 
             # check if the transform file exists
-            if not os.path.isfile(transform_file):
+            if not os.path.isfile(path_transform_file):
                 missing_transforms.append(image_id)
 
         if len(missing_transforms) == len(images):
@@ -81,8 +82,11 @@ class GCPCustom(BaseCommand):
 
         # in this case we need all transforms
         if all_transforms_req and len(missing_transforms) > 0:
-            raise FileNotFoundError(f"{len(missing_transforms)} transforms are missing.")
-
+            if len(missing_transforms) == 1:
+                error_str = f"{len(missing_transforms)} transform file is missing."
+            else:
+                error_str = f"{len(missing_transforms)} transform files are missing."
+            raise FileNotFoundError(error_str)
 
     def _get_gcps(self):
 
@@ -93,14 +97,21 @@ class GCPCustom(BaseCommand):
         # load the images
         images = []
         for image_id in image_ids:
+            if self.debug:
+                print(f"Load image '{image_id}'")
+
             img = li.load_image(image_id, self.project_folder + "/images_orig")
             images.append(img)
 
         # load the transforms from the images
         transforms = []
         for image_id in image_ids:
-            transform = lt.load_transform(image_id, self.project_folder + "/transforms")
-            transforms.append(transform)
+            try:
+                transform = lt.load_transform(image_id, self.project_folder + "/transforms")
+                transforms.append(transform)
+            # ignore if the transform file does not exist
+            except (Exception,):
+                transforms.append(np.zeros((3, 3)))
 
         # get identical gcps for the images
         gcp_dict = ig.identify_gcps(image_ids, images, transforms)
@@ -184,7 +195,7 @@ class GCPCustom(BaseCommand):
                     image_xml_dict[image_id] = image_xml_element  # Save the reference
                 else:
                     image_xml_element = image_xml_dict[image_id]
-                    
+
                 # create the gcp element
                 gcp_element = etree.SubElement(image_xml_element, "OneMesureAF1I")
 
@@ -197,4 +208,3 @@ class GCPCustom(BaseCommand):
         tree = etree.ElementTree(root)
         tree.write(save_fld + "/Measures-S2D.xml",
                    xml_declaration=True, encoding='utf-8', pretty_print=True)
-

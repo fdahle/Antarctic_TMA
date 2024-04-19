@@ -9,6 +9,7 @@ settings = {
     "image_size": (250, 250),
     "image_prefix": "OIS-Reech_"
 }
+prj_fldr = "/data_1/ATM/data_1/sfm/projects/EGU2"
 
 template_path = "/home/fdahle/Documents/GitHub/Antarctic_TMA/src/sfm/html/status_template.html"
 
@@ -251,6 +252,4 @@ def _parse_homol_directory(homol_folder):
 
 
 if __name__ == "__main__":
-    prj_fldr = "/data_1/ATM/data_1/sfm/projects/src_test2"
-
     update_html(prj_fldr)

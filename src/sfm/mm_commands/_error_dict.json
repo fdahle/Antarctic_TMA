@@ -57,6 +57,18 @@
       "MMErrorMsg": "Cannot compute association",
       "ErrorMsg": "Cannot find the output folder",
       "Fix": "Is 'Out' the first named argument?"
+    },
+    {
+      "MMErrorMsg": "Name is not a correct homologue prefix",
+      "ErrorMsg": "Tapas cannot find the Homol folder",
+      "Fix": "Check if the path to the Homol folder is correct."
+    }
+  ],
+  "Tawny": [
+    {
+      "MMErrorMsg": "Cannot open!",
+      "ErrorMsg": "The xml file in the DataDirectory cannot be opened",
+      "Fix": "Check if the path to the DataDirectory is correct."
     }
   ]
 }

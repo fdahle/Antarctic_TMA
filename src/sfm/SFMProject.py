@@ -1,5 +1,6 @@
 import importlib
 import os.path
+import re
 import shutil
 
 from typing import Optional
@@ -171,13 +172,13 @@ class SFMProject(object):
         # save the camera name
         self.camera_name = camera_name
 
-    def set_images(self, image_ids: list[str], image_folder: Optional[str] = None,
-                   copy_masks: bool = False, mask_folder: Optional[str] = None,
-                   copy_resampled: bool = False, resampled_image_folder: Optional[str] = None,
-                   copy_resampled_masks: bool = False, resampled_mask_folder=None,
-                   copy_xml: bool = False, xml_folder: Optional[str] = None,
-                   copy_transform: bool = False, transform_folder: Optional[str] = None,
-                   ignore_missing: bool = False, overwrite: bool = False,) -> None:
+    def prepare_files(self, image_ids: list[str], image_folder: Optional[str] = None,
+                      copy_masks: bool = False, mask_folder: Optional[str] = None,
+                      copy_resampled: bool = False, resampled_image_folder: Optional[str] = None,
+                      copy_resampled_masks: bool = False, resampled_mask_folder=None,
+                      copy_xml: bool = False, xml_folder: Optional[str] = None,
+                      copy_transform: bool = False, transform_folder: Optional[str] = None,
+                      ignore_missing: bool = False, overwrite: bool = False, ) -> None:
         """
         Sets the images for the project by copying them from source folders to the project folder,
         with options for copying associated masks, resampled images, and XML files.
@@ -201,24 +202,41 @@ class SFMProject(object):
             transform_folder (Optional[str]): Folder where transform files are stored.
                 Defaults to DEFAULT_TRANSFORM_FLD.
             overwrite (bool): Whether to overwrite existing files at the destination. Defaults to False.
-            ignore_missing (bool): Whether to ignroe missing files without raising an exception. Defaults to False.
+            ignore_missing (bool): Whether to ignore missing files without raising an exception. Defaults to False.
         Returns:
             None
         """
 
-        # set default folders if not provided
-        image_folder = image_folder or DEFAULT_IMAGE_FLD
-        mask_folder = mask_folder or DEFAULT_MASK_FLD
-        resampled_image_folder = resampled_image_folder or DEFAULT_RESAMPLED_IMAGE_FLD
-        resampled_mask_folder = resampled_mask_folder or DEFAULT_RESAMPLED_MASK_FLD
-        transform_folder = transform_folder or DEFAULT_TRANSFORM_FLD
-        xml_folder = xml_folder or DEFAULT_XML_FLD
+        # copy the images and get the images that were copied
+        self.image_ids = self.set_images(image_ids, image_folder, ignore_missing, overwrite)
 
-        # copy image_ids list to avoid changing the original list
-        image_ids_copy = image_ids.copy()
+        if copy_masks:
+            self.set_masks(self.image_ids, mask_folder,
+                           ignore_missing, overwrite)
+        if copy_resampled:
+            self.set_resampled_images(self.image_ids, resampled_image_folder,
+                                      ignore_missing, overwrite)
+        if copy_resampled_masks:
+            self.set_resampled_masks(self.image_ids, resampled_mask_folder,
+                                     ignore_missing, overwrite)
+        if copy_xml:
+            self.set_xml_files(self.image_ids, xml_folder,
+                               ignore_missing, overwrite)
+        if copy_transform:
+            self.set_transforms(self.image_ids, transform_folder,
+                                ignore_missing, overwrite)
+
+    def set_images(self, image_ids, image_folder=None,
+                   ignore_missing=True, overwrite=False):
 
         if self.debug:
             print("Copy images", end='')
+
+        # set default image folder if not provided
+        image_folder = image_folder or DEFAULT_IMAGE_FLD
+
+        # copy image_ids list to avoid changing the original list
+        image_ids_copy = image_ids.copy()
 
         # List to store missing images
         missing_images = []
@@ -246,110 +264,130 @@ class SFMProject(object):
                 # remove from image_ids list so that the following steps are not executed for that image id
                 image_ids_copy.remove(image_id)
 
-        if len(missing_images) > 0:
+        if len(missing_images) > 0 and ignore_missing is False:
             raise FileNotFoundError("Missing images for the following image ids: ", missing_images)
 
         if self.debug:
             print("\rCopy images - finished")
 
-        # Masks
-        if copy_masks:
+        return image_ids_copy
 
-            if self.debug:
-                print("Copy masks", end='')
+    def set_masks(self, mask_ids=None, mask_folder=None,
+                  ignore_missing=True, overwrite=False):
 
-            # List to store missing masks
-            missing_masks = []
+        if self.debug:
+            print("Copy masks", end='')
 
-            # iterate over the copied image ids
-            for image_id in image_ids_copy:
+        # set default ids if not provided
+        mask_ids = mask_ids or self.image_ids
 
-                # create old and new path to the masks
-                old_mask_path = os.path.join(mask_folder, image_id + ".tif")
-                new_mask_path = os.path.join(self.project_path, "masks_orig", image_id + ".tif")
+        # set default folders if not provided
+        mask_folder = mask_folder or DEFAULT_MASK_FLD
 
-                # check if mask is existing in the original folder
-                if os.path.isfile(old_mask_path):
+        # List to store missing masks
+        missing_masks = []
 
-                    # do not copy if masks are already in the masks_orig folder and overwrite is False
-                    if not (os.path.isfile(new_mask_path) and overwrite is False):
-                        shutil.copyfile(old_mask_path, new_mask_path)
-                else:
-                    missing_masks.append(image_id)
+        # iterate over the copied image ids
+        for image_id in mask_ids:
 
-            # check if images are missing
-            if len(missing_masks) > 0:
-                if ignore_missing:
-                    print("Missing masks for the following images: ", missing_masks)
-                else:
-                    raise FileNotFoundError("Missing masks for the following images: ", missing_masks)
+            # create old and new path to the masks
+            old_mask_path = os.path.join(mask_folder, image_id + ".tif")
+            new_mask_path = os.path.join(self.project_path, "masks_orig", image_id + ".tif")
 
-            if self.debug:
-                print("\rCopy masks - finished")
+            # check if mask is existing in the original folder
+            if os.path.isfile(old_mask_path):
 
-        # Resampled images
-        if copy_resampled:
+                # do not copy if masks are already in the masks_orig folder and overwrite is False
+                if not (os.path.isfile(new_mask_path) and overwrite is False):
+                    shutil.copyfile(old_mask_path, new_mask_path)
+            else:
+                missing_masks.append(image_id)
 
-            if self.debug:
-                print("Copy resampled images", end='')
+        # check if images are missing
+        if len(missing_masks) > 0:
+            if ignore_missing:
+                print("Missing masks for the following images: ", missing_masks)
+            else:
+                raise FileNotFoundError("Missing masks for the following images: ", missing_masks)
 
-            # List to store missing resampled images
-            missing_resampled_images = []
+        if self.debug:
+            print("\rCopy masks - finished")
 
-            # iterate over the copied image ids
-            for image_id in image_ids_copy:
+    def set_resampled_images(self, resampled_image_ids=None, resampled_image_folder=None,
+                             ignore_missing=True, overwrite=False):
 
-                # create old and new path to the resampled images
-                old_resampled_img_path = os.path.join(resampled_image_folder,
-                                                      "OIS-Reech_" + image_id + ".tif")
-                new_resampled_img_path = os.path.join(self.project_path, "images",
-                                                      "OIS-Reech_" + image_id + ".tif")
+        if self.debug:
+            print("Copy resampled images", end='')
 
-                # check if the resampled image is existing in the original folder
-                if os.path.isfile(old_resampled_img_path):
+        # set default ids if not provided
+        resampled_image_ids = resampled_image_ids or self.image_ids
 
-                    # do not copy if images are already in the images folder and overwrite is False
-                    if not (os.path.isfile(new_resampled_img_path) and overwrite is False):
-                        shutil.copyfile(old_resampled_img_path, new_resampled_img_path)
-                else:
-                    missing_resampled_images.append(image_id)
+        # set default folders if not provided
+        resampled_image_folder = resampled_image_folder or DEFAULT_RESAMPLED_IMAGE_FLD
 
-            if len(missing_resampled_images) > 0:
-                if ignore_missing:
-                    print("Missing resampled images for the following images: ", missing_resampled_images)
-                else:
-                    raise FileNotFoundError("Missing resampled images for the following images: ",
-                                            missing_resampled_images)
+        # List to store missing resampled images
+        missing_resampled_images = []
 
-            if self.debug:
-                print("\rCopy resampled images - finished")
+        # iterate over the copied image ids
+        for image_id in resampled_image_ids:
 
-        # Resampled masks
-        if copy_resampled_masks:
+            # create old and new path to the resampled images
+            old_resampled_img_path = os.path.join(resampled_image_folder,
+                                                  "OIS-Reech_" + image_id + ".tif")
+            new_resampled_img_path = os.path.join(self.project_path, "images",
+                                                  "OIS-Reech_" + image_id + ".tif")
 
-            if self.debug:
-                print("Copy resampled masks", end='')
+            # check if the resampled image is existing in the original folder
+            if os.path.isfile(old_resampled_img_path):
 
-            # List to store missing resampled masks
-            missing_resampled_masks = []
+                # do not copy if images are already in the images folder and overwrite is False
+                if not (os.path.isfile(new_resampled_img_path) and overwrite is False):
+                    shutil.copyfile(old_resampled_img_path, new_resampled_img_path)
+            else:
+                missing_resampled_images.append(image_id)
 
-            # iterate over the copied image ids
-            for image_id in image_ids_copy:
+        if len(missing_resampled_images) > 0:
+            if ignore_missing:
+                print("Missing resampled images for the following images: ", missing_resampled_images)
+            else:
+                raise FileNotFoundError("Missing resampled images for the following images: ",
+                                        missing_resampled_images)
 
-                # create old and new path to the resampled masks
-                old_resampled_mask_path = os.path.join(resampled_mask_folder,
-                                                       "OIS-Reech_" + image_id + ".tif")
-                new_resampled_mask_path = os.path.join(self.project_path, "masks",
-                                                       "OIS-Reech_" + image_id + ".tif")
+        if self.debug:
+            print("\rCopy resampled images - finished")
 
-                # check if the resampled mask is existing in the original folder
-                if os.path.isfile(old_resampled_mask_path):
+    def set_resampled_masks(self, resampled_mask_ids=None, resampled_mask_folder=None,
+                            ignore_missing=True, overwrite=False):
 
-                    # do not copy if masks are already in the masks folder and overwrite is False
-                    if not (os.path.isfile(new_resampled_mask_path) and overwrite is False):
-                        shutil.copyfile(old_resampled_mask_path, new_resampled_mask_path)
-                else:
-                    missing_resampled_masks.append(image_id)
+        if self.debug:
+            print("Copy resampled masks", end='')
+
+        # set default ids if not provided
+        resampled_mask_ids = resampled_mask_ids or self.image_ids
+
+        # set default folders if not provided
+        resampled_mask_folder = resampled_mask_folder or DEFAULT_RESAMPLED_MASK_FLD
+
+        # List to store missing resampled masks
+        missing_resampled_masks = []
+
+        # iterate over the copied image ids
+        for image_id in resampled_mask_ids:
+
+            # create old and new path to the resampled masks
+            old_resampled_mask_path = os.path.join(resampled_mask_folder,
+                                                   "OIS-Reech_" + image_id + ".tif")
+            new_resampled_mask_path = os.path.join(self.project_path, "masks",
+                                                   "OIS-Reech_" + image_id + ".tif")
+
+            # check if the resampled mask is existing in the original folder
+            if os.path.isfile(old_resampled_mask_path):
+
+                # do not copy if masks are already in the masks folder and overwrite is False
+                if not (os.path.isfile(new_resampled_mask_path) and overwrite is False):
+                    shutil.copyfile(old_resampled_mask_path, new_resampled_mask_path)
+            else:
+                missing_resampled_masks.append(image_id)
 
             if len(missing_resampled_masks) > 0:
                 if ignore_missing:
@@ -361,78 +399,87 @@ class SFMProject(object):
             if self.debug:
                 print("\rCopy resampled masks - finished")
 
-        # XML files
-        if copy_xml:
+    def set_xml_files(self, xml_ids=None, xml_folder=None,
+                      ignore_missing=True, overwrite=False):
 
-            if self.debug:
-                print("Copy XML files", end='')
+        if self.debug:
+            print("Copy XML files", end='')
 
-            # List to store missing XML files
-            missing_xml_files = []
+        # set default ids if not provided
+        xml_ids = xml_ids or self.image_ids
 
-            # iterate over the copied image ids
-            for image_id in image_ids_copy:
+        # set default folders if not provided
+        xml_folder = xml_folder or DEFAULT_XML_FLD
 
-                # create old and new path to the XML files
-                old_xml_path = os.path.join(xml_folder, "MeasuresIm-" + image_id + ".tif.xml")
-                new_xml_path = os.path.join(self.project_path, "Ori-InterneScan", "MeasuresIm-" + image_id + ".tif.xml")
+        # List to store missing XML files
+        missing_xml_files = []
 
-                # check if the XML file is existing in the original folder
-                if os.path.isfile(old_xml_path):
+        # iterate over the copied image ids
+        for image_id in xml_ids:
 
-                    # do not copy if XML files are already in the Ori-InterneScan folder and overwrite is False
-                    if not (os.path.isfile(new_xml_path) and overwrite is False):
-                        shutil.copyfile(old_xml_path, new_xml_path)
-                else:
-                    missing_xml_files.append(image_id)
+            # create old and new path to the XML files
+            old_xml_path = os.path.join(xml_folder, "MeasuresIm-" + image_id + ".tif.xml")
+            new_xml_path = os.path.join(self.project_path, "Ori-InterneScan", "MeasuresIm-" + image_id + ".tif.xml")
 
-            if len(missing_xml_files) > 0:
-                if ignore_missing:
-                    print("Missing xml files for the following images: ", missing_xml_files)
-                else:
-                    raise FileNotFoundError("Missing xml files for the following images: ",
-                                            missing_xml_files)
+            # check if the XML file is existing in the original folder
+            if os.path.isfile(old_xml_path):
 
-            if self.debug:
-                print("\rCopy XML files - finished")
+                # do not copy if XML files are already in the Ori-InterneScan folder and overwrite is False
+                if not (os.path.isfile(new_xml_path) and overwrite is False):
+                    shutil.copyfile(old_xml_path, new_xml_path)
+            else:
+                missing_xml_files.append(image_id)
 
-        # Transforms
-        if copy_transform:
+        if len(missing_xml_files) > 0:
+            if ignore_missing:
+                print("Missing xml files for the following images: ", missing_xml_files)
+            else:
+                raise FileNotFoundError("Missing xml files for the following images: ",
+                                        missing_xml_files)
 
-            if self.debug:
-                print("Copy transform files", end='')
+        if self.debug:
+            print("\rCopy XML files - finished")
 
-            # List to store missing transform files
-            missing_transform_files = []
+    def set_transforms(self, transform_ids=None, transform_folder=None,
+                       ignore_missing=True, overwrite=False):
 
-            # iterate over the copied image ids
-            for image_id in image_ids_copy:
+        if self.debug:
+            print("Copy transform files", end='')
 
-                # create old and new path to the transform files
-                old_transform_path = os.path.join(transform_folder, image_id + "_transform.txt")
-                new_transform_path = os.path.join(self.project_path, "transforms", image_id + ".txt")
+        # set default ids if not provided
+        transform_ids = transform_ids or self.image_ids
 
-                # check if the transform file is existing in the original folder
-                if os.path.isfile(old_transform_path):
+        # set default folders if not provided
+        transform_folder = transform_folder or DEFAULT_TRANSFORM_FLD
 
-                    # do not copy if transform files are already in the transforms folder and overwrite is False
-                    if not (os.path.isfile(new_transform_path) and overwrite is False):
-                        shutil.copyfile(old_transform_path, new_transform_path)
-                else:
-                    missing_transform_files.append(image_id)
+        # List to store missing transform files
+        missing_transform_files = []
 
-            if len(missing_transform_files) > 0:
-                if ignore_missing:
-                    print("Missing transform files for the following images: ", missing_transform_files)
-                else:
-                    raise FileNotFoundError("Missing transform files for the following images: ",
-                                            missing_transform_files)
+        # iterate over the copied image ids
+        for image_id in transform_ids:
 
-            if self.debug:
-                print("\rCopy transform files - finished")
+            # create old and new path to the transform files
+            old_transform_path = os.path.join(transform_folder, image_id + "_transform.txt")
+            new_transform_path = os.path.join(self.project_path, "transforms", image_id + ".txt")
 
-        # save the copied image ids (to ignore missing files
-        self.image_ids = image_ids_copy
+            # check if the transform file is existing in the original folder
+            if os.path.isfile(old_transform_path):
+
+                # do not copy if transform files are already in the transforms folder and overwrite is False
+                if not (os.path.isfile(new_transform_path) and overwrite is False):
+                    shutil.copyfile(old_transform_path, new_transform_path)
+            else:
+                missing_transform_files.append(image_id)
+
+        if len(missing_transform_files) > 0:
+            if ignore_missing:
+                print("Missing transform files for the following images: ", missing_transform_files)
+            else:
+                raise FileNotFoundError("Missing transform files for the following images: ",
+                                        missing_transform_files)
+
+        if self.debug:
+            print("\rCopy transform files - finished")
 
     def start(self, mode: str, commands: None,
               micmac_args: dict = None,
@@ -467,14 +514,32 @@ class SFMProject(object):
             raise ValueError("Commands must be provided in manual mode")
 
         # execute the commands in order of the list
-        for command in commands:
+        for command_name in commands:
+
+            # get the specif arguments for the command
+            if command_name in micmac_args:
+                cmd_args = micmac_args[command_name]
+            else:
+                cmd_args = {}
+
+            # recognize suffixes with _X and remove them
+            pattern = r'_\d+$'
+            command = re.sub(pattern, '', command_name)
 
             # check if the command is supported
             if command not in self.valid_commands:
-                raise Exception(f"Command '{command}' is not supported")
+
+                # different error message if the command had a suffix
+                if command != command_name:
+                    exc_string = f"Command '{command}' ({command_name}) is not supported"
+                else:
+                    exc_string = f"Command '{command}' is not supported"
+
+                raise Exception(exc_string)
 
             # execute the command
-            self._execute_command(command, micmac_args, print_all_output, save_stats, save_raw)
+            self._execute_command(command, command_name,
+                                  cmd_args, print_all_output, save_stats, save_raw)
 
     def _create_project_structure(self):
 
@@ -518,25 +583,20 @@ class SFMProject(object):
         if os.path.isdir(self.project_path + "/Ori-Tapas") is False:
             os.mkdir(self.project_path + "/Ori-Tapas")
 
-    def _execute_command(self, command_name, micmac_args, print_all_output=False,
+    def _execute_command(self, command, command_name, mm_args, print_all_output=False,
                          save_stats=False, save_raw=False):
 
         try:
             # Dynamically import the module (file)
-            module = importlib.import_module(f"src.sfm.mm_commands.{command_name}")
+            module = importlib.import_module(f"src.sfm.mm_commands.{command}")
 
             # Get the class from the imported module
-            mm_class = getattr(module, command_name)
-
-            # check if there are custom args for the command
-            if command_name in micmac_args:
-                mm_args = micmac_args[command_name]
-            else:
-                mm_args = {}
+            mm_class = getattr(module, command)
 
             # Create an instance of the class
             mm_command = mm_class(self.project_path,
                                   mm_args=mm_args,
+                                  command_name=command_name,
                                   print_all_output=print_all_output,
                                   save_stats=save_stats, save_raw=save_raw,
                                   debug=self.debug)
@@ -544,11 +604,11 @@ class SFMProject(object):
         except (ImportError, AttributeError) as e:
             # Handle the error if the module or class is not found
             if e is ImportError:
-                raise ImportError(f"Could not find a command named '{command_name}'")
+                raise ImportError(f"Could not find a command named '{command}'")
             else:
                 raise e
 
-        if command_name.endswith("Custom"):
+        if command.endswith("Custom"):
             mm_command.execute_custom_cmd()
         else:
             mm_command.execute_shell_cmd(self.micmac_path)

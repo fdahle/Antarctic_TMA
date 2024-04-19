@@ -15,7 +15,7 @@ input_img_type = "tif"
 img_size = (800, 800)
 
 view_directions = ["V"]
-input_ids = []  # ['CA172031L0258']
+input_ids = [1801]  # ['CA172031L0258']
 input_type = "flight_path"
 
 shuffle = False
@@ -57,11 +57,16 @@ class ImageViewer:
         if self.input_type == "flight_path":
             prefixes = ["CA" + str(value) for value in self.input_ids]
 
+            print(prefixes)
+
             # Get all files in the directory
             all_files = os.listdir(self.image_path)
 
             # Filter the files based on the prefixes
             self.input_ids = [os.path.splitext(f)[0] for f in all_files if any(f.startswith(prefix) for prefix in prefixes)]
+
+        print(len(self.input_ids))
+        print(self.input_type)
 
         # load input_ids
         if self.input_ids is None or len(self.input_ids) == 0:

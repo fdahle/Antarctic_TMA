@@ -3,10 +3,11 @@ import glob
 import shutil
 
 from src.sfm.mm_commands._base_command import BaseCommand
-class Campari(BaseCommand):
 
+
+class Campari(BaseCommand):
     required_args = ["ImagePattern", "InputOrientation", "OutputOrientation"]
-    allowed_args = ["ImagePattern", "InputOrientation", "OutputOrientation", "GCP", "EmGPS", "GpsLa",
+    allowed_args = ["ImagePattern", "InputOrientation", "OutputOrientation", "SH", "GCP", "EmGPS", "GpsLa",
                     "SigmaTieP", "FactElimTieP", "CPI1", "CPI2", "FocFree", "PPFree", "AffineFree", "AllFree",
                     "DetGCP", "Visc", "ExpTxt", "ImMinMax", "DegAdd", "DegFree", "DRMax", "PoseFigee"]
 
@@ -24,28 +25,34 @@ class Campari(BaseCommand):
         # validate the input arguments
         self.validate_mm_parameters()
 
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
     def build_shell_dict(self):
 
-            shell_dict = {}
+        shell_dict = {}
 
-            # build the basic shell command
-            shell_string = f'Campari "{self.mm_args["ImagePattern"]}" ' \
-                           f'{self.mm_args["InputOrientation"]} {self.mm_args["OutputOrientation"]}'
+        # build the basic shell command
+        shell_string = f'Campari "{self.mm_args["ImagePattern"]}" ' \
+                       f'{self.mm_args["InputOrientation"]} {self.mm_args["OutputOrientation"]}'
 
-            # add the optional arguments to the shell string
-            for key, val in self.mm_args.items():
+        # add the optional arguments to the shell string
+        for key, val in self.mm_args.items():
 
-                # skip required arguments
-                if key in self.required_args:
-                    continue
+            # skip required arguments
+            if key in self.required_args:
+                continue
 
-                shell_string = shell_string + " " + str(key) + "=" + str(val)
+            shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-            shell_dict["Campari"] = shell_string
+        shell_dict["Campari"] = shell_string
 
-            return shell_dict
+        return shell_dict
 
-    def extract_stats(self, raw_output):
+    def extract_stats(self, name, raw_output):
         pass
 
     def validate_mm_parameters(self):

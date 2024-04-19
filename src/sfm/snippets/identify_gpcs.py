@@ -8,7 +8,7 @@ from typing import Tuple
 from external.lightglue import SuperPoint
 
 
-def identify_gcps(image_ids, images, transforms):
+def identify_gcps(image_ids, images, transforms, debug=False):
     """
     Identifies Ground Control Points (GCPs) across a list of images. Points are identified using the SuperPoint
     algorithm and converted to absolute coordinates using the provided transformation matrices. Overlapping points
@@ -37,8 +37,18 @@ def identify_gcps(image_ids, images, transforms):
         image = images[i]
         transform = transforms[i]
 
+        # check if the transform is empty
+        if np.all(transform == 0):
+            continue
+
+        if debug:
+            print("Find interesting points for image: ", image_id)
+
         # find interesting point in the images
         tps, conf = _find_gcps(image)
+
+        if debug:
+            print(f"Found {tps.shape[0]} interesting points")
 
         # init list for all transformed points
         tps_transformed_list = []
@@ -58,6 +68,9 @@ def identify_gcps(image_ids, images, transforms):
             tps_abs_batch = tps_transformed_homogeneous[:, :2].astype(int)
             tps_transformed_list.append(tps_abs_batch)
 
+        if debug:
+            print("Points are transformed")
+
         # Concatenate all the processed batches
         tps_abs = np.vstack(tps_transformed_list)
 
@@ -68,7 +81,7 @@ def identify_gcps(image_ids, images, transforms):
         dict_conf[image_id] = conf
 
     # get overlapping points between images
-    overlapping_points = _identify_overlapping_gcps(dict_gcps, 10)
+    overlapping_points = _identify_overlapping_gcps(dict_gcps, 10, debug)
 
     return overlapping_points
 
@@ -99,7 +112,7 @@ def _find_gcps(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return key_points, scores
 
 
-def _identify_overlapping_gcps(dict_tps: dict[int, np.ndarray], tolerance_abs: float) -> \
+def _identify_overlapping_gcps(dict_tps: dict[int, np.ndarray], tolerance_abs: float, debug) -> \
         dict[Tuple[float, float], dict[str, list]]:
     """
     Identify and groups ground control points (GCPs) across images based on the proximity of their absolute
@@ -123,6 +136,9 @@ def _identify_overlapping_gcps(dict_tps: dict[int, np.ndarray], tolerance_abs: f
             - 'avg_abs_coord': A tuple representing the averaged absolute coordinates of the points in the group.
             - 'abs_coords': A list of tuples representing the original absolute coordinates of all points in the group.
     """
+
+    if debug:
+        print("Identify overlapping points")
 
     # store all grouped points in this list
     grouped_points = []

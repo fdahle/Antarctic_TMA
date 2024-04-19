@@ -31,12 +31,18 @@ class Malt(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
     def build_shell_dict(self):
 
         shell_dict = {}
 
         # build the basic shell command
-        shell_string = f'Malt {self.mm_args["Mode"]} {self.mm_args["ImagePattern"]} ' \
+        shell_string = f'Malt {self.mm_args["Mode"]} "{self.mm_args["ImagePattern"]}" ' \
                        f'{self.mm_args["Orientation"]}'
 
         # add the optional arguments to the shell string
@@ -52,7 +58,13 @@ class Malt(BaseCommand):
 
         return shell_dict
 
+    def extract_stats(self, name, raw_output):
+        pass
+
     def validate_mm_parameters(self):
 
         if "/" in self.mm_args["ImagePattern"]:
             raise ValueError("ImagePattern cannot contain '/'. Use a pattern like '*.tif' instead.")
+
+    def validate_required_files(self):
+        pass

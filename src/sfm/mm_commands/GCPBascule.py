@@ -29,6 +29,12 @@ class GCPBascule(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
+    def before_execution(self):
+        pass
+
+    def after_execution(self):
+        pass
+
     def build_shell_dict(self):
 
         shell_dict = {}
@@ -52,7 +58,7 @@ class GCPBascule(BaseCommand):
 
         return shell_dict
 
-    def extract_stats(self, raw_output):
+    def extract_stats(self, name, raw_output):
         pass
 
     def validate_mm_parameters(self):

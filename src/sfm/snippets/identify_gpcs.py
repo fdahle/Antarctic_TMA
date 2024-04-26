@@ -1,6 +1,10 @@
 import copy
 import numpy as np
+import pandas as pd
 import torch
+
+from numba import jit, types
+from numba.typed import List, Dict
 
 from tqdm import tqdm
 from typing import Tuple
@@ -8,7 +12,7 @@ from typing import Tuple
 from external.lightglue import SuperPoint
 
 
-def identify_gcps(image_ids, images, transforms, debug=False):
+def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
     """
     Identifies Ground Control Points (GCPs) across a list of images. Points are identified using the SuperPoint
     algorithm and converted to absolute coordinates using the provided transformation matrices. Overlapping points
@@ -23,9 +27,8 @@ def identify_gcps(image_ids, images, transforms, debug=False):
         coordinates, and a list of original absolute coordinates of the GCPs.
     """
 
-    # save gcps and confidence for each image
-    dict_gcps = {}
-    dict_conf = {}
+    # set variable for pandas dataframe
+    data_gcps = None
 
     # iterating tps in batches is faster
     batch_size = 100
@@ -46,6 +49,28 @@ def identify_gcps(image_ids, images, transforms, debug=False):
 
         # find interesting point in the images
         tps, conf = _find_gcps(image)
+
+        # mask the points if a mask is provided
+        if masks is not None:
+            # get the mask for the image
+            mask = masks[i]
+
+            # check if the shape of the mask is the same as the image
+            if mask.shape != image.shape:
+                raise ValueError(f"Shape of mask for image {image_id} does not match the image shape.")
+
+            # Get the values of the mask at the points
+            filter_vals = np.asarray([mask[int(row[1]), int(row[0])] for row in tps])
+
+            # Determine indices to keep (logical OR to find any zeros, then invert)
+            keep_indices = np.logical_not(filter_vals == 0)
+
+            # Filter the tie points and confidences
+            tps = tps[keep_indices]
+            conf = conf[keep_indices]
+
+        if np.any(tps < 0):
+            raise ValueError("Negative x coordinate found in points for {image_id}.")
 
         if debug:
             print(f"Found {tps.shape[0]} interesting points")
@@ -77,11 +102,32 @@ def identify_gcps(image_ids, images, transforms, debug=False):
         # attach id and absolute coords to tps
         tps = np.concatenate((tps, tps_abs), axis=1)
 
-        dict_gcps[image_id] = tps
-        dict_conf[image_id] = conf
+        # this list contains all data
+        data_lst = []
 
-    # get overlapping points between images
-    overlapping_points = _identify_overlapping_gcps(dict_gcps, 10, debug)
+        for idx, point in enumerate(tps):
+            data_lst.append({
+                "image_id": image_id,
+                "x": point[0],
+                "y": point[1],
+                "x_abs": point[2],
+                "y_abs": point[3],
+                "conf": conf[idx]
+            })
+
+        # convert list of dicts to dataframe
+        data_fr = pd.DataFrame(data_lst, columns=["image_id", "x", "y", "x_abs", "y_abs", "conf"])
+
+        if data_gcps is None:
+            data_gcps = data_fr
+        else:
+            # append to the dataframe
+            data_gcps = pd.concat([data_gcps, data_fr], ignore_index=True)
+
+    # get all rows with conf > 0.01
+    data_gcps = data_gcps[data_gcps["conf"] > 0.01]
+
+    overlapping_points = _identify_overlapping_gcps(data_gcps, 5)
 
     return overlapping_points
 
@@ -112,111 +158,48 @@ def _find_gcps(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return key_points, scores
 
 
-def _identify_overlapping_gcps(dict_tps: dict[int, np.ndarray], tolerance_abs: float, debug) -> \
-        dict[Tuple[float, float], dict[str, list]]:
-    """
-    Identify and groups ground control points (GCPs) across images based on the proximity of their absolute
-    coordinates. Each point is compared against existing groups of points. If a point is within a specified tolerance
-    of a group absolute coordinates, it is added to that group. Otherwise, a new group is formed. Averages the absolute
-    coordinates of grouped points and filters out any groups that do not appear in at least two different images.
+def _identify_overlapping_gcps(data, threshold):
+    from sklearn.cluster import DBSCAN
 
-    Args:
-        dict_tps: A dictionary mapping image IDs to arrays of ground control points. Each GCP is represented as a
-            tuple of (x_rel, y_rel, x_abs, y_abs), where `x_rel` and `y_rel` are the relative coordinates in the
-            image, and `x_abs` and `y_abs` are the absolute coordinates in some reference frame.
-        tolerance_abs: A float specifying the tolerance within which two points are considered to be at
-            the same location in terms of their absolute coordinates.
+    if threshold == 0:
+        threshold = 0.001
 
-    Returns:
-        A dictionary where each key is a tuple representing the averaged absolute coordinates of a group of points,
-            and each value is a dictionary containing:
-            - 'image_ids': A list of image IDs in which the grouped points appear.
-            - 'relative_positions': A list of tuples representing the relative positions of each point in the group
-                within their respective images.
-            - 'avg_abs_coord': A tuple representing the averaged absolute coordinates of the points in the group.
-            - 'abs_coords': A list of tuples representing the original absolute coordinates of all points in the group.
-    """
+    # cluster the points with a given threshold
+    clustering = DBSCAN(eps=threshold, min_samples=1, metric='manhattan')  # using manhattan distance
+    data['cluster'] = clustering.fit_predict(data[['x_abs', 'y_abs']])
 
-    if debug:
-        print("Identify overlapping points")
+    # remove all clusters with only one point
+    cluster_sizes = data['cluster'].value_counts()
+    data = data[data['cluster'].map(cluster_sizes) > 1]
 
-    # store all grouped points in this list
-    grouped_points = []
+    # get the average abs coords for each cluster
+    mean_coords = data.groupby('cluster')[['x_abs', 'y_abs']].mean()
 
-    # Calculate the total number of points to process
-    total_points = sum(len(gcps) for gcps in dict_tps.values())
+    # get the average confidence for each cluster
+    mean_conf = data.groupby('cluster')['conf'].mean()
 
-    # init progress bar
-    progress_bar = tqdm(total=total_points)
+    # Reset index to allow for merging
+    mean_coords = mean_coords.reset_index()
+    mean_conf = mean_conf.reset_index()
 
-    # iterate all images
-    for img_id, gcps in dict_tps.items():
+    # Merge the average coordinates and conf back into the original DataFrame
+    data = data.merge(mean_coords, on='cluster', suffixes=('', '_avg'))
+    data = data.merge(mean_conf, on='cluster', suffixes=('', '_avg'))
 
-        # iterate all gcps of one image
-        for gcp in gcps:
+    # Replace x_abs and y_abs with their average values
+    data['x_abs'] = data['x_abs_avg']
+    data['y_abs'] = data['y_abs_avg']
+    data['conf'] = data['conf_avg']
 
-            # reset point_added
-            point_added = False
+    # Drop the temporary average columns
+    data.drop(columns=['x_abs_avg', 'y_abs_avg', 'conf_avg'], inplace=True)
 
-            # get relative and absolute coords
-            x_rel, y_rel, x_abs, y_abs = gcp
+    # Convert DataFrame to dictionary grouped by cluster
+    cluster_dict = {}
+    for cluster, group in data.groupby('cluster'):
+        # Create a key for the cluster using the mean of x_abs and y_abs
+        key = (group['x_abs'].mean(), group['y_abs'].mean())
+        # Create a list of dictionaries for each row in the group
+        cluster_dict[key] = group.drop(columns=['cluster', 'x_abs', 'y_abs']).to_dict('records')
 
-            # check already added points
-            for group in grouped_points:
-
-                # get distance between point
-                distance = np.linalg.norm(np.array(group['abs_coord']) - np.array((x_abs, y_abs)))
-
-                # check if point is close to a group
-                if distance <= tolerance_abs:
-                    group['abs_coord'].append((x_abs, y_abs))
-                    group['rel_coord'].append((x_rel, y_rel))
-                    group['img_id'].append(img_id)
-                    point_added = True
-                    break
-
-            # If point is not close to any group, create a new group
-            if not point_added:
-                grouped_points.append({
-                    'abs_coord': [(x_abs, y_abs)],
-                    'rel_coord': [(x_rel, y_rel)],
-                    'img_id': [img_id]
-                })
-
-            # Update progress bar
-            progress_bar.update(1)
-
-    # TODO (IF AVERAGING POINTS; I ALSO NEED TO CHANGE THIS IN THE RELATIVE VALUES)
-
-    # Filter out groups that don't meet the criteria (appear in at least 2 different images)
-    common_points = {}
-
-    # iterate all groups
-    for group in grouped_points:
-
-        # Use a set to ensure that unique image IDs are counted
-        image_ids = set(group['img_id'])
-
-        # only add points that are in at least 2 images
-        if len(image_ids) >= 2:
-
-            # get abs and rel coords
-            abs_coords = np.array(group['abs_coord'])
-            rel_coords = group['rel_coord']
-
-            # Average the absolute coordinates since we're considering them for common points
-            avg_abs_coord = np.mean(abs_coords, axis=0)
-            key = tuple(avg_abs_coord)
-
-            # Prepare the absolute coordinates for output
-            abs_coords_list = group['abs_coord']  # This already contains all absolute coordinates
-
-            # Store the averaged absolute coordinates and other info in common_points
-            common_points[key] = {
-                'image_ids': list(image_ids),
-                'rel_coords': rel_coords,
-                'avg_abs_coord': avg_abs_coord,
-                'abs_coords': abs_coords_list
-            }
-
-    return common_points
+    return cluster_dict

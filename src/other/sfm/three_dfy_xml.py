@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 path = "/data_1/ATM/data_1/sfm/projects/EGU2/Measures.xml"
 
 PT_VAL = 0
-INCERTITUDE_VAL = 0.05
+INCERTITUDE_VAL = 200
 
 def three_dfy_xml(xml_path, pt_val, inc_val):
     # Load the XML file

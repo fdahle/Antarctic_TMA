@@ -42,5 +42,3 @@ def export_world_file(trans_matrix, output_path):
     with open(output_path, 'w') as file:
         for item in world_file_content:
             file.write(f"{item}\n")
-
-    print(f"World file exported successfully to {output_path}")

@@ -1,9 +1,21 @@
 import getpass
+import pandas as pd
 import os
 import shutil
+import xml.etree.ElementTree as ET
 
 from datetime import datetime
 from PIL import Image
+
+update_parts = {
+    "project_basics": False,
+    "project_images": False,
+    "project_cameras": False,
+    "micmac_steps": False,
+    "tie_points": False,
+    "gcps": True,
+    "output": False
+}
 
 settings = {
     "image_size": (250, 250),
@@ -33,53 +45,62 @@ def update_html(project_folder):
         html_content = file.read()
 
     # basic project infos
-    html_content = html_content.replace("{PROJECT_NAME}", os.path.basename(project_folder))
-    html_content = html_content.replace("{PROJECT_AUTHOR}", getpass.getuser())
-    current_datetime = datetime.now()
-    html_content = html_content.replace("{PROJECT_CREATION_DATE}", current_datetime.strftime("%m/%d/%Y, %H:%M:%S"))
+    if update_parts["project_basics"]:
+        html_content = html_content.replace("{PROJECT_NAME}", os.path.basename(project_folder))
+        html_content = html_content.replace("{PROJECT_AUTHOR}", getpass.getuser())
+        current_datetime = datetime.now()
+        html_content = html_content.replace("{PROJECT_CREATION_DATE}", current_datetime.strftime("%m/%d/%Y, %H:%M:%S"))
 
     # set the html for images
-    image_files = sorted(os.listdir(images_orig_folder), key=lambda x: x.split("_")[0].split(".")[0])
-    images_html = '<div class="images-container">\n'
-    for image_name in image_files:
+    if update_parts["project_images"]:
+        image_files = sorted(os.listdir(images_orig_folder), key=lambda x: x.split("_")[0].split(".")[0])
+        images_html = '<div class="images-container">\n'
+        for image_name in image_files:
 
-        # skip non-tif files
-        if image_name.endswith(".tif") is False:
-            continue
+            # skip non-tif files
+            if image_name.endswith(".tif") is False:
+                continue
 
-        # get the image id
-        image_id = image_name.split("_")[0].split(".")[0]
+            # get the image id
+            image_id = image_name.split("_")[0].split(".")[0]
 
-        # set the paths
-        original_path = os.path.join(images_orig_folder, image_name)
-        thumbnail_name = os.path.splitext(image_name)[0] + ".png"
-        thumbnail_path = os.path.join(thumbnails_folder, thumbnail_name)
+            # set the paths
+            original_path = os.path.join(images_orig_folder, image_name)
+            thumbnail_name = os.path.splitext(image_name)[0] + ".png"
+            thumbnail_path = os.path.join(thumbnails_folder, thumbnail_name)
 
-        # create or update the thumbnail
-        _create_or_update_thumbnail(original_path, thumbnail_path, settings["image_size"])
+            # create or update the thumbnail
+            _create_or_update_thumbnail(original_path, thumbnail_path, settings["image_size"])
 
-        # generate the html for the image
-        relative_thumbnail_path = os.path.join("thumbnails", thumbnail_name)
-        images_html += f'''
-            <div class="image-block">
-                <img src="{relative_thumbnail_path}" alt="{image_name}">
-                <br><strong>{image_id}</strong>
-                {_generate_presence_html(image_id, project_folder)}
-            </div>
-        '''
+            # generate the html for the image
+            relative_thumbnail_path = os.path.join("thumbnails", thumbnail_name)
+            images_html += f'''
+                <div class="image-block">
+                    <img src="{relative_thumbnail_path}" alt="{image_name}">
+                    <br><strong>{image_id}</strong>
+                    {_generate_presence_html(image_id, project_folder)}
+                </div>
+            '''
 
-    # replace the placeholder with the actual images
-    images_html += '</div>\n'
-    html_content = html_content.replace("{PROJECT_IMAGES}", images_html)
+        # replace the placeholder with the actual images
+        images_html += '</div>\n'
+        html_content = html_content.replace("{PROJECT_IMAGES}", images_html)
 
     # get the steps html
-    html_content = html_content.replace("{MICMAC_STEPS}", _update_steps_html(project_folder))
+    if update_parts["micmac_steps"]:
+        html_content = html_content.replace("{MICMAC_STEPS}", _update_steps_html(project_folder))
 
     # get tie-points html
-    html_content = html_content.replace("{TIE_POINTS}", _generate_tie_points_html(homol_folder))
+    if update_parts["tie_points"]:
+        html_content = html_content.replace("{TIE_POINTS}", _generate_tie_points_html(homol_folder))
+
+    # get gcp html
+    if update_parts["gcps"]:
+        html_content = html_content.replace("{GCP_POINTS}", _generate_gcp_html(project_folder))
 
     # get the output html
-    html_content = html_content.replace("{OUTPUT_FILES}", _generate_output_html(project_folder))
+    if update_parts["output"]:
+        html_content = html_content.replace("{OUTPUT_FILES}", _generate_output_html(project_folder))
 
     # save the updated html
     with open(html_path, 'w') as file:
@@ -94,8 +115,9 @@ def _check_image_presence(image_id, folder):
 
 
 def _create_or_update_thumbnail(original_path, thumbnail_path, size):
-    print(thumbnail_path, os.path.exists(thumbnail_path))
+
     if os.path.exists(thumbnail_path):
+
         with Image.open(thumbnail_path) as img:
             if img.size == size:
                 return
@@ -250,6 +272,88 @@ def _parse_homol_directory(homol_folder):
                         })
     return connections
 
+
+def _generate_gcp_html(project_folder):
+
+    # define path to the gcp files
+    path_gcp_files_image = os.path.join(project_folder, "Measures-S2D.xml")
+    path_gcp_files_real = os.path.join(project_folder, "Measures.xml")
+
+    # check if the gcp files are existing
+    if os.path.isfile(path_gcp_files_image) is False or os.path.isfile(path_gcp_files_real) is False:
+        return ""
+
+    # parse the xml files
+    gcps_image = _parse_gcp_xml(path_gcp_files_image, "image")
+    gcp_real = _parse_gcp_xml(path_gcp_files_real, "world")
+
+    gcps = gcps_image.merge(gcp_real, on='gcp', how='inner')
+
+    # Create a pivot table to count each GCP occurrence in each image
+    pivot_table = pd.crosstab(gcps['image_id'], gcps['gcp'])
+
+    html_content = "<table border='1'>\n<tr><th>Image ID</th>"
+
+    # Add headers for each column (image ID)
+    for col_id in pivot_table.columns:
+        html_content += f"<th>{col_id}</th>"
+    html_content += "</tr>\n"
+
+    # Add rows for each image ID
+    for index, row in pivot_table.iterrows():
+        html_content += f"<tr><td>{index}</td>"
+        for val in row:
+            html_content += f"<td>{val}</td>"
+        html_content += "</tr>\n"
+    html_content += "</table>"
+
+    return html_content
+
+def _parse_gcp_xml(xml_file, type):
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    # Create a list to store the data
+    data = []
+
+    if type == "image":
+        # Iterate through each 'MesureAppuiFlottant1Im' in the XML
+        for measure in root.findall('MesureAppuiFlottant1Im'):
+            image_id = measure.find('NameIm').text
+            # Iterate through each 'OneMesureAF1I' within the current 'MesureAppuiFlottant1Im'
+            for pt in measure.findall('OneMesureAF1I'):
+                gcp = pt.find('NamePt').text
+                xy = pt.find('PtIm').text.split()
+                x = int(xy[0])
+                y = int(xy[1])
+
+                # Append the extracted information to the data list
+                data.append({'image_id': image_id, 'gcp': gcp, 'x': x, 'y': y})
+
+        # Create a DataFrame
+        df = pd.DataFrame(data, columns=['image_id', 'gcp', 'x', 'y'])
+
+    elif type == "world":
+        # Iterate through each 'OneAppuisDAF' in the XML
+        for point in root.findall('OneAppuisDAF'):
+            gcp = point.find('NamePt').text
+            xy = point.find('Pt').text.split()
+            x = float(xy[0])
+            y = float(xy[1])
+            incertitude = point.find('Incertitude').text.split()
+            x_quality = float(incertitude[0])
+            y_quality = float(incertitude[1])
+
+            # Append the extracted information to the data list
+            data.append({'gcp': gcp, 'x': x, 'y': y, 'x_quality': x_quality, 'y_quality': y_quality})
+
+        # Create a DataFrame
+        df = pd.DataFrame(data, columns=['gcp', 'x', 'y', 'x_quality', 'y_quality'])
+
+    else:
+        raise ValueError("Invalid type argument. Use 'image' or 'world'.")
+
+    return df
 
 if __name__ == "__main__":
     update_html(prj_fldr)

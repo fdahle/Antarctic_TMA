@@ -98,19 +98,18 @@ class TiePointDetector:
             A tuple containing two elements:
                 - A NumPy array of the final averaged tie points.
                 - A NumPy array of the confidence scores associated with each tie point.
-
         Raises:
-            AssertionError: If the dimensions of the masks do not match their corresponding images.
+            ValueError: If the dimensions of the masks do not match their corresponding images.
         """
 
         # TODO: add rotation
 
         if mask1 is not None:
-            assert (input_img1.shape[0] == mask1.shape[0] and
-                    input_img1.shape[1] == mask1.shape[1])
+            if mask1.shape != input_img1.shape:
+                raise ValueError("Mask1 must have the same dimensions as input_img1")
         if mask2 is not None:
-            assert (input_img2.shape[0] == mask2.shape[0] and
-                    input_img2.shape[1] == mask2.shape[1])
+            if mask2.shape != input_img2.shape:
+                raise ValueError("Mask2 must have the same dimensions as input_img2")
 
         try:
             # we handle the warnings ourselves -> ignore them

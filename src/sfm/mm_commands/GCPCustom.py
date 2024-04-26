@@ -7,13 +7,15 @@ from lxml import etree
 # Custom imports
 import src.load.load_image as li
 import src.load.load_transform as lt
-import src.sfm.snippets.identify_gpcs as ig
 from src.sfm.mm_commands._base_command import BaseCommand
+import src.sfm.snippets.calc_resample_matrix as crm
+import src.sfm.snippets.identify_gpcs as ig
+import src.sfm.snippets.resample_tie_points as rtp
 
 
 class GCPCustom(BaseCommand):
     required_args = []
-    allowed_args = ["ALLTransformsReq"]
+    allowed_args = ["ALLTransformsReq", "UseMasks"]
 
     def __init__(self, *args, **kwargs):
 
@@ -28,6 +30,15 @@ class GCPCustom(BaseCommand):
         if "ALLTransformsReq" not in self.mm_args:
             self.mm_args["ALLTransformsReq"] = True
 
+        if "UseMasks" not in self.mm_args:
+            self.mm_args["UseMasks"] = False
+
+        # validate the mm_args
+        self.validate_mm_args()
+
+        # validate the input parameters
+        # self.validate_mm_parameters()
+
     def before_execution(self):
         pass
 
@@ -40,7 +51,7 @@ class GCPCustom(BaseCommand):
     def execute_custom_cmd(self):
 
         # validate the required files
-        self.validate_required_files(self.mm_args["ALLTransformsReq"])
+        self.validate_required_files()
 
         # get the gcps
         gcp_dict = self._get_gcps()
@@ -58,7 +69,7 @@ class GCPCustom(BaseCommand):
     def extract_stats(self, raw_output):
         pass
 
-    def validate_required_files(self, all_transforms_req):
+    def validate_required_files(self):
 
         # for each image we need a transform file
         images = glob.glob(self.project_folder + "/images_orig/*.tif")
@@ -81,12 +92,40 @@ class GCPCustom(BaseCommand):
             raise FileNotFoundError(f"No transform files found in '{self.project_folder}/transforms'.")
 
         # in this case we need all transforms
-        if all_transforms_req and len(missing_transforms) > 0:
+        if self.mm_args["ALLTransformsReq"] and len(missing_transforms) > 0:
             if len(missing_transforms) == 1:
                 error_str = f"{len(missing_transforms)} transform file is missing."
             else:
                 error_str = f"{len(missing_transforms)} transform files are missing."
             raise FileNotFoundError(error_str)
+
+        # check if we should use masks
+        if self.mm_args["UseMasks"]:
+
+            # store all missing masks in this list
+            missing_masks = []
+
+            # iterate all images
+            for image in images:
+
+                # get image id from the image path
+                image_id = os.path.basename(image)[:-4]
+
+                # get path to mask file
+                path_mask_file = f"{self.project_folder}/masks_orig/{image_id}.tif"
+
+                # check if the mask file exists
+                if not os.path.isfile(path_mask_file):
+                    missing_masks.append(image_id)
+
+            if len(missing_masks) > 0:
+                if len(missing_masks) == len(images):
+                    error_str = f"No mask files found in '{self.project_folder}/masks'."
+                elif len(missing_masks) == 1:
+                    error_str = f"{len(missing_masks)} mask file is missing."
+                else:
+                    error_str = f"{len(missing_masks)} mask files are missing."
+                raise FileNotFoundError(error_str)
 
     def _get_gcps(self):
 
@@ -106,6 +145,8 @@ class GCPCustom(BaseCommand):
         # load the transforms from the images
         transforms = []
         for image_id in image_ids:
+            if self.debug:
+                print(f"Load transform '{image_id}'")
             try:
                 transform = lt.load_transform(image_id, self.project_folder + "/transforms")
                 transforms.append(transform)
@@ -113,39 +154,58 @@ class GCPCustom(BaseCommand):
             except (Exception,):
                 transforms.append(np.zeros((3, 3)))
 
+        # load the masks if needed
+        if self.mm_args["UseMasks"]:
+            masks = []
+            for image_id in image_ids:
+                if self.debug:
+                    print(f"Load mask '{image_id}'")
+
+                mask = li.load_image(image_id, self.project_folder + "/masks_orig")
+                masks.append(mask)
+        else:
+            masks = None
+
         # get identical gcps for the images
-        gcp_dict = ig.identify_gcps(image_ids, images, transforms)
+        gcp_dict = ig.identify_gcps(image_ids, images, transforms, masks)
 
         return gcp_dict
 
     def _resample_gcps(self, gcp_dict):
-
-        import src.sfm.snippets.resample_tie_points as rtp
-        import src.sfm.snippets.calc_resample_matrix as crm
+        """
+         convert the gcps to the absolute coords
+        """
 
         image_transforms = {}
 
         for point, data in gcp_dict.items():
-            new_rel_coords = []
-            for image_id, rel_coords in zip(data['image_ids'], data['rel_coords']):
+
+            for entry in data:
+
+                image_id = entry["image_id"]
+                rel_coords = (entry["x"], entry["y"])
+
+                print("REL COORDS")
+                print(rel_coords)
 
                 # load image transform if not existing yet
                 if image_id not in image_transforms.keys():
-                    image_xml = crm.calc_resample_matrix(self.project_folder, image_id)
-                    image_transforms[image_id] = image_xml
+                    image_trans_mat = crm.calc_resample_matrix(self.project_folder, image_id)
+                    image_transforms[image_id] = image_trans_mat
                 else:
-                    image_xml = image_transforms[image_id]
+                    image_trans_mat = image_transforms[image_id]
 
                 # get the transformed coordinates
-                transformed_coords = rtp.resample_tie_points(rel_coords, image_xml)
+                transformed_coords = rtp.resample_tie_points(rel_coords, image_trans_mat)
+
+                if np.any(transformed_coords < 0):
+                    raise ValueError(f"Negative x coordinate found in transformed points for {image_id}.")
 
                 # convert back to tuple
                 transformed_coords = tuple(transformed_coords[0])
 
-                new_rel_coords.append(transformed_coords)
-
-            # Update the dictionary with the new relative coordinates
-            data['rel_coords'] = new_rel_coords
+                entry["x"] = transformed_coords[0]
+                entry["y"] = transformed_coords[1]
 
         return gcp_dict
 
@@ -154,12 +214,11 @@ class GCPCustom(BaseCommand):
 
         root = etree.Element("DicoAppuisFlottant")
 
-        for i, g_dict in enumerate(gcp_dict.values()):
+        for i, key in enumerate(gcp_dict.keys()):
             gcp_element = etree.SubElement(root, "OneAppuisDAF")
 
             abs_coords = etree.SubElement(gcp_element, "Pt")
-            abs_coords.text = str(g_dict["avg_abs_coord"][0]) + " " + \
-                              str(g_dict["avg_abs_coord"][1])
+            abs_coords.text = str(key[0]) + " " + str(key[1])
 
             gcp_name = etree.SubElement(gcp_element, "NamePt")
             gcp_name.text = "GCP" + str(i + 1)
@@ -179,13 +238,14 @@ class GCPCustom(BaseCommand):
         # this dict contains the xml elements for each image
         image_xml_dict = {}
 
-        for i, gcp_dict in enumerate(gcp_dict.values()):
+        for i, gcp_entry in enumerate(gcp_dict.values()):
 
-            for j in range(len(gcp_dict["image_ids"])):
+            for j in range(len(gcp_entry)):
 
                 # get the image id and rel coords
-                image_id = gcp_dict["image_ids"][j]
-                coords = gcp_dict["rel_coords"][j]
+                image_id = gcp_entry[j]["image_id"]
+                x = gcp_entry[j]["x"]
+                y = gcp_entry[j]["y"]
 
                 # check if image already has a xml element
                 if image_id not in image_xml_dict.keys():
@@ -203,7 +263,7 @@ class GCPCustom(BaseCommand):
                 gcp_name.text = "GCP" + str(i + 1)
 
                 rel_coords = etree.SubElement(gcp_element, "PtIm")
-                rel_coords.text = str(coords[0]) + " " + str(coords[1])
+                rel_coords.text = str(x) + " " + str(y)
 
         tree = etree.ElementTree(root)
         tree.write(save_fld + "/Measures-S2D.xml",

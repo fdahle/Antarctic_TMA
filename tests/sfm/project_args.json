@@ -20,7 +20,8 @@
     "ExpTxt": 1
   },
   "GCPCustom": {
-    "ALLTransformsReq": false
+    "ALLTransformsReq": false,
+    "UseMasks": true
   },
   "GCPBascule": {
     "ImagePattern": "OIS.*tif",

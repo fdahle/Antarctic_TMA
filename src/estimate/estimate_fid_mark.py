@@ -1,2 +1,109 @@
-def estimate_fid_mark():
-    pass
+# Package imports
+import pandas as pd
+
+# Custom imports
+import src.base.connect_to_database as ctd
+
+# Constants
+MIN_NR_OF_IMAGES = 3
+MAX_STD = None
+
+
+def estimate_fid_mark(image_id, key,
+                      return_data=False,
+                      fid_mark_data=None, conn=None):
+
+    # establish connection to psql if not already done
+    if conn is None:
+        conn = ctd.establish_connection()
+
+    # we only need to get data when it is not provided
+    if fid_mark_data is None:
+
+        # get the properties of this image (flight path, etc.)
+        sql_string = f"SELECT tma_number, view_direction, cam_id FROM images WHERE image_id='{image_id}'"
+        data_img_props = ctd.execute_sql(sql_string, conn)
+
+        # get the attribute values for this image
+        tma_number = data_img_props["tma_number"].iloc[0]
+        view_direction = data_img_props["view_direction"].iloc[0]
+        cam_id = data_img_props["cam_id"].iloc[0]
+
+        # get the images with the same properties
+        sql_string = f"SELECT image_id FROM images WHERE tma_number={tma_number} AND " \
+                     f"view_direction='{view_direction}' AND cam_id={cam_id}"
+        data_ids = ctd.execute_sql(sql_string, conn)
+
+        # convert to list and flatten
+        data_ids = data_ids.values.tolist()
+        data_ids = [item for sublist in data_ids for item in sublist]
+
+        # remove the image_id from the image we want to extract information from
+        data_ids.remove(image_id)
+
+        # check if we still have data
+        if len(data_ids) == 0:
+            return None
+
+        # convert list to a string
+        str_data_ids = "('" + "', '".join(data_ids) + "')"
+
+        # get all entries from the same flight and the same viewing direction
+        sql_string = f"SELECT image_id, " \
+                     f"fid_mark_1_x, fid_mark_1_y, fid_mark_1_estimated " \
+                     f"fid_mark_2_x, fid_mark_2_y, fid_mark_2_estimated " \
+                     f"fid_mark_3_x, fid_mark_3_y, fid_mark_3_estimated " \
+                     f"fid_mark_4_x, fid_mark_4_y, fid_mark_4_estimated " \
+                     f"fid_mark_5_x, fid_mark_5_y, fid_mark_5_estimated " \
+                     f"fid_mark_6_x, fid_mark_6_y, fid_mark_6_estimated " \
+                     f"fid_mark_7_x, fid_mark_7_y, fid_mark_7_estimated " \
+                     f"fid_mark_8_x, fid_mark_8_y, fid_mark_8_estimated " \
+                     f"FROM images_fid_points WHERE image_id IN {str_data_ids}"
+        fid_mark_data = ctd.execute_sql(sql_string, conn)
+
+    # count the number of non Nan values (x and y should be similar)
+    x_count = fid_mark_data.loc[(fid_mark_data[f'fid_mark_{key}_estimated'] == False) &  # noqa
+                              pd.notnull(fid_mark_data[f'fid_mark_{key}_x'])].shape[0]
+    y_count = fid_mark_data.loc[(fid_mark_data[f'fid_mark_{key}_estimated'] == False) &  # noqa
+                              pd.notnull(fid_mark_data[f'fid_mark_{key}_y'])].shape[0]
+
+    # check if the counts are similar (should usually always be the case)
+    if x_count != y_count:
+        return None
+
+    # check if there is a minimum number of images
+    if MIN_NR_OF_IMAGES is not None:
+
+        # check if the number of images is below the minimum
+        if x_count < MIN_NR_OF_IMAGES or y_count < MIN_NR_OF_IMAGES:
+            return None
+
+    # get the std values
+    x_std = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
+                            f'fid_mark_{key}_x'].std()
+    y_std = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
+                            f'fid_mark_{key}_y'].std()
+
+    # check if there is a maximum standard deviation
+    if MAX_STD is not None:
+
+        # check if the standard deviation is above the maximum
+        if x_std > MAX_STD or y_std > MAX_STD:
+            return None
+
+    # get the mean values
+    x_val = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
+                            f'fid_mark_{key}_x'].mean()
+    y_val = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
+                            f'fid_mark_{key}_y'].mean()
+
+    # convert to integer
+    x_val = int(x_val)
+    y_val = int(y_val)
+
+    coords = (x_val, y_val)
+
+    if return_data:
+        return coords, fid_mark_data
+    else:
+        return coords

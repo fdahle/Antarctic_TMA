@@ -1,15 +1,16 @@
+# Package imports
 import copy
 import numpy as np
 import pandas as pd
 import torch
-
-from numba import jit, types
-from numba.typed import List, Dict
-
-from tqdm import tqdm
+from sklearn.cluster import DBSCAN
 from typing import Tuple
 
+# External imports
 from external.lightglue import SuperPoint
+
+# Custom imports
+import src.sfm.snippets.get_gcp_height as ggh
 
 
 def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
@@ -48,7 +49,7 @@ def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
             print("Find interesting points for image: ", image_id)
 
         # find interesting point in the images
-        tps, conf = _find_gcps(image)
+        tps, conf = _find_key_points(image)
 
         # mask the points if a mask is provided
         if masks is not None:
@@ -99,6 +100,9 @@ def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
         # Concatenate all the processed batches
         tps_abs = np.vstack(tps_transformed_list)
 
+        # get the height of the gcps
+        z_vals = ggh.get_gcp_height(tps_abs)
+
         # attach id and absolute coords to tps
         tps = np.concatenate((tps, tps_abs), axis=1)
 
@@ -112,11 +116,12 @@ def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
                 "y": point[1],
                 "x_abs": point[2],
                 "y_abs": point[3],
+                "z_abs": z_vals[idx],
                 "conf": conf[idx]
             })
 
         # convert list of dicts to dataframe
-        data_fr = pd.DataFrame(data_lst, columns=["image_id", "x", "y", "x_abs", "y_abs", "conf"])
+        data_fr = pd.DataFrame(data_lst, columns=["image_id", "x", "y", "x_abs", "y_abs", "z_abs", "conf"])
 
         if data_gcps is None:
             data_gcps = data_fr
@@ -132,7 +137,7 @@ def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
     return overlapping_points
 
 
-def _find_gcps(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _find_key_points(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     Finds keypoints and their scores in a given image using the SuperPoint extractor.
     Args:
@@ -159,14 +164,16 @@ def _find_gcps(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _identify_overlapping_gcps(data, threshold):
-    from sklearn.cluster import DBSCAN
 
     if threshold == 0:
         threshold = 0.001
 
+    # convert to numpy array to suppress FutureWarning
+    data_np = data[['x_abs', 'y_abs']].to_numpy()
+
     # cluster the points with a given threshold
     clustering = DBSCAN(eps=threshold, min_samples=1, metric='manhattan')  # using manhattan distance
-    data['cluster'] = clustering.fit_predict(data[['x_abs', 'y_abs']])
+    data['cluster'] = clustering.fit_predict(data_np)
 
     # remove all clusters with only one point
     cluster_sizes = data['cluster'].value_counts()

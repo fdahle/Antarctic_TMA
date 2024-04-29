@@ -1,7 +1,13 @@
 # Package imports
+import cv2
 import numpy as np
 import xml.etree.ElementTree as Et
 from skimage import transform as tf
+
+import src.display.display_images as di
+import src.load.load_image as li
+
+debug_show_images = False
 
 
 def calc_resample_matrix(project_folder, image_id, scan_res=0.025):
@@ -32,16 +38,25 @@ def calc_resample_matrix(project_folder, image_id, scan_res=0.025):
     points_camera = np.array(points_camera)
 
     # adapt cam points to image
-    #points_camera = np.round(points_camera / scan_res).astype(int)
-
-    print("IMG")
-    print(points_image)
-    print("CAM")
-    print(points_camera)
-    print("")
+    points_camera = np.round(points_camera / scan_res).astype(int)
 
     # get affine transformation
     trans_mat = tf.estimate_transform('affine', points_image, points_camera)
     trans_mat = np.array(trans_mat)[0:2, :]
+
+    if debug_show_images:
+
+        # load the images
+        image = li.load_image(image_id)
+        image_resampled = li.load_image(project_folder + "/OIS-Reech_" + image_id + ".tif")
+
+        # resample the one image
+        rows, cols = image.shape
+        transformed_image = cv2.warpAffine(image, trans_mat, (cols, rows))
+
+        style_config = {"title": image_id, "titles_sup": [image.shape, transformed_image.shape, image_resampled.shape]}
+        di.display_images([image[:500, :500],
+                           transformed_image[:500, :500],
+                           image_resampled[:500, :500]], style_config=style_config)
 
     return trans_mat

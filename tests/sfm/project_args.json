@@ -27,7 +27,7 @@
     "ImagePattern": "OIS.*tif",
     "InputOrientation": "Relative",
     "OutputOrientation": "Ground",
-    "FileGroundControlPoints": "Measures_3d.xml",
+    "FileGroundControlPoints": "Measures.xml",
     "FileImageMeasurements": "Measures-S2D.xml"
   },
   "Malt": {

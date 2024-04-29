@@ -185,9 +185,6 @@ class GCPCustom(BaseCommand):
                 image_id = entry["image_id"]
                 rel_coords = (entry["x"], entry["y"])
 
-                print("REL COORDS")
-                print(rel_coords)
-
                 # load image transform if not existing yet
                 if image_id not in image_transforms.keys():
                     image_trans_mat = crm.calc_resample_matrix(self.project_folder, image_id)
@@ -214,17 +211,26 @@ class GCPCustom(BaseCommand):
 
         root = etree.Element("DicoAppuisFlottant")
 
+        # iterate through all gcps
         for i, key in enumerate(gcp_dict.keys()):
+
+            # get the gcp entry
+            gcp_entry = gcp_dict[key]
+
+            # create the gcp element in xml
             gcp_element = etree.SubElement(root, "OneAppuisDAF")
 
+            # get the absolute coords
             abs_coords = etree.SubElement(gcp_element, "Pt")
-            abs_coords.text = str(key[0]) + " " + str(key[1])
+            abs_coords.text = str(key[0]) + " " + str(key[1]) + " " + str(gcp_entry[0]["z_abs"])
 
+            # create the name of the gcp
             gcp_name = etree.SubElement(gcp_element, "NamePt")
             gcp_name.text = "GCP" + str(i + 1)
 
+            # set reliability of the gcp
             reliability = etree.SubElement(gcp_element, "Incertitude")
-            reliability.text = "1 1"
+            reliability.text = "100 100 100"
 
         tree = etree.ElementTree(root)
         tree.write(save_fld + "/Measures.xml",

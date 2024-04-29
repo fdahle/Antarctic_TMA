@@ -4,7 +4,7 @@ import shapely.ops
 
 from numpy import ndarray
 from rasterio.transform import Affine
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon
 
 
 def convert_image_to_footprint(image: ndarray, transform: ndarray, no_data_value: int = 0) -> Polygon:

@@ -2,6 +2,7 @@ import copy
 import math
 import matplotlib
 matplotlib.use('TkAgg')
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -150,8 +151,22 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
 
         # Optionally draw lines on the image
         if lines and idx < len(lines):
-            for line in lines[idx]:
-                ax.plot([line[0], line[2]], [line[1], line[3]], color=style_config['line_color'],
+
+            # get the line colors
+            line_colors = style_config['line_color']
+
+            # Replicate single color if only one provided
+            if not isinstance(line_colors, list):
+                line_colors = [line_colors] * len(lines[idx])
+
+            # otherwise validate the number of colors
+            elif len(line_colors) != len(lines[idx]):
+                raise ValueError("Number of colors provided does not match number of lines.")
+
+            # plot each line with its corresponding color
+            for line, color in zip(lines[idx], line_colors):
+                ax.plot([line[0], line[2]], [line[1], line[3]],
+                        color=_normalize_color(color),
                         linewidth=style_config['line_width'])
 
         # Optionally draw bounding boxes on the image
@@ -171,7 +186,7 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
 
                 # Determine color for tie points
                 if tie_points_conf is not None:
-                    conf = new_conf[tp_idx]
+                    conf = new_conf[tp_idx]  # noqa
                     # Interpolate color from red (low confidence) to green (high confidence)
                     color = (1 - conf, conf, 0)  # Red to green, based on conf
                 else:
@@ -328,5 +343,13 @@ def _determine_image_type(input_img: np.ndarray) -> Optional[str]:
 
 
 def _normalize_color(color):
-    """Convert a color from 0-255 range to 0-1 range."""
-    return tuple(c / 255.0 for c in color)
+
+    """Normalize color or colors from 0-255 range to 0-1 range."""
+    if isinstance(color, str):
+        return mcolors.to_rgba(color)
+    if isinstance(color, tuple):  # Single color tuple
+        return tuple(c / 255.0 for c in color)
+    elif isinstance(color, list):  # List of color tuples
+        return [tuple(c / 255.0 for c in col) for col in color]
+    else:
+        raise ValueError("Color must be a tuple or a list of tuples.")

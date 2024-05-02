@@ -36,7 +36,9 @@ class OriConvert(BaseCommand):
         shell_dict = {}
 
         # build the basic shell command
-        shell_string = f'OriConvert {self.mm_args["InputFile"]} {self.mm_args["OutputFile"]}'
+        shell_string = f'OriConvert {self.mm_args["FormatSpecification"]} ' \
+                       f'{self.mm_args["OrientationFile"]} ' \
+                       f'{self.mm_args["TargetedOrientation"]}'
 
         # add the optional arguments to the shell string
         for key, val in self.mm_args.items():

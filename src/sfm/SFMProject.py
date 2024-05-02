@@ -33,6 +33,11 @@ class SFMProject(object):
             "desc": "Adjust camera calibration and orientation by bundle adjustment",
             "file": "mm_cmd.Campari"
         },
+        "CenterBascule": {
+            "desc": "Transform a purely relative orientation, as computed with Tapas, "
+                    "in an absolute one",
+            "file": "mm_cmd.CenterBascule"
+        },
         "GCPBascule": {
             "desc": "Georeference model using Ground Control Points (GCPs)",
             "file": "mm_cmd.GCPBascule"
@@ -52,6 +57,10 @@ class SFMProject(object):
         "Malt": {
             "desc": "Compute DEM",
             "file": "mm_cmd.Malt"
+        },
+        "OriConvert": {
+            "desc": "Transform GPS data from text to MicMacXML format",
+            "file": "mm_cmd.OriConvert"
         },
         "Nuage2Ply": {
             "desc": "Convert dense cloud to PLY format",

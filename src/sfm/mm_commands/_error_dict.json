@@ -13,6 +13,7 @@
       "Fix": "Check the correct path to the folder"
     }
   ],
+  "CenterBascule": [],
   "GCPBascule": [
     {
       "MMErrorMsg": "Bad Nb Value in xml_init (double)",
@@ -33,6 +34,18 @@
       "MMErrorMsg": "Empty list for StdGetListOfFile",
       "ErrorMsg": "The file for Ground control Points is not found",
       "Fix": "Check if the file is existing at the specified path"
+    }
+  ],
+  "OriConvert": [
+    {
+      "MMErrorMsg": "File do not begin by format specification",
+      "ErrorMsg": "The *.csv is not in the correct format",
+      "Fix": "Check if the input csv file is correct"
+    },
+    {
+      "MMErrorMsg": "This image does not exist!",
+      "ErrorMsg": "The image specified in the csv file does not exist",
+      "Fix": "Check if the image_id is correct (OIS & .tif appended?)."
     }
   ],
   "Schnaps": [

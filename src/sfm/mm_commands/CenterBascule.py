@@ -1,9 +1,10 @@
 from src.sfm.mm_commands._base_command import BaseCommand
 
-class CenterBascule(BaseCommand):
 
-    required_args = []
-    allowed_args = []
+class CenterBascule(BaseCommand):
+    required_args = ["FullName", "OrientationIn", "LocalizationOfInformationCenters", "Out"]
+    allowed_args = ["FullName", "OrientationIn", "LocalizationOfInformationCenters", "Out",
+                    "L1", "CalcV"]
 
     def __init__(self, *args, **kwargs):
 
@@ -31,7 +32,10 @@ class CenterBascule(BaseCommand):
         shell_dict = {}
 
         # build the basic shell command
-        shell_string = f'CenterBascule'
+        shell_string = f'CenterBascule {self.mm_args["FullName"]} ' \
+                       f'{self.mm_args["OrientationIn"]} ' \
+                       f'{self.mm_args["LocalizationOfInformationCenters"]} ' \
+                       f'{self.mm_args["Out"]}'
 
         # add the optional arguments to the shell string
         for key, val in self.mm_args.items():

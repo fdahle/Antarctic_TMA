@@ -19,6 +19,12 @@
     "SH": "Homol_mini",
     "ExpTxt": 1
   },
+  "CenterBascule": {
+    "FullName": "OIS-.*tif",
+    "OrientationIn": "Relative",
+    "LocalizationOfInformationCenters": "Nav-Brut-RTL",
+    "Out": "Adjusted"
+  },
   "GCPCustom": {
     "ALLTransformsReq": false,
     "UseMasks": true
@@ -39,6 +45,12 @@
     "DefCor": 0,
     "CostTrans": 1,
     "EZA": 1
+  },
+  "OriConvert": {
+    "FormatSpecification": "OriTxtInFile",
+    "OrientationFile": "cameras.csv",
+    "TargetedOrientation": "Nav-Brut-RTL",
+    "ChSys": "EPSG3031.xml@SysCoRTL.xml"
   },
   "ReSampFid": {
     "ImagePattern": "CA*.*tif",

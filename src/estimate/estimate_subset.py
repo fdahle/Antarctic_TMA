@@ -1,4 +1,5 @@
 # Package imports
+import copy
 import pandas as pd
 
 # Custom imports
@@ -10,7 +11,7 @@ MAX_STD = None
 
 
 def estimate_subset(image_id, key,
-                    return_data=False,
+                    use_estimated=False, return_data=False,
                     subset_data=None, conn=None):
 
     # establish connection to psql if not already done
@@ -38,13 +39,6 @@ def estimate_subset(image_id, key,
         data_ids = data_ids.values.tolist()
         data_ids = [item for sublist in data_ids for item in sublist]
 
-        # remove the image_id from the image we want to extract information from
-        data_ids.remove(image_id)
-
-        # check if we still have data
-        if len(data_ids) == 0:
-            return None, None if return_data else None
-
         # convert list to a string
         str_data_ids = "('" + "', '".join(data_ids) + "')"
 
@@ -57,11 +51,23 @@ def estimate_subset(image_id, key,
                      f"FROM images_fid_points WHERE image_id IN {str_data_ids}"
         subset_data = ctd.execute_sql(sql_string, conn)
 
+    # create a copy for the return
+    orig_subset_data = copy.deepcopy(subset_data)
+
+    # remove the image_id from the image we want to extract information from
+    subset_data = subset_data[subset_data['image_id'] != image_id]
+
+    # remove estimated if we don't want to use them
+    if use_estimated is False:
+        subset_data = subset_data.loc[subset_data[f'subset_{key}_estimated'] == False]  # noqa
+
+    # check if we still have data
+    if subset_data.shape[0] == 0:
+        return None
+
     # count the number of non Nan values (x and y should be similar)
-    x_count = subset_data.loc[(subset_data[f'subset_{key}_estimated'] == False) &  # noqa
-                              pd.notnull(subset_data[f'subset_{key}_x'])].shape[0]
-    y_count = subset_data.loc[(subset_data[f'subset_{key}_estimated'] == False) &  # noqa
-                              pd.notnull(subset_data[f'subset_{key}_y'])].shape[0]
+    x_count = subset_data.loc[pd.notnull(subset_data[f'subset_{key}_x'])].shape[0]
+    y_count = subset_data.loc[pd.notnull(subset_data[f'subset_{key}_y'])].shape[0]
 
     # check if the counts are similar (should usually always be the case)
     if x_count != y_count:
@@ -75,10 +81,8 @@ def estimate_subset(image_id, key,
             return None, subset_data if return_data else None
 
     # get the std values
-    x_std = subset_data.loc[subset_data[f'subset_{key}_estimated'] == False,  # noqa
-                            f'subset_{key}_x'].std()
-    y_std = subset_data.loc[subset_data[f'subset_{key}_estimated'] == False,  # noqa
-                            f'subset_{key}_y'].std()
+    x_std = subset_data[f'subset_{key}_x'].std()
+    y_std = subset_data[f'subset_{key}_y'].std()
 
     # check if there is a maximum standard deviation
     if MAX_STD is not None:
@@ -88,15 +92,14 @@ def estimate_subset(image_id, key,
             return None, subset_data if return_data else None
 
     # get the mean values
-    x_val = subset_data.loc[subset_data[f'subset_{key}_estimated'] == False,  # noqa
-                            f'subset_{key}_x'].mean()
-    y_val = subset_data.loc[subset_data[f'subset_{key}_estimated'] == False,  # noqa
-                            f'subset_{key}_y'].mean()
+    x_val = subset_data[f'subset_{key}_x'].mean()
+    y_val = subset_data[f'subset_{key}_y'].mean()
 
     # convert to integer
     x_val = int(x_val)
     y_val = int(y_val)
 
+    # save coords as tuple
     coords = (x_val, y_val)
 
-    return coords, subset_data if return_data else coords
+    return (coords, orig_subset_data) if return_data else coords

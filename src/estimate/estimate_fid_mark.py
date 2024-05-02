@@ -1,4 +1,5 @@
 # Package imports
+import copy
 import pandas as pd
 
 # Custom imports
@@ -9,17 +10,15 @@ MIN_NR_OF_IMAGES = 3
 MAX_STD = None
 
 
-def estimate_fid_mark(image_id, key,
-                      return_data=False,
+def estimate_fid_mark(image_id: str, key: str,
+                      use_estimated: bool = False, return_data: bool = False,
                       fid_mark_data=None, conn=None):
-
     # establish connection to psql if not already done
     if conn is None:
         conn = ctd.establish_connection()
 
     # we only need to get data when it is not provided
     if fid_mark_data is None:
-
         # get the properties of this image (flight path, etc.)
         sql_string = f"SELECT tma_number, view_direction, cam_id FROM images WHERE image_id='{image_id}'"
         data_img_props = ctd.execute_sql(sql_string, conn)
@@ -38,13 +37,6 @@ def estimate_fid_mark(image_id, key,
         data_ids = data_ids.values.tolist()
         data_ids = [item for sublist in data_ids for item in sublist]
 
-        # remove the image_id from the image we want to extract information from
-        data_ids.remove(image_id)
-
-        # check if we still have data
-        if len(data_ids) == 0:
-            return None
-
         # convert list to a string
         str_data_ids = "('" + "', '".join(data_ids) + "')"
 
@@ -61,11 +53,23 @@ def estimate_fid_mark(image_id, key,
                      f"FROM images_fid_points WHERE image_id IN {str_data_ids}"
         fid_mark_data = ctd.execute_sql(sql_string, conn)
 
+    # create a copy for the return
+    orig_fid_mark_data = copy.deepcopy(fid_mark_data)
+
+    # remove the image_id from the image we want to extract information from
+    fid_mark_data = fid_mark_data[fid_mark_data['image_id'] != image_id]
+
+    # remove estimated if we don't want to use them
+    if use_estimated is False:
+        fid_mark_data = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False]  # noqa
+
+    # check if we still have data
+    if fid_mark_data.shape[0] == 0:
+        return None
+
     # count the number of non Nan values (x and y should be similar)
-    x_count = fid_mark_data.loc[(fid_mark_data[f'fid_mark_{key}_estimated'] == False) &  # noqa
-                              pd.notnull(fid_mark_data[f'fid_mark_{key}_x'])].shape[0]
-    y_count = fid_mark_data.loc[(fid_mark_data[f'fid_mark_{key}_estimated'] == False) &  # noqa
-                              pd.notnull(fid_mark_data[f'fid_mark_{key}_y'])].shape[0]
+    x_count = fid_mark_data.loc[pd.notnull(fid_mark_data[f'fid_mark_{key}_x'])].shape[0]
+    y_count = fid_mark_data.loc[pd.notnull(fid_mark_data[f'fid_mark_{key}_y'])].shape[0]
 
     # check if the counts are similar (should usually always be the case)
     if x_count != y_count:
@@ -79,10 +83,8 @@ def estimate_fid_mark(image_id, key,
             return None
 
     # get the std values
-    x_std = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
-                            f'fid_mark_{key}_x'].std()
-    y_std = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
-                            f'fid_mark_{key}_y'].std()
+    x_std = fid_mark_data[f'fid_mark_{key}_x'].std()
+    y_std = fid_mark_data[f'fid_mark_{key}_y'].std()
 
     # check if there is a maximum standard deviation
     if MAX_STD is not None:
@@ -92,18 +94,14 @@ def estimate_fid_mark(image_id, key,
             return None
 
     # get the mean values
-    x_val = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
-                            f'fid_mark_{key}_x'].mean()
-    y_val = fid_mark_data.loc[fid_mark_data[f'fid_mark_{key}_estimated'] == False,  # noqa
-                            f'fid_mark_{key}_y'].mean()
+    x_val = fid_mark_data[f'fid_mark_{key}_x'].mean()
+    y_val = fid_mark_data[f'fid_mark_{key}_y'].mean()
 
     # convert to integer
     x_val = int(x_val)
     y_val = int(y_val)
 
+    # save coords as tuple
     coords = (x_val, y_val)
 
-    if return_data:
-        return coords, fid_mark_data
-    else:
-        return coords
+    return (coords, orig_fid_mark_data) if return_data else coords

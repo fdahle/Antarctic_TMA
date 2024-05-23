@@ -33,7 +33,7 @@ def estimate_focal_lengths():
         pbar.set_postfix_str(f"Estimate focal length for {image_id} "
                              f"({updated_entries} already updated)")
 
-                # estimate the focal length
+        # estimate the focal length
         estimated_focal_length = efl.estimate_focal_length(image_id, conn)
 
         if estimated_focal_length is None:

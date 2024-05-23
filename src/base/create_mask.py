@@ -101,8 +101,6 @@ def create_mask(image: np.ndarray,
     mask[:, :min_x] = 0
     mask[:, max_x:] = 0
 
-    print(ignore_boxes)
-
     # Mask the ignore_boxes if any
     if ignore_boxes is not None:
         for box in ignore_boxes:

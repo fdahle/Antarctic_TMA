@@ -1,14 +1,16 @@
+# Package imports
 import open3d as o3d
 import numpy as np
 from tqdm import tqdm
 
+
 def load_pointcloud(pc_path: str, return_as_array=False) -> np.ndarray:
 
     # extract the format of the point cloud
-    format = pc_path.split('.')[-1]
+    pc_format = pc_path.split('.')[-1]
 
     # different formats require different loading methods
-    if format == "obj":
+    if pc_format == "obj":
 
         points = []
         with open(pc_path, 'r') as file:

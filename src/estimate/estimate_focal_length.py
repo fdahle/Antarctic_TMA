@@ -1,6 +1,9 @@
 # Package imports
 import copy
 import pandas as pd
+import psycopg2
+from psycopg2 import extensions
+from typing import Optional, Union
 
 # Custom imports
 import src.base.connect_to_database as ctd
@@ -10,9 +13,27 @@ MIN_NR_OF_IMAGES = 3
 MAX_STD = 0.005
 
 
-def estimate_focal_length(image_id,
-                          use_estimated=False, return_data=False,
-                          focal_length_data=None, conn=None):
+def estimate_focal_length(image_id: str,
+                          use_estimated: bool = False, return_data: bool = False,
+                          focal_length_data: Optional[pd.DataFrame] = None,
+                          conn: Optional[psycopg2.extensions.connection] = None
+                          ) -> Union[None, tuple[None, None], float,
+                                     tuple[float, Optional[pd.DataFrame]]]:
+    """
+    Estimates the focal length for a given image based on images with similar properties.
+    Args:
+        image_id (str): The ID of the image for which the focal length is to be estimated.
+        use_estimated (bool): Flag to include estimated focal lengths in the analysis.
+        return_data (bool): Flag to return the original focal length data.
+        focal_length_data (Optional[pd.DataFrame]): Pre-loaded focal length data for images with similar properties.
+        conn (Optional[Connection]): Database connection object.
+    Returns:
+        float: A float values containing the estimated focal length.
+            This return type is provided when `return_data` is False.
+        Tuple[float], pd.DataFrame]: A tuple containing the estimated focal length and the
+            original subset data `pd.DataFrame` if `return_data` is True.
+        None: Returns None if conditions like minimum number of images or maximum standard deviation are not met.
+    """
 
     # establish connection to psql if not provided
     if conn is None:
@@ -36,7 +57,7 @@ def estimate_focal_length(image_id,
 
         # convert to list and flatten
         data_ids = data_ids.values.tolist()
-        data_ids = [item for sublist in data_ids for item in sublist]
+        data_ids = [item for sublist in data_ids for item in sublist]  # noqa
 
         # convert list to a string
         str_data_ids = "('" + "', '".join(data_ids) + "')"
@@ -70,7 +91,7 @@ def estimate_focal_length(image_id,
         if focal_length_count < MIN_NR_OF_IMAGES:
             return None
 
-    # get the std value of height
+    # get the std value of focal length
     std = focal_length_data['focal_length'].std()
 
     # check if the standard deviation is below the maximum

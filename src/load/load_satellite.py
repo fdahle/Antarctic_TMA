@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import rasterio
+import rasterio.merge, rasterio.mask
 import shapely
 from rasterio import Affine
 

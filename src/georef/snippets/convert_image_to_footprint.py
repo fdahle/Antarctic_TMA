@@ -7,7 +7,8 @@ from rasterio.transform import Affine
 from shapely.geometry import Polygon
 
 
-def convert_image_to_footprint(image: ndarray, transform: ndarray, no_data_value: int = 0) -> Polygon:
+def convert_image_to_footprint(image: ndarray, transform: ndarray, extend=0,
+                               no_data_value: int = 0) -> Polygon:
     """
     Converts a raster image into a footprint polygon by creating a mask to identify
     valid data points, converting these points to polygons, and then simplifying and
@@ -27,63 +28,6 @@ def convert_image_to_footprint(image: ndarray, transform: ndarray, no_data_value
     Raises:
         ValueError: If the resulting shape is neither a Polygon nor a MultiPolygon, indicating
                     an unexpected result from the polygon creation process.
-    """
-
-    """
-    # create a mask of this image to check where's no data
-    mask = np.ones_like(image)
-    mask[image == no_data_value] = 0
-
-    # check if georef transform is a numpy array
-    if isinstance(transform, np.ndarray):
-
-        if transform.shape[0] == 3 and transform.shape[1] == 3:
-            a, b, c = transform[0]
-            d, e, f = transform[1]
-        elif transform.shape[0] == 9:
-            a, b, c, d, e, f, _, _, _ = transform
-        else:
-            raise ValueError("The transformation matrix is not of the correct shape")
-
-        # Create the Rasterio affine transform
-        transform = Affine(a, b, c, d, e, f)
-
-    # convert the raster cell to polygons
-    shapes = rasterio.features.shapes(mask, transform=transform)
-
-    # merge all polygons
-    shape = shapely.ops.unary_union([shapely.geometry.shape(shape) for shape, val in shapes if val == 1])
-
-    # flatten the polygon lines
-    polygon = shape.simplify(100)
-
-    # Initialize the biggest polygon and its area
-    final_poly = None
-    max_area = 0
-
-    if isinstance(polygon, Polygon):
-        polygons = [polygon]  # Convert single polygon to a list of polygons
-    elif isinstance(polygon, MultiPolygon):
-        polygons = polygon.geoms  # Access the individual polygons within the MultiPolygon
-    else:
-        raise ValueError("The type of polygon is undefined")
-
-    # Iterate over all polygons
-    for poly in polygons:
-
-        # Calculate the area of the current polygon
-        area = poly.area
-
-        # If the current polygon's area is larger than the current maximum
-        if area > max_area:
-            # Update the biggest polygon and the maximum area
-            final_poly = poly
-            max_area = area
-
-    # Create a new polygon without any interior rings
-    final_poly = Polygon(final_poly.exterior)
-
-    return final_poly
     """
 
     # check if georef transform is a numpy array

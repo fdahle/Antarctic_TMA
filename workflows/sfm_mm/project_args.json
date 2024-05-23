@@ -1,0 +1,113 @@
+{
+  "AperiCloud_Absolute": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1,
+    "Orientation": "Final",
+    "SH": "Homol_mini"
+  },
+  "AperiCloud_Relative": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1,
+    "Orientation": "Relative",
+    "SH": "Homol_mini"
+  },
+  "Campari_Absolute": {
+    "ImagePattern": "OIS-.*tif",
+    "InputOrientation": "Adjusted",
+    "OutputOrientation": "Final",
+    "AllFree": 1,
+    "SH": "Homol_mini",
+    "ExpTxt": 1
+  },
+  "Campari_Relative": {
+    "ImagePattern": "OIS-.*tif",
+    "InputOrientation": "Relative",
+    "OutputOrientation": "Final_Relative",
+    "AllFree": 1,
+    "SH": "Homol_mini",
+    "ExpTxt": 1
+  },
+  "CenterBascule": {
+    "ImagePattern": "OIS-.*tif",
+    "OrientationIn": "Relative",
+    "LocalizationOfInformationCenters": "Nav-Brut-RTL",
+    "Out": "Adjusted"
+  },
+  "GCPCustom": {
+    "ALLTransformsReq": false,
+    "UseMasks": true
+  },
+  "GCPBascule": {
+    "ImagePattern": "OIS.*tif",
+    "InputOrientation": "Relative",
+    "OutputOrientation": "Ground",
+    "FileGroundControlPoints": "Measures.xml",
+    "FileImageMeasurements": "Measures-S2D.xml"
+  },
+  "Malt_Absolute": {
+    "Mode": "Ortho",
+    "ImagePattern": "OIS*.*tif",
+    "Orientation": "Final",
+    "NbVI": 2,
+    "ZoomF": 4,
+    "DefCor": 0,
+    "CostTrans": 1,
+    "EZA": 1
+  },
+  "Malt_Relative": {
+    "Mode": "Ortho",
+    "ImagePattern": "OIS*.*tif",
+    "Orientation": "Final_Relative",
+    "NbVI": 2,
+    "ZoomF": 4,
+    "DefCor": 0,
+    "CostTrans": 1,
+    "EZA": 1
+  },
+  "Nuage2Ply": {
+    "XmlFile": "<AUTO>",
+    "Attr": "output/orthophoto.tif",
+    "Out": "output/pointcloud.ply"
+  },
+  "OriConvert": {
+    "FormatSpecification": "OriTxtInFile",
+    "OrientationFile": "cameras.csv",
+    "TargetedOrientation": "Nav-Brut-RTL",
+    "ChSys": "EPSG3031.xml@SysCoRTL.xml"
+  },
+  "ReSampFid": {
+    "ImagePattern": "CA*.*tif",
+    "ScanResolution": 0.025,
+    "ResampleMasks": true
+  },
+  "SaisieMasq": {
+  },
+  "Schnaps": {
+    "ImagePattern": "OIS.*tif",
+    "ExpTxt": 1
+  },
+  "Tapas": {
+    "ImagePattern": "OIS.*tif",
+    "DistortionModel": "RadialBasic",
+    "Out": "Relative",
+    "LibFoc": 0,
+    "SH": "Homol_mini",
+    "ExpTxt": 1
+  },
+  "TapiocaCustom": {
+    "use_footprints": false,
+    "use_masks": true
+  },
+  "Tarama_Absolute": {
+    "ImagePattern": "OIS.*tif",
+    "Orientation": "Final"
+  },
+  "Tarama_Relative": {
+    "ImagePattern": "OIS.*tif",
+    "Orientation": "Final_Relative"
+  },
+  "Tawny": {
+    "DataDirectory": "Ortho-MEC-Malt",
+    "Out": "Orthophotomosaic.tif"
+  }
+}

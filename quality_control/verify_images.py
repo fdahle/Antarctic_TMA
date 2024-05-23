@@ -38,14 +38,12 @@ def verify_images():
 
     return return_dict
 
-def verify_images_psql
-
 def verify_image_sizes():
 
     # get the image sizes from database
+    pass
 
-
-    conn = ctd.
+    #conn = ctd.
 
 def plot_results():
 

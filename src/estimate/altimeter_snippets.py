@@ -1,4 +1,5 @@
 # Package imports
+import copy
 import math
 import numpy as np
 from scipy import spatial
@@ -154,7 +155,7 @@ def do_lines_form_tip(line_1: list[float], line_2: list[float],
                                                                x_circle, y_circle)
 
     # final check if the lines form a tip or not
-    if 0.9 > angle_diff > 0.60 and \
+    if 0.95 > angle_diff > 0.60 and \
             dist < 60 and r_inner ** 2 < xy < r_outer ** 2 and \
             mid_line_through_center is True:
         return True
@@ -261,6 +262,7 @@ def intersection_of_lines(line1, line2):
 
 
 def merge_lines(lines):
+
     while True:
         break_loop = False
         lines_merged = False

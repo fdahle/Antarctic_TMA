@@ -10,8 +10,8 @@ import src.display.display_shapes as ds
 # Debug settings
 debug_show_points = False
 
-def calc_azimuth(image_id, conn=None):
 
+def calc_azimuth(image_id, conn=None):
     # establish connection to psql
     if conn is None:
         conn = ctd.establish_connection()

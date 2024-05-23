@@ -19,7 +19,7 @@ import src.base.modify_csv as mc
 import src.export.export_geometry as eg
 
 # import extract function
-import src.other.misc.extract_ids as ei
+import src.other.extract.extract_ids_by_area as ei
 
 # import georef functions
 import src.georef.georef_sat as gs
@@ -56,7 +56,7 @@ VERIFY_IMAGE_POSITIONS = False
 DISTANCE_THRESHOLD = 100  # TODO UPDATE THIS!
 
 # settings for calc
-CALC_TYPES = ["sat", "img"]
+CALC_TYPES = ["sat"]
 
 # define if images of a certain type should be overwritten
 OVERWRITE_SAT = False
@@ -732,8 +732,8 @@ if __name__ == "__main__":
         image_positions = lsd.load_shape_data(path_approx_shape)
 
         # filter the ids inside the bounds
-        _input_ids = ei.extract_ids(BOUNDS, image_positions,
-                                    image_directions=["V"], complete_flightpaths=True)
+        _input_ids = ei.extract_ids_by_area(BOUNDS, image_positions,
+                                            image_directions=["V"], complete_flightpaths=True)
 
     # image ids are provided
     elif INPUT_TYPE == "ids":
@@ -747,7 +747,6 @@ if __name__ == "__main__":
 
     # filter image ids for only vertical images
     _input_ids = [img_id for img_id in _input_ids if "V" in img_id]
-
 
     # check if there is a status csv and load it
     def _load_processed_images(filename):

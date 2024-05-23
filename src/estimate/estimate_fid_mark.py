@@ -1,6 +1,9 @@
 # Package imports
 import copy
 import pandas as pd
+import psycopg2
+from psycopg2 import extensions
+from typing import Optional, Union
 
 # Custom imports
 import src.base.connect_to_database as ctd
@@ -12,7 +15,27 @@ MAX_STD = None
 
 def estimate_fid_mark(image_id: str, key: str,
                       use_estimated: bool = False, return_data: bool = False,
-                      fid_mark_data=None, conn=None):
+                      fid_mark_data: Optional[pd.DataFrame] = None,
+                      conn: Optional[psycopg2.extensions.connection] = None
+                      ) -> Union[None, tuple[None, None], tuple[int, int],
+                                 tuple[tuple[int, int], Optional[pd.DataFrame]]]:
+    """
+    Estimates the fid mark values for a given image based on images with similar properties.
+    Args:
+        image_id (str): The ID of the image for which the fid mark is to be estimated.
+        key (str): Key specifying the fid mark (1, 2, 3, 4, 5, 6, 7, 8).
+        use_estimated (bool): Flag to include estimated fid marks in the analysis.
+        return_data (bool): Flag to return the original fid mark data along with the estimated coordinates.
+        fid_mark_data (Optional[pd.DataFrame]): Pre-loaded fid mark data for images with similar properties.
+        conn (Optional[Connection]): Database connection object.
+    Returns:
+        Tuple[int, int]: A tuple containing the estimated x and y coordinates (x_val, y_val).
+            This return type is provided when `return_data` is False.
+        Tuple[Tuple[int, int], pd.DataFrame]: A tuple containing the estimated coordinates as a tuple of
+            integers (x_val, y_val), and the original fid mark data `pd.DataFrame` if `return_data` is True.
+        None: Returns None if conditions like minimum number of images or maximum standard deviation are not met.
+    """
+
     # establish connection to psql if not already done
     if conn is None:
         conn = ctd.establish_connection()
@@ -35,7 +58,7 @@ def estimate_fid_mark(image_id: str, key: str,
 
         # convert to list and flatten
         data_ids = data_ids.values.tolist()
-        data_ids = [item for sublist in data_ids for item in sublist]
+        data_ids = [item for sublist in data_ids for item in sublist]  # noqa
 
         # convert list to a string
         str_data_ids = "('" + "', '".join(data_ids) + "')"

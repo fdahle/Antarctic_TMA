@@ -8,6 +8,7 @@ from typing import Optional
 # Display imports
 import src.display.display_images as di
 
+# Constants
 MAX_GAP_LINE = 25
 MIN_LENGTH_LINE = 25
 RHO = 1
@@ -140,6 +141,9 @@ def extract_fid_mark(image: np.ndarray, key: str,
 
     # how many pixels next to the line are we searching for the fid-marks
     extra_search_width = 15
+
+    # init variables before loop
+    min_x_sm, min_y_sm, max_x_sm, max_y_sm = 0, 0, 0, 0
 
     # create an even smaller subset based on the line
     if key in ["n", "s"]:
@@ -289,6 +293,6 @@ def extract_fid_mark(image: np.ndarray, key: str,
     if display and fid_mark is not None:
         fid_mark_subset_x = fid_mark[0] - min_x
         fid_mark_subset_y = fid_mark[1] - min_y
-        di.display_images(subset, points=[[[fid_mark_subset_x, fid_mark_subset_y]]])
+        di.display_images(subset, points=[[(fid_mark_subset_x, fid_mark_subset_y)]])
 
     return fid_mark

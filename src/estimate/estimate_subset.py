@@ -1,6 +1,9 @@
 # Package imports
 import copy
 import pandas as pd
+import psycopg2
+from psycopg2 import extensions
+from typing import Optional, Union
 
 # Custom imports
 import src.base.connect_to_database as ctd
@@ -10,9 +13,30 @@ MIN_NR_OF_IMAGES = 3
 MAX_STD = None
 
 
-def estimate_subset(image_id, key,
-                    use_estimated=False, return_data=False,
-                    subset_data=None, conn=None):
+def estimate_subset(image_id: str,
+                    key: str,
+                    use_estimated: bool = False,
+                    return_data: bool = False,
+                    subset_data: Optional[pd.DataFrame] = None,
+                    conn: Optional[psycopg2.extensions.connection] = None
+                    ) -> Union[None, tuple[None, None], tuple[int, int],
+                               tuple[tuple[int, int], Optional[pd.DataFrame]]]:
+    """
+    Estimates the subset values for a given image based on images with similar properties.
+    Args:
+        image_id (str): The ID of the image for which the subset is to be estimated.
+        key (str): Key specifying the subset direction ('n', 'e', 's', 'w').
+        use_estimated (bool): Flag to include estimated subsets in the analysis.
+        return_data (bool): Flag to return the original subset data along with the estimated coordinates.
+        subset_data (Optional[pd.DataFrame]): Pre-loaded subset data for images with similar properties.
+        conn (Optional[Connection]): Database connection object.
+    Returns:
+        Tuple[int, int]: A tuple containing the estimated x and y coordinates (x_val, y_val).
+            This return type is provided when `return_data` is False.
+        Tuple[Tuple[int, int], pd.DataFrame]: A tuple containing the estimated coordinates as a tuple of
+            integers (x_val, y_val), and the original subset data `pd.DataFrame` if `return_data` is True.
+        None: Returns None if conditions like minimum number of images or maximum standard deviation are not met.
+    """
 
     # establish connection to psql if not already done
     if conn is None:
@@ -20,7 +44,6 @@ def estimate_subset(image_id, key,
 
     # we only need to get data when it is not provided
     if subset_data is None:
-
         # get the properties of this image (flight path, etc.)
         sql_string = f"SELECT tma_number, view_direction, cam_id FROM images WHERE image_id='{image_id}'"
         data_img_props = ctd.execute_sql(sql_string, conn)
@@ -37,7 +60,7 @@ def estimate_subset(image_id, key,
 
         # convert to list and flatten
         data_ids = data_ids.values.tolist()
-        data_ids = [item for sublist in data_ids for item in sublist]
+        data_ids = [item for sublist in data_ids for item in sublist]  # noqa
 
         # convert list to a string
         str_data_ids = "('" + "', '".join(data_ids) + "')"
@@ -71,14 +94,14 @@ def estimate_subset(image_id, key,
 
     # check if the counts are similar (should usually always be the case)
     if x_count != y_count:
-        return None, subset_data if return_data else None
+        return None, None if return_data else None
 
     # check if there is a minimum number of images
     if MIN_NR_OF_IMAGES is not None:
 
         # check if the number of images is below the minimum
         if x_count < MIN_NR_OF_IMAGES or y_count < MIN_NR_OF_IMAGES:
-            return None, subset_data if return_data else None
+            return None, None if return_data else None
 
     # get the std values
     x_std = subset_data[f'subset_{key}_x'].std()
@@ -89,7 +112,7 @@ def estimate_subset(image_id, key,
 
         # check if the standard deviation is above the maximum
         if x_std > MAX_STD or y_std > MAX_STD:
-            return None, subset_data if return_data else None
+            return None, None if return_data else None
 
     # get the mean values
     x_val = subset_data[f'subset_{key}_x'].mean()

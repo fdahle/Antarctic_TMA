@@ -17,7 +17,7 @@ TWEAK_VALS = [-20, 30, 10]
 
 def calculate_fid_mark(image: np.ndarray, key: str,
                        subset_bounds: list[tuple[int, int, int, int]],
-                       display: bool = False) -> Optional[tuple[int, int]]:
+                       ) -> Optional[tuple[int, int]]:
     """
     Calculate a fiducial mark from a given image, based on the specified key. Here the fiducial marks
     in the corners (NE, NW, SE, SW) are calculated based on the lines we calculate for the subsets at
@@ -32,8 +32,6 @@ def calculate_fid_mark(image: np.ndarray, key: str,
         image (np.ndarray): The input image from which the fiducial mark is to be calculated
         key (str): A two digit string ('ne', 'nw', 'se', 'sw') indicating the direction
         subset_bounds (List): A list with the two subsets that are required for the key
-        display (bool, optional): If True, the function will display the subset of the image used
-            for fiducial mark extraction. Defaults to False.
     Returns:
         Optional[tuple[int, int]]: A tuple containing the x and y coordinates of the calculated fiducial
             mark within the entire image. Returns None if no fiducial mark is detected.

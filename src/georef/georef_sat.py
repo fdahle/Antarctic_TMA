@@ -514,17 +514,29 @@ class GeorefSatellite:
         counter = 0
         counter_going_down = 0
 
+        # init variables for tweaking
+        step_x, step_y = 0, 0
+
         # tweak the image in a loop
         while counter < self.tweak_max_iterations:
 
             # increase tweak counter
             counter = counter + 1
 
-            # find the direction in which we need to change the satellite image
-            step_y, step_x = self._find_footprint_direction(tweaked_sat, tweaked_tps[:, 0:2],
-                                                            self.tweak_step_size)
+            # make tps at least 2d
+            tweaked_tps = np.atleast_2d(tweaked_tps)
 
-            print(f"  Tweak image ({counter}/{self.tweak_max_iterations}) with ({step_y}, {step_x})")
+            # check if we still have tps
+            if tweaked_tps.shape[0] < 2:
+                # too few tps are available so keep the step_x and step_y
+                pass
+            else:
+                # find the direction in which we need to change the satellite image
+                step_y, step_x = self._find_footprint_direction(tweaked_sat, tweaked_tps[:, 0:2],
+                                                                self.tweak_step_size)
+
+            print(f"  Tweak image ({counter}/{self.tweak_max_iterations}) with "
+                  f"({step_y}, {step_x})")
 
             # tweak the satellite bounds
             tweaked_sat_bounds[0] = tweaked_sat_bounds[0] + step_x

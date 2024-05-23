@@ -13,14 +13,14 @@
   },
   "Campari": {
     "ImagePattern": "OIS-.*tif",
-    "InputOrientation": "Ground",
+    "InputOrientation": "Adjusted",
     "OutputOrientation": "Final",
     "AllFree": 1,
     "SH": "Homol_mini",
     "ExpTxt": 1
   },
   "CenterBascule": {
-    "FullName": "OIS-.*tif",
+    "ImagePattern": "OIS-.*tif",
     "OrientationIn": "Relative",
     "LocalizationOfInformationCenters": "Nav-Brut-RTL",
     "Out": "Adjusted"
@@ -40,11 +40,17 @@
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
     "Orientation": "Final",
+    "UseGPU": true,
     "NbVI": 2,
     "ZoomF": 4,
     "DefCor": 0,
     "CostTrans": 1,
     "EZA": 1
+  },
+  "Nuage2Ply": {
+    "XmlFile": "malt.xml",
+    "Attr": "output/orthophoto.tif",
+    "Out": "output/pointcloud.ply"
   },
   "OriConvert": {
     "FormatSpecification": "OriTxtInFile",
@@ -80,7 +86,7 @@
     "Orientation": "Final"
   },
   "Tawny": {
-    "DataDirectory": "Ortho",
+    "DataDirectory": "Ortho-MEC-Malt",
     "Out": "Orthophotomosaic.tif"
   }
 }

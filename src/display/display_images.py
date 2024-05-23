@@ -6,6 +6,7 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import ConnectionPatch, Polygon
 from shapely.geometry.polygon import Polygon as ShapelyPolygon
 from typing import List, Tuple, Optional, Dict, Any, Union
@@ -25,6 +26,7 @@ base_style_config = {
 
 
 def display_images(images: Union[np.ndarray, List[np.ndarray]],
+                   image_types: Optional[List[str]] = None,
                    points: Optional[List[List[Tuple[int, int]]]] = None,
                    lines: Optional[List[List[Tuple[int, int, int, int]]]] = None,
                    bounding_boxes: Optional[List[List[Union[Tuple[int, int, int, int], List[int]]]]] = None,
@@ -107,6 +109,15 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
         new_tps = tie_points
         new_conf = tie_points_conf
 
+    # Calculate global cmin and cmax for all DEM images
+    dem_min = np.inf
+    dem_max = -np.inf
+    if image_types is not None:
+        for img, img_type in zip(images, image_types):
+            if img_type == "dem":
+                dem_min = min(dem_min, np.nanmin(img))
+                dem_max = max(dem_max, np.nanmax(img))
+
     # create the plot
     fig, axarr = plt.subplots(plot_shape[0], plot_shape[1], squeeze=False)
     fig.subplots_adjust(hspace=0.3, wspace=0.3)  # Adjust space between plots
@@ -117,6 +128,17 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
 
     # Flatten axarr to simplify iterating over it if it's multidimensional
     axes = axarr.flatten()
+
+    # define colormaps
+    c = ["darkred", "red", "lightcoral", "white", "palegreen", "green", "darkgreen"]
+    v = [0, .15, .4, .5, 0.6, .9, 1.]
+    ls = list(zip(v, c))
+    cmap_red_green = LinearSegmentedColormap.from_list('rg', ls, N=256)
+
+    c = ["darkgreen", "green", "palegreen", "white", "lightcoral", "red", "darkred"]
+    v = [0, .15, .4, .5, 0.6, .9, 1.]
+    ls = list(zip(v, c))
+    cmap_green_red = LinearSegmentedColormap.from_list('rg', ls, N=256)
 
     # Iterate over images and their corresponding axes
     for idx, enum_img in enumerate(images):
@@ -129,7 +151,10 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
         ax = axes[idx]
 
         # determine the type of the image
-        img_type = _determine_image_type(img)  # noqa
+        if image_types is None:
+            img_type = _determine_image_type(img)  # noqa
+        else:
+            img_type = image_types[idx]
 
         # we need to assure color images have the right format
         if img_type == "color" and img.shape[0] == 3:
@@ -138,8 +163,14 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
         # show image differently based on the image type
         if img_type == "gray":
             ax.imshow(img, cmap="gray")
+        elif img_type == "dem":
+            ax.imshow(img, cmap="terrain", vmin=dem_min, vmax=dem_max)
         elif img_type == "color":
             ax.imshow(img, interpolation=None)
+        elif img_type == "rtg":  # red to green
+            ax.imshow(img, cmap=cmap_red_green)
+        elif img_type == "gtr":  # green to red
+            ax.imshow(img, cmap=cmap_green_red)
         else:  # Default or undefined types
             ax.imshow(img)
 
@@ -152,22 +183,25 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
         # Optionally draw lines on the image
         if lines and idx < len(lines):
 
-            # get the line colors
-            line_colors = style_config['line_color']
+            # get the lines for the current image
+            image_lines = lines[idx]
 
-            # Replicate single color if only one provided
-            if not isinstance(line_colors, list):
-                line_colors = [line_colors] * len(lines[idx])
+            if len(image_lines) > 1:
 
-            # otherwise validate the number of colors
-            elif len(line_colors) != len(lines[idx]):
-                raise ValueError("Number of colors provided does not match number of lines.")
+                # get the line colors
+                line_colors = style_config['line_color']
 
-            # plot each line with its corresponding color
-            for line, color in zip(lines[idx], line_colors):
-                ax.plot([line[0], line[2]], [line[1], line[3]],
-                        color=_normalize_color(color),
-                        linewidth=style_config['line_width'])
+                # Replicate single color if only one provided
+                if not isinstance(line_colors, list):
+                    line_colors = [line_colors] * len(image_lines)
+                else:
+                    line_colors = [line_colors[idx]] * len(image_lines)
+
+                # plot each line with its corresponding color
+                for line, color in zip(image_lines, line_colors):
+                    ax.plot([line[0], line[2]], [line[1], line[3]],
+                            color=_normalize_color(color),
+                            linewidth=style_config['line_width'])
 
         # Optionally draw bounding boxes on the image
         if bounding_boxes and idx < len(bounding_boxes):

@@ -53,6 +53,22 @@ def extract_fid_marks():
         # loop over all subsets
         for key in ['n', 'e', 's', 'w']:
 
+            pbar.set_postfix_str(f"Extract fid mark {key} for {image_id} "
+                                 f"({updated_entries} already updated)")
+
+            # convert key to numeric key for fid marks
+            numeric_key = {'n': 7, 'e': 6, 's': 8, 'w': 5}[key]
+
+            # get existing fid mark information
+            fid_mark_estimated = row[f'fid_mark_{numeric_key}_estimated']
+            fid_mark_extraction_date = row[f'fid_mark_{numeric_key}_extraction_date']
+
+            # if fid mark is not estimated and has an extraction date
+            if fid_mark_estimated or fid_mark_extraction_date is None or overwrite:
+                pass
+            else:
+                continue
+
             # get the subset values
             subset_x = row[f'subset_{key}_x']
             subset_y = row[f'subset_{key}_y']
@@ -64,52 +80,39 @@ def extract_fid_marks():
                     pd.isnull(subset_width) or pd.isnull(subset_height):
                 continue
 
-            # convert key to numeric key for fid marks
-            numeric_key = {'n': 7, 'e': 6, 's': 8, 'w': 5}[key]
+            # get bounding box of the subset
+            subset_bounds = (int(subset_x), int(subset_y),
+                             int(subset_x + subset_width), int(subset_y + subset_height))
 
-            pbar.set_postfix_str(f"Extract fid mark {key} for {image_id} "
-                                 f"({updated_entries} already updated)")
-
-            # get existing fid mark information
-            fid_mark_estimated = row[f'fid_mark_{numeric_key}_estimated']
-            fid_mark_extraction_date = row[f'fid_mark_{numeric_key}_extraction_date']
-
-            # if fid mark is not estimated and has an extraction date
-            if overwrite or fid_mark_estimated or fid_mark_extraction_date is None:
-
-                # load the image
-                if image is None:
-                    try:
-                        image = li.load_image(image_id)
-                    except (Exception,):
-                        continue
-
-                # get bounding box of the subset
-                subset_bounds = (int(subset_x), int(subset_y),
-                                 int(subset_x + subset_width), int(subset_y + subset_height))
-
-                # extract the fid mark
+            # load the image
+            if image is None:
                 try:
-                    point = efm.extract_fid_mark(image, key, subset_bounds)
+                    image = li.load_image(image_id)
                 except (Exception,):
-                    point = None
-
-                # skip if no fid mark is found
-                if point is None:
                     continue
 
-                # Get the current date
-                current_date = datetime.now()
+            # extract the fid mark
+            try:
+                point = efm.extract_fid_mark(image, key, subset_bounds)
+            except (Exception,):
+                point = None
 
-                # update the subset values
-                sql_string = f"UPDATE images_fid_points " \
-                             f"SET fid_mark_{numeric_key}_x={point[0]}, " \
-                             f"fid_mark_{numeric_key}_y={point[1]}, " \
-                             f"fid_mark_{numeric_key}_extraction_date='{current_date}', " \
-                             f"fid_mark_{numeric_key}_estimated=False " \
-                             f"WHERE image_id='{image_id}'"
-                ctd.execute_sql(sql_string, conn)
-                updated_entries += 1
+            # skip if no fid mark is found
+            if point is None:
+                continue
+
+            # Get the current date
+            current_date = datetime.now()
+
+            # update the subset values
+            sql_string = f"UPDATE images_fid_points " \
+                         f"SET fid_mark_{numeric_key}_x={point[0]}, " \
+                         f"fid_mark_{numeric_key}_y={point[1]}, " \
+                         f"fid_mark_{numeric_key}_extraction_date='{current_date}', " \
+                         f"fid_mark_{numeric_key}_estimated=False " \
+                         f"WHERE image_id='{image_id}'"
+            ctd.execute_sql(sql_string, conn)
+            updated_entries += 1
 
 
 if __name__ == "__main__":

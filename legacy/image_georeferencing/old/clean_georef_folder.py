@@ -20,7 +20,6 @@ debug_check_shapes = True
 
 def clean_georef_folder(image_id=None, test_valid=True, test_invalid=True, mode="sat",
                         verbose=False):
-
     # overview paths
     path_exact_footprints_shape_valid = base_path + f"/overview/{mode}/{mode}_footprints.shp"
     path_exact_footprints_shape_invalid = base_path + f"/overview/{mode}_invalid/{mode}_footprints_invalid.shp"
@@ -368,7 +367,6 @@ def clean_georef_folder(image_id=None, test_valid=True, test_invalid=True, mode=
 
 
 if __name__ == "__main__":
-
     img_id = None
 
-    clean_georef_folder(image_id=img_id,verbose=True)
+    clean_georef_folder(image_id=img_id, verbose=True)

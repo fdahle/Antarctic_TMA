@@ -1,4 +1,5 @@
 # Package imports
+import copy
 import cv2
 import dlib
 import numpy as np
@@ -19,26 +20,31 @@ PATH_TEMPLATES = "/data_1/ATM/data_1/machine_learning/dlib/altimeter/templates"
 matching_confidence_value = 20000000
 
 # Debugging
-debug_print = True
+debug_print = False
 debug_show_altimeter = False
 debug_show_binary = False
 debug_show_circle = False
-debug_show_long_lines = True
-debug_show_selected_lines = True  # show center & tip lines
-debug_show_pointer = True
+debug_show_binarized = False
+debug_show_all_lines = False
+debug_show_long_lines = False
+debug_show_center_lines = False
+debug_show_special_lines = False  # show parallel & tip lines
+debug_show_pointer = False
 
 
-def estimate_altimeter(image):
+def estimate_altimeter(image, return_position=False):
 
     if debug_print:
         print("Estimate altimeter for image")
 
     # detect altimeter subset
-    altimeter = _detect_altimeter(image)
+    altimeter, altimeter_box = _detect_altimeter(image)
 
     # if no altimeter could be detected, return None
     if altimeter is None:
-        return None
+        if debug_print:
+            print("No altimeter detected")
+        return None if not return_position else (None, None)
 
     if debug_show_altimeter:
         style_config = {'title': 'Altimeter subset'}
@@ -47,12 +53,19 @@ def estimate_altimeter(image):
     if debug_print:
         print("Altimeter detected successfully")
 
+    # create the altimeter bounds
+    bounding_box = [altimeter_box[0], altimeter_box[2],
+                    altimeter_box[1] - altimeter_box[0],
+                    altimeter_box[3] - altimeter_box[1]]
+
     # locate the circle in the altimeter
-    circle = _locate_circle(altimeter)
+    circle, min_th = _locate_circle(altimeter)
 
     # if no circle could be located, return None
     if circle is None:
-        return None
+        if debug_print:
+            print("No circle located in the altimeter subset")
+        return None if not return_position else (None, bounding_box)
 
     if debug_show_circle:
         style_config = {'title': 'Located Circle', 'point_size': circle[2]}
@@ -61,41 +74,90 @@ def estimate_altimeter(image):
     if debug_print:
         print(f"Circle located at {circle[0]} {circle[1]} with radius {circle[2]}")
 
+    # binarize the image with the circle
+    altimeter_binarized = _binarize_circle(altimeter, min_th + 15, 255)
+
+    if debug_show_binarized:
+        di.display_images([altimeter, altimeter_binarized])
+
     # find lines in the circle
-    lines = _find_lines(altimeter)
+    lines = _find_lines(altimeter_binarized)
 
     if lines is None:
-        return None
+        if debug_print:
+            print("No lines found in the altimeter subset")
+        return None if not return_position else (None, bounding_box)
 
     if debug_print:
         print(f"Found {len(lines)} lines in the altimeter subset")
 
+    if debug_show_all_lines:
+        style_config = {'title': 'All lines in altimeter subset'}
+        di.display_images(altimeter, lines=[lines], style_config=style_config)
+
+    # remove short lines
+    lines = snippets.delete_short_lines(lines, 20)
+
+    if lines is None:
+        if debug_print:
+            print("No lines left after deletion of short lines")
+        return None if not return_position else (None, bounding_box)
+
+    if debug_print:
+        print(f"{len(lines)} lines left after deletion of short lines")
+
+    if debug_show_long_lines:
+        style_config = {'title': 'Long lines in altimeter subset'}
+        di.display_images(altimeter, lines=[lines], style_config=style_config)
+
+    # get center and non-enter lines
+    center_lines, non_center_lines = _get_center_lines(circle, lines, altimeter)
+
+    if debug_print:
+        print(f"Lines separated into {len(center_lines)} center "
+              f"and {len(non_center_lines)} non-center lines")
+
+    if debug_show_center_lines:
+        style_config = {'title': 'Center (left) and non-center (right) lines',
+                        'line_color': ['red', 'green']}
+        di.display_images([altimeter, altimeter],
+                          lines=[center_lines, non_center_lines],
+                          style_config=style_config)
+
     # select lines that are parallel or form a tip
-    center_lines, tip_lines = _select_lines(circle, lines, altimeter)
+    parallel_lines, tip_lines = _select_lines(center_lines, non_center_lines, circle)
 
     if debug_print:
         print(f"Found {len(center_lines)} center lines and {len(tip_lines)} tip lines")
 
-    if debug_show_selected_lines:
-        style_config = {'title': 'Center Lines (red) & Tip Lines (green)',
+    if debug_show_special_lines:
+
+        # flatten tip lines
+        display_tip_lines = [inner for sublist in tip_lines for inner in sublist]
+
+        style_config = {'title': 'Parallel Lines (left) & Tip Lines (right)',
                         'line_color': ['red', 'green']}
-        di.display_images(altimeter, lines=[[center_lines, tip_lines]],
+        di.display_images([altimeter, altimeter], lines=[center_lines, display_tip_lines],
                           style_config=style_config)
 
     # for altimeter detection we need both center and tip lines
-    if center_lines is None or tip_lines is None:
-        return None
-
-    # get the parallel lines
-    parallel_lines = _pair_lines(center_lines)
+    if parallel_lines is None or tip_lines is None:
+        if debug_print:
+            print("Parallel or tip lines is None")
+        return None if not return_position else (None, bounding_box)
 
     # filter parallel lines
     correct_parallel_lines = _filter_parallel_lines(parallel_lines)
 
+    if len(tip_lines) == 0 or len(correct_parallel_lines) == 0:
+        if debug_print:
+            print("No tip or correct parallel lines found")
+        return None if not return_position else (None, bounding_box)
+
     # get height from line
     height = _lines2height(tip_lines, correct_parallel_lines, circle, altimeter)
 
-    return height
+    return height if not return_position else (height, bounding_box)
 
 
 def _detect_altimeter(image: np.ndarray):
@@ -109,7 +171,7 @@ def _detect_altimeter(image: np.ndarray):
 
     # check if there's only one detection (-> altimeter)
     if len(detections) != 1:
-        return None
+        return None, None
 
     # get the detection
     d = detections[0]
@@ -130,7 +192,7 @@ def _detect_altimeter(image: np.ndarray):
     # get the subset of the altimeter
     altimeter = image[bounding_box[2]:bounding_box[3], bounding_box[0]: bounding_box[1]]
 
-    return altimeter
+    return altimeter, bounding_box
 
 
 def _locate_circle(altimeter: np.ndarray):
@@ -193,9 +255,11 @@ def _locate_circle(altimeter: np.ndarray):
                 int(mid_p[0] + np.cos(18 * np.pi / 180) * 205), int(mid_p[1] + np.sin(18 * np.pi / 180) * 205), r)
         else:
             # no circle could be located
-            return None
+            return None, None
 
-        return circle
+        return circle, min_th
+
+    return None, None
 
 
 def _find_lines(altimeter: np.ndarray):
@@ -226,7 +290,7 @@ def _find_lines(altimeter: np.ndarray):
     return lines_list
 
 
-def _select_lines(circle, lines, altimeter):
+def _get_center_lines(circle, lines, altimeter):
     # get center of circle
     x_circle = circle[0]
     y_circle = circle[1]
@@ -235,8 +299,8 @@ def _select_lines(circle, lines, altimeter):
     r_circle = CENTER_RADIUS_SIZE
 
     # only keep lines that are going through the center of the circle
-    selected_lines_center = []
-    selected_lines_non_center = []
+    lines_center = []
+    lines_non_center = []
     for line in lines:
 
         # get coefficient of the line
@@ -247,73 +311,51 @@ def _select_lines(circle, lines, altimeter):
         # check if the line intersects with the circle
         d = np.abs(a * x_circle + b * y_circle + c) / np.sqrt(a ** 2 + b ** 2)
         if d <= r_circle:
-            selected_lines_center.append(line)
+            lines_center.append(line)
         else:
-            selected_lines_non_center.append(line)
-
-    if debug_print:
-        print(f"Lines separated into {len(selected_lines_center)} center "
-              f"and {len(selected_lines_non_center)} non-center lines")
-
-    # delete the lines that are too short (<25)
-    selected_lines_center = snippets.delete_short_lines(selected_lines_center)
-    selected_lines_non_center = snippets.delete_short_lines(selected_lines_non_center)
-
-    if debug_print:
-        print(f"{len(selected_lines_center)} center and "
-              f"{len(selected_lines_non_center)} non-center lines "
-              f"left after deletion of short lines")
-
-    if debug_show_long_lines:
-        style_config = {'title': 'Long lines for center (red) and non-center (green)',
-                        'line_color': ['red', 'green']}
-        print(selected_lines_center)
-        di.display_images(altimeter,
-                          lines=[[selected_lines_center, selected_lines_non_center]],
-                          style_config=style_config)
+            lines_non_center.append(line)
 
     # merge lines together
-    selected_lines_center = snippets.merge_lines(selected_lines_center)
+    lines_center = snippets.merge_lines(lines_center)
+    #lines_non_center = snippets.merge_lines(lines_non_center)
+
+    return lines_center, lines_non_center
+
+
+def _select_lines(selected_lines_center, selected_lines_non_center, circle):
+
+    # get center of circle
+    x_circle = circle[0]
+    y_circle = circle[1]
+
+    # get parallel lines
+    parallel_lines = _pair_lines(selected_lines_center)
+
+    # rearrange all lines once relative to the circle center
+    rearranged_lines = [snippets.rearrange_line(line, x_circle, y_circle) for
+                        line in selected_lines_non_center]
 
     # look for lines that are making the tip of the short pointer
-    selected_lines_tip = []
-    selected_lines_tip_debug = []  # we need an extra list for showing the center lines
-    for line_1 in selected_lines_non_center:
-
-        # rearrange line so that the center point is the first point
-        line_1 = snippets.rearrange_line(line_1, x_circle, y_circle)
-
-        # don't use line again
-        if line_1 in selected_lines_tip_debug:
+    tip_lines = []
+    for i, line_1 in enumerate(rearranged_lines):
+        # Don't use line again if already used in a tip
+        if any(line_1 in pair for pair in tip_lines):
             continue
 
-        # we want to compare lines with other lines -> therefore second iteration
-        for line_2 in selected_lines_non_center:
-
-            # rearrange line so that the center point is the first point
-            line_2 = snippets.rearrange_line(line_2, x_circle, y_circle)
-
-            # we don't need to compare the same lines
+        for line_2 in rearranged_lines[i + 1:]:  # Start from i+1 to avoid duplicate pairs
+            # We don't need to compare the same lines
             if line_1 == line_2:
                 continue
 
-            # don't use line again
-            if line_1 in selected_lines_tip_debug or line_2 in selected_lines_tip_debug:
-                continue
+            # Check if these two lines form a tip
+            if snippets.do_lines_form_tip(line_1, line_2, x_circle, y_circle, circle[2]):
+                tip_lines.append([line_1, line_2])
 
-            # check if lines form a tip
-            is_tip = snippets.do_lines_form_tip(line_1, line_2, x_circle, y_circle, circle[2])
-
-            # save the lines if we have a tip
-            if is_tip:
-                selected_lines_tip.append([line_1, line_2])
-                selected_lines_tip_debug.append(line_1)
-                selected_lines_tip_debug.append(line_2)
-
-    return selected_lines_center, selected_lines_tip
+    return parallel_lines, tip_lines
 
 
 def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
+
     if len(lines_tip) > 1:
         print("Too many lines tip found")
         return None
@@ -326,7 +368,7 @@ def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
 
     # get middle line of short
     inter_x, inter_y = snippets.intersection_of_lines(lines_tip[0][0], lines_tip[0][1])
-    middle_line_short = [circle[0], circle[1], inter_x, inter_y]
+    middle_line_short = [circle[0], circle[1], int(inter_x), int(inter_y)]
     final_lines.append(middle_line_short)
 
     # get middle line of long
@@ -346,49 +388,40 @@ def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
     height = 10000 + reading_short + reading_long
 
     if debug_show_pointer:
-        di.display_images(altimeter, lines=final_lines)
+        di.display_images(altimeter, lines=[final_lines])
 
     return height
 
 
-def _pair_lines(lines_center):
-    _parallel_lines = []
+def _pair_lines(lines):
 
-    for line1 in lines_center:
+    parallel_lines = []
 
-        for line2 in lines_center:
+    for i, line1 in enumerate(lines):
+        for line2 in lines[i + 1:]:  # Start from the next index to avoid duplicate pairs and self-comparison
 
-            # skip identical
-            if line1 == line2:
-                continue
+            # Calculate the angle between the two lines
+            angle = snippets.angle_between_lines(line1, line2)
 
-            # skip already found lines
-            skip_pair = False
-            for pair in _parallel_lines:
-                if line2 == pair[0] and line1 == pair[1]:
-                    skip_pair = True
-                    break
-            if skip_pair:
-                continue
-
-            an = snippets.angle_between_lines(line1, line2)
-
-            if an < 5:
-
+            # Check if lines are sufficiently parallel
+            if angle < 5:
+                # Create LineString objects for more complex geometric operations
                 ls1 = LineString([(line1[0], line1[1]), (line1[2], line1[3])])
                 ls2 = LineString([(line2[0], line2[1]), (line2[2], line2[3])])
-                dist = ls1.distance(ls2)
 
-                if dist < 25:
-                    _parallel_lines.append([line1, line2])
+                # Calculate the distance to check how close the lines are
+                distance = ls1.distance(ls2)
 
-    return _parallel_lines
+                # If lines are close enough, consider them as parallel
+                if distance < 30:
+                    parallel_lines.append([line1, line2])
 
+    return parallel_lines
 
 def _filter_parallel_lines(parallel_lines):
 
     top_length = 0
-    top_pair = None
+    top_pair = []
 
     for para_line in parallel_lines:
         line1 = para_line[0]
@@ -401,3 +434,18 @@ def _filter_parallel_lines(parallel_lines):
             top_pair = para_line
 
     return top_pair
+
+
+def _binarize_circle(img, min_th=0, max_th=255):
+
+    img = copy.deepcopy(img)
+
+    ret, o1 = cv2.threshold(img, min_th, max_th, cv2.THRESH_BINARY)
+    # Erosion & Dilation
+    kernel1 = np.ones((3, 3), np.uint8)
+    img_erosion = cv2.erode(o1, kernel1, iterations=2)
+    img_dilation = cv2.dilate(img_erosion, kernel1, iterations=2)
+    # white black color exchange()
+    img_binary = 255 - img_dilation
+
+    return img_binary

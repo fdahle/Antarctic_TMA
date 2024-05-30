@@ -5,10 +5,10 @@ import src.sfm_mm.SFMProject as SfmP
 
 PATH_SFM_PROJECTS = "/data_1/ATM/data_1/sfm/mm_projects"
 
-input_name = "test2147"
-#input_ids = ["CA180132V0094", "CA180132V0095", "CA180132V0096", "CA180132V0097"]
+input_name = "test1844"
+# input_ids = ["CA180132V0094", "CA180132V0095", "CA180132V0096", "CA180132V0097"]
 
-input_ids = ["CA214732V0027", "CA214732V0028", "CA214732V0029", "CA214732V0030", "CA214732V0031", "CA214732V0032", "CA214732V0033", "CA214732V0034","CA214732V0035"]
+input_ids = ['CA184432V0183', 'CA184432V0184', 'CA184432V0185', 'CA184432V0186', 'CA184432V0187', 'CA184432V0188', 'CA184432V0189']
 debug=True
 overwrite = False
 resume = True
@@ -52,12 +52,7 @@ def auto_sfm_mm(project_name, image_ids, overwrite=False):
                     "CenterBascule", "Campari_Absolute", "AperiCloud_Absolute", "Tarama_Absolute",
                     "Malt_Absolute", "Tawny", "Nuage2Ply"]
     elif georef_mode == "relative":
-        #commands = ["ReSampFid"]
-
-        import src.sfm_mm.snippets.reduce_images as ri
-        ri.reduce_images(os.path.join(PATH_SFM_PROJECTS, project_name), 200)
-
-        commands = ["TapiocaCustom", "Schnaps", "Tapas",
+        commands = ["ReSampFid", "ReduceCustom", "TapiocaCustom", "Schnaps", "Tapas",
                     "AperiCloud_Relative", "Campari_Relative", "Tarama_Relative",
                     "Malt_Relative", "Tawny", "Nuage2Ply"]
     else:

@@ -21,6 +21,7 @@ class BaseCommand(ABC):
                  save_stats=False,
                  save_raw=False,
                  clean_up=True,
+                 auto_enter=False,
                  debug=False,
                  overwrite=False):
 
@@ -37,6 +38,7 @@ class BaseCommand(ABC):
         self.save_stats = save_stats
         self.save_raw = save_raw
         self.clean_up = clean_up
+        self.auto_enter = auto_enter
         self.debug = debug
         self.overwrite = overwrite
 
@@ -92,6 +94,11 @@ class BaseCommand(ABC):
                         print(stdout_line, end="")
 
                     raw_output.append(stdout_line)
+
+                    # Check for the warning message
+                    if "Warn tape enter to continue" in stdout_line and self.auto_enter:
+                        p.stdin.write('\n')
+                        p.stdin.flush()
 
             # save the raw output
             if self.save_raw:

@@ -38,7 +38,7 @@ def find_overlapping_images(
     # verify the working modes
     for mode in working_modes:
         if mode not in ["ids", "footprints"]:
-            raise ValueError(f"working_modes must only contain 'ids' or 'footprints', not {mode}")
+            raise ValueError(f"working_modes must only contain 'ids' or 'footprints', not '{mode}'")
 
     if type(image_ids) is not list:
         raise ValueError("image_ids must be a list")

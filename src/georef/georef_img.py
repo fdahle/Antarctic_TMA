@@ -16,7 +16,8 @@ import src.display.display_images as di
 # import georef snippet functions
 import src.georef.snippets.calc_transform as ct
 
-debug_display_steps = True
+debug_display_steps = False
+
 
 class GeorefImage:
 
@@ -101,6 +102,9 @@ class GeorefImage:
             # apply tie-point matching between geo-referenced image and input image
             tps_img, conf_img = self.tp_finder.find_tie_points(georeferenced_image, image,
                                                                georeferenced_mask, mask)
+
+            if tps_img.shape[0] < 4:
+                continue
 
             # check if georef transform is a numpy array
             if isinstance(georeferenced_transform, np.ndarray):

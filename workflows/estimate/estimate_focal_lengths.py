@@ -44,11 +44,9 @@ def estimate_focal_lengths():
                      f"focal_length={estimated_focal_length}, " \
                      f"focal_length_estimated=TRUE " \
                      f"WHERE image_id='{image_id}'"
-
         ctd.execute_sql(sql_string, conn)
 
         updated_entries += 1
-
 
 if __name__ == "__main__":
     estimate_focal_lengths()

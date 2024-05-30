@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 
 
 def convert_image_to_footprint(image: ndarray, transform: ndarray, extend=0,
-                               no_data_value: int = 0) -> Polygon:
+                               no_data_value: int = 0, catch=False) -> Polygon:
     """
     Converts a raster image into a footprint polygon by creating a mask to identify
     valid data points, converting these points to polygons, and then simplifying and
@@ -29,6 +29,12 @@ def convert_image_to_footprint(image: ndarray, transform: ndarray, extend=0,
         ValueError: If the resulting shape is neither a Polygon nor a MultiPolygon, indicating
                     an unexpected result from the polygon creation process.
     """
+
+    if transform is None:
+        if catch:
+            return None
+        else:
+            raise ValueError("The transformation matrix is missing")
 
     # check if georef transform is a numpy array
     if isinstance(transform, np.ndarray):

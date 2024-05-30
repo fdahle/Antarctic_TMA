@@ -48,6 +48,7 @@
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
     "Orientation": "Final",
+    "UseGPU": true,
     "NbVI": 2,
     "ZoomF": 4,
     "DefCor": 0,
@@ -58,6 +59,7 @@
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
     "Orientation": "Final_Relative",
+    "UseGPU": true,
     "NbVI": 2,
     "ZoomF": 4,
     "DefCor": 0,
@@ -74,6 +76,9 @@
     "OrientationFile": "cameras.csv",
     "TargetedOrientation": "Nav-Brut-RTL",
     "ChSys": "EPSG3031.xml@SysCoRTL.xml"
+  },
+  "ReduceCustom": {
+    "Pxl": 200
   },
   "ReSampFid": {
     "ImagePattern": "CA*.*tif",

@@ -59,6 +59,7 @@ class GeorefCalc:
 
         # check if there are enough geo-referenced images to calculate a position
         if len(georeferenced_ids) < self.min_nr_of_images:
+            print("Not enough images to calculate a position")
             return None, None, None, None
 
         # Get the centroids of the footprints

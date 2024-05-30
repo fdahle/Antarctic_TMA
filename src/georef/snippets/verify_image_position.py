@@ -11,6 +11,7 @@ import src.display.display_shapes as ds
 debug_plot_shapes = True
 debug_print_distance = True
 
+
 def verify_image_position(footprint: Union[Polygon, str],
                           line_footprints: List[Union[Polygon, str]],
                           distance_percentage: int = 20) -> bool:

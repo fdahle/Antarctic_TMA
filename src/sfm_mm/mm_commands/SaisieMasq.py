@@ -1,8 +1,12 @@
 # Custom imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
-class SaisieMasq(BaseCommand):
 
+class SaisieMasq(BaseCommand):
+    """
+    SaisieMasq is a very simple tool to edit mask images.
+    It creates a binary mask image from a polygonal selection in the displayed image.
+    """
     required_args = []
     allowed_args = []
 
@@ -30,23 +34,23 @@ class SaisieMasq(BaseCommand):
 
     def build_shell_dict(self):
 
-            shell_dict = {}
+        shell_dict = {}
 
-            # build the basic shell command
-            shell_string = f'SaisieMasq '
+        # build the basic shell command
+        shell_string = f'SaisieMasq '
 
-            # add the optional arguments to the shell string
-            for key, val in self.mm_args.items():
+        # add the optional arguments to the shell string
+        for key, val in self.mm_args.items():
 
-                # skip required arguments
-                if key in self.required_args:
-                    continue
+            # skip required arguments
+            if key in self.required_args:
+                continue
 
-                shell_string = shell_string + " " + str(key) + "=" + str(val)
+            shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-            shell_dict["SaisieMasq"] = shell_string
+        shell_dict["SaisieMasq"] = shell_string
 
-            return shell_dict
+        return shell_dict
 
     def extract_stats(self, name, raw_output):
         pass

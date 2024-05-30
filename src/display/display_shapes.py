@@ -48,6 +48,9 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str]],
 
         # some shapes are lists, so check if the number of labels in this list is equal
         for i, shape in enumerate(shapes):
+            if style_config['labels'][i] is None:
+                continue
+
             if isinstance(shape, list):
                 if len(style_config['labels'][i]) != len(shape):
                     raise ValueError("The number of labels must be equal to the number of elements "

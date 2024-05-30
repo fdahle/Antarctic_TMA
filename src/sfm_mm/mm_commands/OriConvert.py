@@ -2,6 +2,15 @@ from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
 class OriConvert(BaseCommand):
+    """
+    OriConvert is a versatile command used to:
+    - Transform embedded GPS data from text format to MicMac's Xml orientation format.
+    - Transform the GPS coordinate system, potentially into a euclidean coordinate system.
+    - Generate image pattern for selecting a sample of the image block.
+    - Compute relative speed of each camera in order to determine and correct GPS systematic error (delay).
+    - Importing external orientation from others software: to come.
+    """
+
     required_args = ["FormatSpecification", "OrientationFile", "TargetedOrientation"]
     allowed_args = ["FormatSpecification", "OrientationFile", "TargetedOrientation",
                     "ChSys", "Calib", "AddCalib", "ConvOri", "PrePost", "KN2I", "DN", "ImC",

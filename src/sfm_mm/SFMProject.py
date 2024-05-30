@@ -70,6 +70,10 @@ class SFMProject(object):
             "desc": "Reduce tie-points",
             "file": "mm_cmd.Schnaps"
         },
+        "ReduceCustom": {
+            "desc": "Cut off borders of images",
+            "file": "mm_cmd.ReduceCustom"
+        },
         "ReSampFid": {
             "desc": "resample the images",
             "file": "mm_cmd.ReSampFid"
@@ -97,10 +101,11 @@ class SFMProject(object):
     }
 
     def __init__(self, project_name, project_folder, micmac_path=None,
-                 debug=False, resume=False, overwrite=False):
+                 auto_enter=False, debug=False, resume=False, overwrite=False):
 
-        # debug settings
+        # save settings
         self.debug = debug
+        self.auto_enter = auto_enter
 
         # project settings
         self.project_name = project_name
@@ -548,7 +553,8 @@ class SFMProject(object):
 
             # execute the command
             self._execute_command(command, command_name,
-                                  cmd_args, print_all_output, save_stats, save_raw)
+                                  cmd_args, print_all_output, save_stats, save_raw,
+                                  auto_enter=self.auto_enter, debug=self.debug)
 
     def _create_project_structure(self):
 
@@ -597,7 +603,7 @@ class SFMProject(object):
             os.mkdir(self.project_path + "/Ori-Tapas")
 
     def _execute_command(self, command, command_name, mm_args, print_all_output=False,
-                         save_stats=False, save_raw=False):
+                         save_stats=False, save_raw=False, auto_enter=False, debug=False):
 
         print("Execute command:", command_name)
 
@@ -614,7 +620,7 @@ class SFMProject(object):
                                   command_name=command_name,
                                   print_all_output=print_all_output,
                                   save_stats=save_stats, save_raw=save_raw,
-                                  debug=self.debug)
+                                  auto_enter=auto_enter, debug=debug)
 
         except (ImportError, AttributeError) as e:
             # Handle the error if the module or class is not found

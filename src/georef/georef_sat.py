@@ -114,7 +114,7 @@ class GeorefSatellite:
             Exception: If no satellite image is available for the given bounds and month.
         """
 
-        print("Geo-reference image by satellite")
+        # print("Geo-reference image by satellite")
 
         image = copy.deepcopy(input_image)
 
@@ -153,9 +153,9 @@ class GeorefSatellite:
             mask, _ = ri.rotate_image(mask, angle)
 
         # adjust the image and mask so that it has the same pixel size as the satellite image
-        image, adjust_factors = self._adjust_image_resolution(sat, image, sat_bounds, image_bounds)
+        image, adjust_factors = self._adjust_image_resolution(sat, image, sat_bounds, image_bounds, "image")
         if mask is not None:
-            mask, _ = self._adjust_image_resolution(sat, mask, sat_bounds, image_bounds)
+            mask, _ = self._adjust_image_resolution(sat, mask, sat_bounds, image_bounds, "mask")
 
         # enhance the image for an improved tie-point detection
         # TODO: FIX ENHANCE IMAGE; IF TRUE LESS TIE-points are found
@@ -231,7 +231,7 @@ class GeorefSatellite:
 
     @staticmethod
     def _adjust_image_resolution(img1: np.ndarray, img2: np.ndarray, img_bound1: list[int],
-                                 img_bound2: list[int]) -> Tuple[np.ndarray, Tuple[float, float]]:
+                                 img_bound2: list[int], img_type) -> Tuple[np.ndarray, Tuple[float, float]]:
         """
         Adjusts the resolution of the second image to match that of the first image based on their respective bounds.
         Args:
@@ -274,7 +274,7 @@ class GeorefSatellite:
         # Resample the first image using the zoom factors in x and y directions
         resampled_img2 = scipy.ndimage.zoom(img2, (zoom_factor_y, zoom_factor_x))
 
-        print(f"Adjusted image resolution with "
+        print(f"Adjusted {img_type} resolution with "
               f"zoom-factor ({round(zoom_factor_y, 4)}, {round(zoom_factor_x, 4)})")
 
         return resampled_img2, (zoom_factor_x, zoom_factor_y)

@@ -5,6 +5,9 @@ from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
 class Tapas(BaseCommand):
+    """
+    Tapas is used for computing purely relative orientations
+    """
     required_args = ["DistortionModel", "ImagePattern"]
     allowed_args = ["DistortionModel", "ImagePattern", "ExpTxt", "Out", "InCal", "InOri", "DoC",  # noqa
                     "ForCalib", "Focs", "VitesseInit", "PPRel", "Decentre", "PropDiag", "SauvAutom",  # noqa
@@ -194,7 +197,6 @@ class Tapas(BaseCommand):
 
                 # append dict to the list
                 stats["statistical_summary"].append(stat_dict)
-
 
             if "warnings of" in line:
                 stats["warnings"]["total_warnings"] = int(re.search(r'There were (\d+) warnings', line).group(1))

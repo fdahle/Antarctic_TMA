@@ -51,11 +51,10 @@ def create_mask(image: np.ndarray,
 
     # Initialize fid_marks if None, or fill in missing/default for existing keys
     if fid_marks is None:
-        if fid_marks is None:
-            if use_default_fiducials:
-                fid_marks = default_positions
-            else:
-                raise ValueError("Fiducial marks are required when use_default_fiducials is False.")
+        if use_default_fiducials:
+            fid_marks = default_positions
+        else:
+            raise ValueError("Fiducial marks are required when use_default_fiducials is False.")
     else:
         if not use_default_fiducials:
 

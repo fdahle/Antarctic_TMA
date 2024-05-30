@@ -19,6 +19,7 @@ tables_to_check = ["All tables", "images", "images_extracted", "images_fid_point
 debug_more_details = False
 debug_max_cutoff = 100
 
+
 def verify_psql(table, conn):
 
     # special handling for multiple tables

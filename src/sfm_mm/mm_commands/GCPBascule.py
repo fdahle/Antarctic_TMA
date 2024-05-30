@@ -6,6 +6,7 @@ import shutil
 # Custom imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
+
 class GCPBascule(BaseCommand):
 
     required_args = ["ImagePattern", "InputOrientation", "OutputOrientation",

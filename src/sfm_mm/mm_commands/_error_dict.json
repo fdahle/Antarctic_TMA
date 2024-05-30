@@ -54,6 +54,7 @@
       "Fix": "Check if the image_id is correct (OIS & .tif appended?)."
     }
   ],
+  "ReduceCustom": [],
   "Schnaps": [
     {
       "MMErrorMsg": "ERROR: No image found!",
@@ -68,9 +69,9 @@
   ],
   "Tapas": [
     {
-      "MMErrorMsg": "Not Enouh Equation in ElSeg3D::L2InterFaisceaux",
-      "ErrorMsg": "Lack of tie points that are usable",
-      "Fix": "Is ExpTxt enabled? Otherwise check if the images have enough distinct points."
+      "MMErrorMsg": "aBestCam==0",
+      "ErrorMsg": "Images (or image pairs) are unconnected (see NON INIT)",
+      "Fix": "remove isolated images or add additional images to the project."
     },
     {
       "MMErrorMsg": "Cannot compute association",
@@ -81,6 +82,11 @@
       "MMErrorMsg": "Name is not a correct homologue prefix",
       "ErrorMsg": "Tapas cannot find the Homol folder",
       "Fix": "Check if the path to the Homol folder is correct."
+    },
+    {
+      "MMErrorMsg": "Not Enouh Equation in ElSeg3D::L2InterFaisceaux",
+      "ErrorMsg": "Lack of tie points that are usable",
+      "Fix": "Is ExpTxt enabled? Otherwise check if the images have enough distinct points."
     }
   ],
   "Tawny": [

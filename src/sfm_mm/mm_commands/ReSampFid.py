@@ -10,6 +10,11 @@ from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
 class ReSampFid(BaseCommand):
+
+    """
+    ReSampFid is a tool to resample images using fiducial marks
+    """
+
     required_args = ["ImagePattern", "ScanResolution"]
     allowed_args = ["ImagePattern", "ScanResolution"]
 

@@ -117,7 +117,7 @@ def derive_image_position(image_id,
     point_list = [loads(wkt) for wkt in wkt_point_list]
     footprint_list = [loads(wkt) for wkt in wkt_footprint_list]
 
-    # Extract _x and y coordinates using list comprehension
+    # Extract x and y coordinates using list comprehension
     x = np.array([point.x for point in point_list])
     y = np.array([point.y for point in point_list])
 

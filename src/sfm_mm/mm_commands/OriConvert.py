@@ -1,3 +1,8 @@
+# Package imports
+import json
+import os
+
+# Custom imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
@@ -65,10 +70,28 @@ class OriConvert(BaseCommand):
         return shell_dict
 
     def extract_stats(self, name, raw_output):
-        pass
+
+        # Initialize statistics dictionary
+        stats = {}
+
+        # Serialize the dictionary to a JSON string
+        json_output = json.dumps(stats, indent=4)
+
+        # Define path to save the json file
+        json_path = f"{self.project_folder}/stats/{name}_stats.json"
+
+        # Save json_output to a file
+        with open(json_path, "w") as file:
+            file.write(json_output)
+
+        if self.debug:
+            print(f"OriConvert: Stats saved to {json_path}")
 
     def validate_mm_parameters(self):
         pass
 
     def validate_required_files(self):
-        pass
+
+        if self.mm_args["FormatSpecification"] == "OriTxtInFile" and \
+                os.path.isfile(self.project_folder + "/" + self.mm_args["OrientationFile"]) is False:
+            raise FileNotFoundError(f"OrientationFile '{self.mm_args['OrientationFile']}' is missing.")

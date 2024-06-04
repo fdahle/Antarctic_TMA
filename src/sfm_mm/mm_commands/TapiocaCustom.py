@@ -1,22 +1,22 @@
+# Package imports
+import json
 import os
 import glob
 import numpy as np
+import re
 
-#
+# custom imports
 import src.base.find_overlapping_images as foi
 import src.base.find_tie_points as ftp
-
-#
 import src.load.load_image as li
-
-#
 from src.sfm_mm.mm_commands._base_command import BaseCommand
+from src.sfm_mm.mm_commands._context_manager import log_and_print
 
 
 class TapiocaCustom(BaseCommand):
 
     required_args = []
-    allowed_args = ["use_footprints", "use_masks"]
+    allowed_args = ["use_footprints", "use_masks", "max_id_range", "save_tps_images"]
 
     def __init__(self, *args, **kwargs):
 
@@ -41,21 +41,89 @@ class TapiocaCustom(BaseCommand):
         # nothing required after execution
         pass
 
-    def extract_stats(self, name, raw_output):
-        pass
-
     def execute_custom_cmd(self):
 
         # validate the required files
         self.validate_required_files()
 
-        # create the tie point structure
-        self._create_tie_point_structure()
+        # Redirect stdout to capture printed output
+        with log_and_print() as log_stream:
+
+            # create the tie point structure
+            self._create_tie_point_structure()
+
+        # extract the log output
+        raw_output = log_stream.getvalue()
+
+        # save the raw output to a file
+        if self.save_raw:
+            filename = f"{self.project_folder}/stats/" \
+                       f"{self.command_name}_raw.txt"
+            with open(filename, "w") as file:
+                file.write(raw_output)
+
+        if self.save_stats:
+            self.extract_stats(self.command_name, raw_output)
+
+    def extract_stats(self, name, raw_output):
+
+        # Split the raw_output into lines if it's a single string
+        if isinstance(raw_output, str):
+            raw_output = raw_output.splitlines()
+
+        # Initialize statistics dictionary
+        stats = {
+            "general": {
+                "total_images": 0,
+                "total_tie_points": 0,
+            },
+            "images": []
+        }
+
+        total_tie_points = 0
+        current_image = None
+
+        # Iterate over each line to extract and organize information
+        for line in raw_output:
+            if re.match(r'^\d+ images are tested for overlap:', line):
+                total_images = int(re.findall(r'\d+', line)[0])
+                stats["general"]["total_images"] = total_images
+            elif re.match(r'^\s*OIS-Reech_', line):
+                parts = line.split()
+                current_image = {
+                    "name": parts[0],
+                    "overlapping_images": []
+                }
+                stats["images"].append(current_image)
+            elif re.match(r'^\s+\d+ tie points found between', line):
+                parts = re.findall(r'\d+|\bOIS-Reech_\w+\b', line)
+                tie_points = int(parts[0])
+                other_image = parts[2]
+
+                total_tie_points += tie_points
+
+                current_image["overlapping_images"].append({
+                    "other_image": other_image,
+                    "tie_points": tie_points
+                })
+
+        stats["general"]["total_tie_points"] = total_tie_points
+
+        # Serialize the dictionary to a JSON string
+        json_output = json.dumps(stats, indent=4)
+
+        # save json_output to a file
+        with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
+            file.write(json_output)
 
     def validate_mm_parameters(self):
         print("Validate mm parameters", end='')
 
-        pass
+        if "save_tps_images" not in self.mm_args.keys():
+            self.mm_args["save_tps_images"] = False
+
+        if "max_id_range" not in self.mm_args.keys():
+            self.mm_args["max_id_range"] = 1
 
         print("\rValidate mm parameters - finished")
 
@@ -75,7 +143,7 @@ class TapiocaCustom(BaseCommand):
             # check if at least 2 images are available
             if len(tif_files) < 2:
                 raise FileNotFoundError(f"{len(tif_files)} images are available. "
-                                 f"At least 2 images are required for tie-point matching.")
+                                        f"At least 2 images are required for tie-point matching.")
 
             # check for each file if a mask exists
             for file in tif_files:
@@ -120,7 +188,8 @@ class TapiocaCustom(BaseCommand):
 
         # find overlapping images
         # todo: add support for footprints
-        short_overlap_dict = foi.find_overlapping_images(short_file_names, working_modes=["ids"])
+        short_overlap_dict = foi.find_overlapping_images(short_file_names, working_modes=["ids"],
+                                                         max_id_range=self.mm_args["max_id_range"])
 
         # convert the short names to the full names again
         overlap_dict = {prefix + key: [prefix + value for value in values] for
@@ -177,9 +246,21 @@ class TapiocaCustom(BaseCommand):
                 else:
                     other_mask = None
 
+                if self.mm_args["save_tps_images"]:
+
+                    tp_img_folder = self.project_folder + "/visuals/tps"
+
+                    if os.path.isdir(tp_img_folder) is False:
+                        os.mkdir(tp_img_folder)
+
+                    save_path = tp_img_folder + "/" + key_id + "_" + other_id + ".png"
+                else:
+                    save_path = None
+
                 # find tie points between the key and the other image
                 tps, conf = tpd.find_tie_points(key_image, other_image,
-                                                key_mask, other_mask)
+                                                key_mask, other_mask,
+                                                save_path=save_path)
 
                 conf = conf.reshape(-1, 1)
 

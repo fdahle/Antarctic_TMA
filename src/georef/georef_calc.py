@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 import src.georef.snippets.calc_transform as ct
 
 debug_display_image_footprint = False
+print_debug = False
 
 
 class GeorefCalc:
@@ -140,6 +141,10 @@ class GeorefCalc:
         georeferenced_centers_sorted = [georeferenced_centers[i] for i in sorted_indices]
         georeferenced_numbers_sorted = [georeferenced_numbers[i] for i in sorted_indices]
 
+        if print_debug:
+            print("Image_nr:", image_nr)
+            print("Georef_numbers:", georeferenced_numbers_sorted)
+
         # Extract x and y coordinates for line fitting
         x = [point.x for point in georeferenced_centers]
         y = [point.y for point in georeferenced_centers]
@@ -159,8 +164,15 @@ class GeorefCalc:
             adjusted_distance = spatial_distance / max(1, id_difference)  # Avoid division by zero
             distances_adjusted.append(adjusted_distance)
 
+        if print_debug:
+            print("distances_adjusted:")
+            print(distances_adjusted)
+
         # get an average distance for the adjusted distances
         avg_distance_adjusted = np.mean(distances_adjusted)
+
+        if print_debug:
+            print("Average distance adjusted:", avg_distance_adjusted)
 
         # Find the position where the new image fits in
         position_index = next((i for i, num in enumerate(georeferenced_numbers_sorted) if num > image_nr),
@@ -168,42 +180,57 @@ class GeorefCalc:
 
         # init points to satisfy the linter
         next_point = prev_point = None
+        next_id = prev_id = None
+
+        if print_debug:
+            print("Position index:", position_index)
+
 
         # calculate the reference point and the next point
         if position_index == 0:
-            reference_point = georeferenced_centers_sorted[0]
             next_point = georeferenced_centers_sorted[1]
+            next_id = georeferenced_numbers_sorted[1]
         elif position_index == len(georeferenced_centers_sorted):
-            reference_point = georeferenced_centers_sorted[-1]
             prev_point = georeferenced_centers_sorted[-2]
+            prev_id = georeferenced_numbers_sorted[-2]
         else:
-            reference_point = georeferenced_centers_sorted[position_index - 1]
+            prev_point = georeferenced_centers_sorted[position_index - 1]
+            prev_id = georeferenced_numbers_sorted[position_index - 1]
             next_point = georeferenced_centers_sorted[position_index]
+            next_id = georeferenced_numbers_sorted[position_index]
+
+        if print_debug:
+            print("Prev point:", prev_point, "ID:", prev_id)
+            print("Next point:", next_point, "ID:", next_id)
 
         # Convert Shapely Points to numpy arrays for calculation
-        reference_point_coords = np.array([reference_point.x, reference_point.y])
         if position_index == 0:
-            next_point_coords = np.array([next_point.x, next_point.y])
-            direction = next_point_coords - reference_point_coords
+            ref_coords = np.array([next_point.x, next_point.y])
+            ref_id = next_id
+            direction = -1
         elif position_index == len(georeferenced_centers_sorted):
-            prev_point_coords = np.array([prev_point.x, prev_point.y])
-            direction = reference_point_coords - prev_point_coords
+            ref_coords = np.array([prev_point.x, prev_point.y])
+            ref_id = prev_id
+            direction = 1
         else:
-            next_point_coords = np.array([next_point.x, next_point.y])
-            direction = next_point_coords - reference_point_coords
+            ref_coords = np.array([prev_point.x, prev_point.y])
+            ref_id = prev_id
+            direction = 1
 
-        direction_normalized = direction / np.linalg.norm(direction)
+        diff_ids = abs(image_nr - ref_id)
 
-        # Calculate the distance to adjust from the reference point
-        if position_index == 0 or position_index == len(georeferenced_centers_sorted):
-            distance_adjustment = avg_distance_adjusted
-        else:
-            id_difference = abs(image_nr - georeferenced_numbers_sorted[position_index - 1])
-            distance_adjustment = avg_distance_adjusted * id_difference
+        if print_debug:
+            print("diff ids: ", diff_ids)
+
+        distance_adjustment = avg_distance_adjusted * diff_ids
 
         # Calculate the new position along the direction
-        new_coords = reference_point_coords + direction_normalized * distance_adjustment
+        new_coords = ref_coords + distance_adjustment * direction
         new_x, new_y = new_coords
+
+        if print_debug:
+            print("Distance adjustment", distance_adjustment)
+            print("New Coords:", new_coords)
 
         # Adjust the y coordinate to ensure it is on the fitted line
         new_y = line_func(new_x)

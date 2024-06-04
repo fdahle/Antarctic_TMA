@@ -2,6 +2,7 @@
 import csv
 import os.path
 from pyproj import Transformer
+from typing import Union
 
 # Custom imports
 import src.base.connect_to_database as ctd
@@ -10,10 +11,29 @@ import src.base.connect_to_database as ctd
 overwrite = True
 
 
-def create_camera_csv(image_ids, csv_path, prefix="",
-                      input_epsg=3031, output_epsg=3031,
-                      skip_missing=False,
-                      default_height=5000):
+def create_camera_csv(image_ids: list[Union[int, str]], csv_path: str, prefix: str = "",
+                      input_epsg: int = 3031, output_epsg: int = 3031,
+                      skip_missing: bool = False,
+                      default_height: float = 5000.0) -> None:
+    """
+    Creates a CSV file defining the camera positions of the images for use in MicMac for OriConvert.
+    Args:
+        image_ids (List[Union[int, str]]): A list of the ids of the images that should be included
+            in the csv.
+        csv_path (str): The path to the CSV file to be created.
+        prefix (str, optional): A prefix to be added to the image IDs in the CSV file. Defaults to "".
+        input_epsg (int, optional): The EPSG code of the input coordinate system. Defaults to 3031.
+        output_epsg (int, optional): The EPSG code of the output coordinate system. Defaults to 3031.
+        skip_missing (bool, optional): Whether to skip images with missing height information.
+            Defaults to False.
+        default_height (float, optional): The default height to be used if height information
+            is missing. Defaults to 5000.0.
+    Returns:
+        None
+    Raises:
+        FileExistsError: If the CSV file already exists and overwrite is set to False.
+        ValueError: If the camera type is not found in the image ID.
+    """
 
     # check if the file already exists
     if os.path.isfile(csv_path) and overwrite is False:
@@ -25,7 +45,7 @@ def create_camera_csv(image_ids, csv_path, prefix="",
     # convert lst of image_ids to string for sql query
     str_image_ids = ",".join(["'" + str(image_id) + "'" for image_id in image_ids])
 
-    # get all cameria parameters from the database
+    # get all camera parameters from the database
     sql_string = "SELECT images.image_id, " \
                  "ST_AsText(position_exact) AS position_exact, " \
                  "azimuth_exact, height " \
@@ -46,8 +66,6 @@ def create_camera_csv(image_ids, csv_path, prefix="",
         lambda pos: transformer.transform(float(pos.split(" ")[0][6:]),
                                           float(pos.split(" ")[1][:-1]))))
     data = data.drop(columns=['position_exact'])
-
-    print(data)
 
     with open(csv_path, 'w', newline='') as file:
         writer = csv.writer(file, delimiter=' ', quoting=csv.QUOTE_MINIMAL)

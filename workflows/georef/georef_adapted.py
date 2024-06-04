@@ -342,10 +342,20 @@ def georef_adapted(input_ids,
         # iterate all images
         for image_id in tqdm(processed_images_adapted):
 
+            # check if the id is in sat_shape_data
+            if image_id not in sat_shape_data['image_id'].tolist():
+                continue
+
+            # get number of line footprints
+            num_line_footprints = sat_shape_data.loc[sat_shape_data['image_id'].str[2:6] ==
+                                                     image_id[2:6]].shape[0]
+            if num_line_footprints < 2:
+                continue
+
             footprint = sat_shape_data.loc[
                 sat_shape_data['image_id'] == image_id].geometry.iloc[0]
             line_footprints = sat_shape_data.loc[
-                sat_shape_data['image_id'][2:6] == image_id[2:6]].geometry
+                sat_shape_data['image_id'].str[2:6] == image_id[2:6]].geometry
 
             valid_image = vip.verify_image_position(footprint, line_footprints, distance_threshold)
 

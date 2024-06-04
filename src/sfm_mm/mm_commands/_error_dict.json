@@ -79,6 +79,11 @@
       "Fix": "Is 'Out' the first named argument?"
     },
     {
+      "MMErrorMsg": "Distortion Inversion  by finite difference do not converge (probably ill-conditioned canvas)",
+      "ErrorMsg": "<TO DO>",
+      "Fix": "<TO DO >"
+    },
+    {
       "MMErrorMsg": "Name is not a correct homologue prefix",
       "ErrorMsg": "Tapas cannot find the Homol folder",
       "Fix": "Check if the path to the Homol folder is correct."

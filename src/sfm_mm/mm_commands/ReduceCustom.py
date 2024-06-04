@@ -1,11 +1,12 @@
 # Package imports
 import glob
-
+import json
 
 # Custom imports
 import src.load.load_image as li
 import src.export.export_tiff as et
 from src.sfm_mm.mm_commands._base_command import BaseCommand
+from src.sfm_mm.mm_commands._context_manager import log_and_print
 
 
 class ReduceCustom(BaseCommand):
@@ -39,30 +40,67 @@ class ReduceCustom(BaseCommand):
         raise AssertionError("This custom class does not have a shell command.")
 
     def execute_custom_cmd(self):
-        # get all tif files in project folder that start with "OIS-"
-        images = glob.glob(f"{self.project_folder}/OIS-*.tif")
 
-        # add all images that are in the folder mask
-        images += glob.glob(f"{self.project_folder}/masks/*.tif")
+        # Redirect stdout to capture printed output
+        with log_and_print() as log_stream:
 
-        for image_path in images:
-            # Load the image
-            img = li.load_image(image_path)
+            # get all tif files in project folder that start with "OIS-"
+            images = glob.glob(f"{self.project_folder}/OIS-*.tif")
 
-            # Get the size of the image
-            height, width = img.shape
+            # add all images that are in the folder mask
+            images += glob.glob(f"{self.project_folder}/masks/*.tif")
 
-            # Define the size of the border to remove
-            border = int(self.mm_args["Pxl"])
+            for image_path in images:
+                # Load the image
+                img = li.load_image(image_path)
 
-            # Remove the border from the image
-            img = img[border:height - border, border:width - border]
+                # Get the size of the image
+                height, width = img.shape
 
-            # Save the image
-            et.export_tiff(img, image_path, overwrite=True)
+                # Define the size of the border to remove
+                border = int(self.mm_args["Pxl"])
+
+                # Save the original shape
+                old_shape = img.shape
+
+                # Remove the border from the image
+                img = img[border:height - border, border:width - border]
+
+                # Save the new shape
+                new_shape = img.shape
+
+                print(f"Shape reduced from {old_shape} to {new_shape} for image {image_path}")
+
+                # Save the image
+                et.export_tiff(img, image_path, overwrite=True)
+
+        # extract the log output
+        raw_output = log_stream.getvalue()
+
+        # save the raw output to a file
+        if self.save_raw:
+            filename = f"{self.project_folder}/stats/" \
+                       f"{self.command_name}_raw.txt"
+            with open(filename, "w") as file:
+                file.write(raw_output)
+
+        if self.save_stats:
+            self.extract_stats(self.command_name, raw_output)
 
     def extract_stats(self, name, raw_output):
-        pass
+        # Split the raw_output into lines if it's a single string
+        if isinstance(raw_output, str):
+            raw_output = raw_output.splitlines()
+
+        stats={}
+        print("TODO")
+
+        # Serialize the dictionary to a JSON string
+        json_output = json.dumps(stats, indent=4)
+
+        # save json_output to a file
+        with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
+            file.write(json_output)
 
     def validate_mm_parameters(self):
         pass

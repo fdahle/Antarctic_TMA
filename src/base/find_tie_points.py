@@ -82,7 +82,7 @@ class TiePointDetector:
 
         self.logger.print(f"TiePointDetector initialized using {matching_method} on {self.device}", color="OKBLUE")
 
-    def find_tie_points(self, input_img1, input_img2, mask1=None, mask2=None):
+    def find_tie_points(self, input_img1, input_img2, mask1=None, mask2=None, save_path=None):
         """
         Finds tie points between two input images, optionally using masks to limit the search area.
 
@@ -205,6 +205,13 @@ class TiePointDetector:
                     di.display_images([img1, img2],
                                       tie_points=tps, tie_points_conf=list(conf),
                                       style_config=style_config)
+
+                if save_path is not None:
+                    style_config = {"title": f"{len(conf)} final Tie-points"}
+                    di.display_images([img1, img2],
+                                      tie_points=tps, tie_points_conf=list(conf),
+                                      style_config=style_config, save_path=save_path)
+
         except (Exception,) as e:
             if self.catch:
                 return np.empty((0, 4)), np.empty((0, 1))

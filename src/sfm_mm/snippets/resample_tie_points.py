@@ -1,7 +1,19 @@
 import numpy as np
+from typing import Union
 
 
-def resample_tie_points(points, trans_mat):
+def resample_tie_points(points: Union[list[tuple[float, float]], np.ndarray],
+                        trans_mat: np.ndarray) -> np.ndarray:
+    """
+    Resamples tie points to absolute values using a transformation matrix.
+    Args:
+        points (Union[List[Tuple[float, float]], np.ndarray]): A list of (x, y) coordinates
+            or a numpy array of shape (n, 2).
+        trans_mat (np.ndarray): A transformation matrix of shape (2, 3) or (3, 3).
+    Returns:
+        np.ndarray: A numpy array of transformed points of shape (n, 2).
+    """
+
     # Ensure 'points' is a numpy array and convert to homogeneous coordinates
     points_np = np.atleast_2d(np.asarray(points))
     ones = np.ones((points_np.shape[0], 1))

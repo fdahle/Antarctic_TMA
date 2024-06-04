@@ -1,16 +1,18 @@
 # Package imports
 import os
 import glob
+import json
 import numpy as np
 from lxml import etree
 
 # Custom imports
 import src.load.load_image as li
 import src.load.load_transform as lt
-from src.sfm_mm.mm_commands._base_command import BaseCommand
 import src.sfm_mm.snippets.calc_resample_matrix as crm
 import src.sfm_mm.snippets.identify_gpcs as ig
 import src.sfm_mm.snippets.resample_tie_points as rtp
+from src.sfm_mm.mm_commands._base_command import BaseCommand
+from src.sfm_mm.mm_commands._context_manager import log_and_print
 
 
 class GCPCustom(BaseCommand):
@@ -55,21 +57,47 @@ class GCPCustom(BaseCommand):
         # validate the required files
         self.validate_required_files()
 
-        # get the gcps
-        gcp_dict = self._get_gcps()
+        # Redirect stdout to capture printed output
+        with log_and_print() as log_stream:
 
-        # resample the gcps
-        gcp_dict = self._resample_gcps(gcp_dict)
+            # get the gcps
+            gcp_dict = self._get_gcps()
 
-        # create the xml files
-        self._create_measures_xml(gcp_dict, self.project_folder)
-        self._create_measures_2d_xml(gcp_dict, self.project_folder)
+            # resample the gcps
+            gcp_dict = self._resample_gcps(gcp_dict)
 
-        if self.debug:
-            print("GCPCustom: command executed successfully.")
+            # create the xml files
+            self._create_measures_xml(gcp_dict, self.project_folder)
+            self._create_measures_2d_xml(gcp_dict, self.project_folder)
+
+        # extract the log output
+        raw_output = log_stream.getvalue()
+
+        # save the raw output to a file
+        if self.save_raw:
+            filename = f"{self.project_folder}/stats/" \
+                       f"{self.command_name}_raw.txt"
+            with open(filename, "w") as file:
+                file.write(raw_output)
+
+        if self.save_stats:
+            self.extract_stats(self.command_name, raw_output)
 
     def extract_stats(self, name, raw_output):
-        pass
+
+        # Split the raw_output into lines if it's a single string
+        if isinstance(raw_output, str):
+            raw_output = raw_output.splitlines()
+
+        stats = {}
+        print("TODO")
+
+        # Serialize the dictionary to a JSON string
+        json_output = json.dumps(stats, indent=4)
+
+        # save json_output to a file
+        with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
+            file.write(json_output)
 
     def validate_required_files(self):
 

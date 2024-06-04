@@ -84,6 +84,7 @@ class BaseCommand(ABC):
             with subprocess.Popen(["/bin/bash", "-c", shell_string],
                                   cwd=self.project_folder,
                                   stdout=subprocess.PIPE,
+                                  stdin=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   universal_newlines=True
                                   ) as p:
@@ -97,8 +98,9 @@ class BaseCommand(ABC):
 
                     # Check for the warning message
                     if "Warn tape enter to continue" in stdout_line and self.auto_enter:
-                        p.stdin.write('\n')
-                        p.stdin.flush()
+
+                        p.stdin.write("\n")  # Write newline to stdin
+                        p.stdin.flush()  # Flush stdin to ensure the newline is sent
 
             # save the raw output
             if self.save_raw:

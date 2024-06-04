@@ -48,18 +48,19 @@
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
     "Orientation": "Final",
-    "UseGPU": true,
+    "UseGpu": false,
     "NbVI": 2,
     "ZoomF": 4,
     "DefCor": 0,
     "CostTrans": 1,
-    "EZA": 1
+    "EZA": 1,
+    "NbProc": 10
   },
   "Malt_Relative": {
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
     "Orientation": "Final_Relative",
-    "UseGPU": true,
+    "UseGpu": false,
     "NbVI": 2,
     "ZoomF": 4,
     "DefCor": 0,
@@ -74,8 +75,7 @@
   "OriConvert": {
     "FormatSpecification": "OriTxtInFile",
     "OrientationFile": "cameras.csv",
-    "TargetedOrientation": "Nav-Brut-RTL",
-    "ChSys": "EPSG3031.xml@SysCoRTL.xml"
+    "TargetedOrientation": "Nav-Brut-RTL"
   },
   "ReduceCustom": {
     "Pxl": 200
@@ -101,7 +101,9 @@
   },
   "TapiocaCustom": {
     "use_footprints": false,
-    "use_masks": true
+    "use_masks": true,
+    "max_id_range": 1,
+    "save_tps_images": true
   },
   "Tarama_Absolute": {
     "ImagePattern": "OIS.*tif",

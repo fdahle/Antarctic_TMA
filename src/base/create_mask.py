@@ -79,10 +79,10 @@ def create_mask(image: np.ndarray,
                 fid_marks[key] = default_position
 
     # get the min and max x/y values from the fid marks
-    min_x = max(fid_marks["3"][0], fid_marks["1"][0])
-    max_x = min(fid_marks["2"][0], fid_marks["4"][0])
-    min_y = max(fid_marks["3"][1], fid_marks["2"][1])
-    max_y = min(fid_marks["1"][1], fid_marks["4"][1])
+    min_x = int(max(fid_marks["3"][0], fid_marks["1"][0]))
+    max_x = int(min(fid_marks["2"][0], fid_marks["4"][0]))
+    min_y = int(max(fid_marks["3"][1], fid_marks["2"][1]))
+    max_y = int(min(fid_marks["1"][1], fid_marks["4"][1]))
 
     # Apply the min_border_width if specified
     if min_border_width is not None:

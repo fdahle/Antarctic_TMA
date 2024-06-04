@@ -8,6 +8,11 @@ from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
 class CenterBascule(BaseCommand):
+    """
+    The CenterBascule tool allows to transform a purely relative orientation,
+    as computed with Tapas, in an absolute one.
+    """
+
     required_args = ["ImagePattern", "OrientationIn", "LocalizationOfInformationCenters", "Out"]
     allowed_args = ["ImagePattern", "OrientationIn", "LocalizationOfInformationCenters", "Out",
                     "L1", "CalcV"]

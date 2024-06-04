@@ -40,7 +40,7 @@
     "Mode": "Ortho",
     "ImagePattern": "OIS*.*tif",
     "Orientation": "Final",
-    "UseGPU": true,
+    "UseGpu": false,
     "NbVI": 2,
     "ZoomF": 4,
     "DefCor": 0,

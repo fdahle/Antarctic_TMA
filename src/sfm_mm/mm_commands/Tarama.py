@@ -7,6 +7,9 @@ from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
 class Tarama(BaseCommand):
+    """
+    Tarama is used to compute a rectified image
+    """
 
     required_args = ["ImagePattern", "Orientation"]
     allowed_args = ["ImagePattern", "Orientation", "Zoom", "Repere", "Out", "ZMoy", "KNadir",

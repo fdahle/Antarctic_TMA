@@ -4,7 +4,17 @@ import src.export.export_tiff as et
 import src.load.load_image as li
 
 
-def reduce_images(project_folder, border):
+def reduce_images(project_folder: str, border: int) -> None:
+    """
+    This function removes a border from all images and masks in the project folder. This can
+    sometimes be useful as otherwise parts of the border will appear in the 3D model. Note that only
+    the resampled images will be affected by this change, the original images will remain unchanged.
+    Args:
+        project_folder (str): Path to the project folder
+        border (int): Size of the border in px to remove from each side of the image
+    Returns:
+        None
+    """
 
     # get all tif files in project folder that start with "OIS-"
     images = glob.glob(f"{project_folder}/OIS-*.tif")

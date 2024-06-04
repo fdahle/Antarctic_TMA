@@ -43,8 +43,12 @@ class Tawny(BaseCommand):
         # define path to the orthophoto
         orthophoto = os.path.join(input_fld, self.mm_args['Out'])
 
+        # define a file name based on the project name
+        project_name = self.project_folder.split("/")[-1]
+        filename = "orthophoto_" + project_name + ".tif"
+
         # Move the output file to the output folder
-        shutil.copy(orthophoto, os.path.join(output_fld, "orthophoto.tif"))
+        shutil.copy(orthophoto, os.path.join(output_fld, filename))
 
         if self.debug:
             print(f"Tawny: Output exported to {output_fld}")

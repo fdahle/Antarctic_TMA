@@ -13,7 +13,8 @@ from external.lightglue import SuperPoint
 import src.sfm_mm.snippets.get_gcp_height as ggh
 
 
-def identify_gcps(image_ids, images, transforms, masks=None, debug=False):
+def identify_gcps(image_ids, images, transforms, masks=None,
+                  debug=False, save_folder=None):
     """
     Identifies Ground Control Points (GCPs) across a list of images. Points are identified using the SuperPoint
     algorithm and converted to absolute coordinates using the provided transformation matrices. Overlapping points

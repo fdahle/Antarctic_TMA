@@ -57,12 +57,17 @@ class Malt(BaseCommand):
         dem_files = glob.glob(dem_pattern)
         xml_files = glob.glob(xml_pattern)
 
+        # define the file names based on the project name
+        project_name = self.project_folder.split("/")[-1]
+        filename_dem = "DEM_" + project_name + ".tif"
+        filename_xml = "malt_" + project_name + ".xml"
+
         # No files found matching the pattern
         if dem_files:
             # Get the most recent file by modification time
             most_recent_file = max(dem_files, key=os.path.getmtime)
             # Move the most recent file to the output folder
-            shutil.copy(most_recent_file, os.path.join(output_fld, "DEM.tif"))
+            shutil.copy(most_recent_file, os.path.join(output_fld, filename_dem))
         else:
             print("Malt: No DEM file found")
 
@@ -70,7 +75,7 @@ class Malt(BaseCommand):
             # Get the most recent file by modification time
             most_recent_file = max(xml_files, key=os.path.getmtime)
             # Move the most recent file to the output folder
-            shutil.copy(most_recent_file, os.path.join(self.project_folder, "malt.xml"))
+            shutil.copy(most_recent_file, os.path.join(self.project_folder, filename_xml))
         else:
             print("Malt: No XML file found")
 
@@ -91,6 +96,13 @@ class Malt(BaseCommand):
             # skip required arguments
             if key in self.required_args:
                 continue
+
+            # true and false must be lowercase
+            if type(val) == bool:
+                if val:
+                    val = "true"
+                else:
+                    val = "false"
 
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 

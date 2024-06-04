@@ -48,7 +48,7 @@ IMAGE_IDS = []
 
 # which type of geo-referencing should be done
 GEOREF_WITH_SATELLITE = False
-GEOREF_WITH_IMAGE = False
+GEOREF_WITH_IMAGE = True
 GEOREF_WITH_CALC = True
 
 # settings for sat
@@ -71,12 +71,12 @@ RETRY_MISSING_SAT = False
 
 # define if failed images should be done again
 RETRY_FAILED_SAT = False
-RETRY_FAILED_IMG = False
+RETRY_FAILED_IMG = True
 RETRY_FAILED_CALC = False
 
 # define if invalid images should be done again
 RETRY_INVALID_SAT = False
-RETRY_INVALID_IMG = False
+RETRY_INVALID_IMG = True
 RETRY_INVALID_CALC = False
 
 
@@ -349,10 +349,20 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
             # iterate all images
             for image_id in tqdm(input_ids):
 
+                # check if the id is in sat_shape_data
+                if image_id not in sat_shape_data['image_id'].tolist():
+                    continue
+
+                # get number of line footprints
+                num_line_footprints = sat_shape_data.loc[sat_shape_data['image_id'].str[2:6] ==
+                                                         image_id[2:6]].shape[0]
+                if num_line_footprints < 2:
+                    continue
+
                 footprint = sat_shape_data.loc[
                     sat_shape_data['image_id'] == image_id].geometry.iloc[0]
                 line_footprints = sat_shape_data.loc[
-                    sat_shape_data['image_id'][2:6] == image_id[2:6]].geometry
+                    sat_shape_data['image_id'].str[2:6] == image_id[2:6]].geometry
 
                 valid_image = vip.verify_image_position(footprint, line_footprints, distance_threshold)
 

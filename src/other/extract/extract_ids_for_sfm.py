@@ -3,7 +3,7 @@ import src.base.connect_to_database as ctd
 USE_SHP_HEIGHT = True
 
 
-def extract_ids_for_sfm(min_nr, image_xml, resampled,
+def extract_ids_for_sfm(min_nr, image_xml, resampled, min_complexity=0,
                         position=True, height=True, focal_length=True,
                         maximum_id_distance=1):
 
@@ -13,6 +13,7 @@ def extract_ids_for_sfm(min_nr, image_xml, resampled,
     conn = ctd.establish_connection()
 
     sql_string = "SELECT images.image_id, images.tma_number, " \
+                 "images_extracted.complexity, " \
                  "images_file_paths.path_xml_file, " \
                  "images_file_paths.path_downloaded_resampled, " \
                  "images_extracted.position_exact, " \
@@ -65,6 +66,11 @@ def extract_ids_for_sfm(min_nr, image_xml, resampled,
         data = data[data['focal_length'].notnull()]
 
         print("Images with focal length: ", data.shape[0])
+
+    # filter based on complexity
+    if min_complexity > 0:
+        data = data[data['complexity'] >= min_complexity]
+        print("Images with complexity: ", data.shape[0])
 
     # filter based on resampled
     if resampled:

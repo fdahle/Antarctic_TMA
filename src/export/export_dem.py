@@ -5,7 +5,26 @@ from rasterio.transform import from_origin
 from scipy.interpolate import griddata
 
 
-def export_dem(points_arr, output_path, grid_size=10, method='linear', epsg=3031):
+def export_dem(points_arr: np.ndarray, output_path: str, grid_size: float = 10,
+               method: str = 'linear', epsg: int = 3031) -> None:
+    """
+    Create a DEM from a point cloud and export it as a GeoTIFF file. The point cloud is converted
+    to a regular grid with a specified grid size. The z-values at grid points are determined using
+    interpolation.
+    Args:
+        points_arr (np.ndarray): A NumPy array with shape (n, 3) where each row represents
+                                 x, y, and z coordinates of a point.
+        output_path (str): Path where the GeoTIFF file will be saved.
+        grid_size (float, optional): The grid size in the units of the coordinate system.
+                                     Defaults to 10.
+        method (str, optional): Method of interpolation used to determine the z-values
+                                at grid points. Can be 'linear', 'nearest', 'cubic', etc.
+                                Defaults to 'linear'.
+        epsg (int, optional): The EPSG code that represents the coordinate reference system
+                              of the output DEM. Defaults to 3031 (Antarctic Polar Stereographic).
+    Returns:
+
+    """
 
     # get x, y, z values
     x = points_arr[:, 0]

@@ -1,5 +1,7 @@
+import numpy as np
 
-def export_world_file(trans_matrix, output_path):
+
+def export_world_file(trans_matrix: np.ndarray, output_path: str) -> None:
     """
     Export a world file from a transformation matrix.
 

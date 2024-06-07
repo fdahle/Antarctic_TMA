@@ -9,6 +9,7 @@ import src.display.display_images as di
 import src.georef.snippets.convert_image_to_footprint as citf
 import src.load.load_rema as lr
 
+import src.dem.minimize_difference as md
 
 buffer_val = 10000
 
@@ -23,7 +24,7 @@ def georef_dem(dem_unref, transform_unref):
     dem_unref[dem_unref == -99999.0] = np.nan
     dem_cleaned[dem_cleaned == -99999.0] = np.nan
 
-    di.display_images([dem_unref, dem_cleaned], image_types=['dem', 'dem'])
+    #di.display_images([dem_unref, dem_cleaned], image_types=['dem', 'dem'])
 
     # get polygon for the unref_dem
     poly_unref = citf.convert_image_to_footprint(dem_cleaned, transform_unref, no_data_value=-99999.0)
@@ -115,7 +116,16 @@ def georef_dem(dem_unref, transform_unref):
     #best_difference = best_difference - best_val
     #best_dem = best_dem - best_val
 
+    # minimize the difference
+
+
     best_difference[best_difference > 50] = 50
+
+    best_dem, change_val = md.minimize_difference(dem_cleaned, best_dem)
+
+    best_difference = np.abs(best_dem - dem_cleaned)
+
+    print("Adapted dem by: ", change_val)
 
     di.display_images([dem_cleaned, best_dem, np.abs(best_difference), dem_large],
                       image_types=["dem", "dem", "gtr", "dem"])

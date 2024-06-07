@@ -45,7 +45,7 @@ def estimate_altimeters():
 
         # estimate the altimeter values
         try:
-            estimated_altimeter, altimeter_position = ea.estimate_altimeter(image, return_position=True)
+            estimated_altimeter, altimeter_position = ea.extract_altimeter(image, return_position=True)
         except Exception as e:
             continue
 

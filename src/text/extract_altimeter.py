@@ -8,7 +8,7 @@ from shapely.geometry import LineString
 
 # Custom imports
 import src.display.display_images as di
-import src.estimate.altimeter_snippets as snippets
+import src.text.altimeter_snippets as snippets
 
 # Constants
 CENTER_RADIUS_SIZE = 25
@@ -32,8 +32,7 @@ debug_show_special_lines = False  # show parallel & tip lines
 debug_show_pointer = False
 
 
-def estimate_altimeter(image, return_position=False):
-
+def extract_altimeter(image, return_position=False):
     if debug_print:
         print("Estimate altimeter for image")
 
@@ -111,7 +110,7 @@ def estimate_altimeter(image, return_position=False):
         di.display_images(altimeter, lines=[lines], style_config=style_config)
 
     # get center and non-enter lines
-    center_lines, non_center_lines = _get_center_lines(circle, lines, altimeter)
+    center_lines, non_center_lines = _get_center_lines(circle, lines)
 
     if debug_print:
         print(f"Lines separated into {len(center_lines)} center "
@@ -131,7 +130,6 @@ def estimate_altimeter(image, return_position=False):
         print(f"Found {len(center_lines)} center lines and {len(tip_lines)} tip lines")
 
     if debug_show_special_lines:
-
         # flatten tip lines
         display_tip_lines = [inner for sublist in tip_lines for inner in sublist]
 
@@ -290,7 +288,7 @@ def _find_lines(altimeter: np.ndarray):
     return lines_list
 
 
-def _get_center_lines(circle, lines, altimeter):
+def _get_center_lines(circle, lines):
     # get center of circle
     x_circle = circle[0]
     y_circle = circle[1]
@@ -317,13 +315,12 @@ def _get_center_lines(circle, lines, altimeter):
 
     # merge lines together
     lines_center = snippets.merge_lines(lines_center)
-    #lines_non_center = snippets.merge_lines(lines_non_center)
+    # lines_non_center = snippets.merge_lines(lines_non_center)
 
     return lines_center, lines_non_center
 
 
 def _select_lines(selected_lines_center, selected_lines_non_center, circle):
-
     # get center of circle
     x_circle = circle[0]
     y_circle = circle[1]
@@ -355,7 +352,6 @@ def _select_lines(selected_lines_center, selected_lines_non_center, circle):
 
 
 def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
-
     if len(lines_tip) > 1:
         print("Too many lines tip found")
         return None
@@ -387,6 +383,10 @@ def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
 
     height = 10000 + reading_short + reading_long
 
+    # it is likely that a height below 17000 is above 20000
+    if height < 17000:
+        height += 10000
+
     if debug_show_pointer:
         di.display_images(altimeter, lines=[final_lines])
 
@@ -394,7 +394,6 @@ def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
 
 
 def _pair_lines(lines):
-
     parallel_lines = []
 
     for i, line1 in enumerate(lines):
@@ -418,16 +417,16 @@ def _pair_lines(lines):
 
     return parallel_lines
 
-def _filter_parallel_lines(parallel_lines):
 
+def _filter_parallel_lines(parallel_lines):
     top_length = 0
     top_pair = []
 
     for para_line in parallel_lines:
         line1 = para_line[0]
         line2 = para_line[1]
-        dist1 = math.sqrt((line1[2] - line1[0])**2 + (line1[3] - line1[1])**2)
-        dist2 = math.sqrt((line2[2] - line2[0])**2 + (line2[3] - line2[1])**2)
+        dist1 = math.sqrt((line1[2] - line1[0]) ** 2 + (line1[3] - line1[1]) ** 2)
+        dist2 = math.sqrt((line2[2] - line2[0]) ** 2 + (line2[3] - line2[1]) ** 2)
         dist = np.mean([dist1, dist2])
         if dist > top_length:
             top_length = dist
@@ -437,7 +436,6 @@ def _filter_parallel_lines(parallel_lines):
 
 
 def _binarize_circle(img, min_th=0, max_th=255):
-
     img = copy.deepcopy(img)
 
     ret, o1 = cv2.threshold(img, min_th, max_th, cv2.THRESH_BINARY)

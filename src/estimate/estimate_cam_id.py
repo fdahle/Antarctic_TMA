@@ -14,11 +14,11 @@ MAX_STD = 0.005
 
 
 def estimate_cam_id(image_id: str,
-                          use_estimated: bool = False, return_data: bool = False,
-                          cam_id_data: Optional[pd.DataFrame] = None,
-                          conn: Optional[psycopg2.extensions.connection] = None
-                          ) -> Union[None, tuple[None, None], float,
-                                     tuple[str, Optional[pd.DataFrame]]]:
+                    use_estimated: bool = False, return_data: bool = False,
+                    cam_id_data: Optional[pd.DataFrame] = None,
+                    conn: Optional[psycopg2.extensions.connection] = None
+                    ) -> Union[None, tuple[None, None], float,
+                               tuple[str, Optional[pd.DataFrame]]]:
     """
     Estimates the cam id for a given image based on images with similar properties.
     Args:
@@ -42,7 +42,6 @@ def estimate_cam_id(image_id: str,
         conn = ctd.establish_connection()
 
     if cam_id_data is None:
-
         # get the properties of this image (flight path, etc)
         sql_string = f"SELECT tma_number, view_direction FROM images WHERE image_id='{image_id}'"
         data_img_props = ctd.execute_sql(sql_string, conn)

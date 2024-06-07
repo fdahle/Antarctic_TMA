@@ -82,7 +82,11 @@ class TiePointDetector:
 
         self.logger.print(f"TiePointDetector initialized using {matching_method} on {self.device}", color="OKBLUE")
 
-    def find_tie_points(self, input_img1, input_img2, mask1=None, mask2=None, save_path=None):
+    def find_tie_points(self, input_img1: np.ndarray,
+                        input_img2: np.ndarray,
+                        mask1: Optional[np.ndarray] = None,
+                        mask2: Optional[np.ndarray] = None,
+                        save_path: Optional[str] = None):
         """
         Finds tie points between two input images, optionally using masks to limit the search area.
 
@@ -93,7 +97,7 @@ class TiePointDetector:
                 Must match the dimensions of `input_img1`. 0 values are filtered, 1 values are kept
             mask2: Optional mask for the second image to specify areas of interest.
                 Must match the dimensions of `input_img2`. 0 values are filtered, 1 values are kept
-
+            save_path: Optional path to save the final tie-points visualization.
         Returns:
             A tuple containing two elements:
                 - A NumPy array of the final averaged tie points.

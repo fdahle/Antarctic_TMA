@@ -4,7 +4,6 @@ import numpy as np
 
 
 def export_tiff(img: np.ndarray, output_path: str, overwrite: bool = False) -> None:
-
     """
     Exports a given image to a TIFF file.
 

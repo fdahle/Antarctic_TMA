@@ -128,5 +128,4 @@ def extract_ids_for_sfm(min_nr, image_xml, resampled, min_complexity=0,
             new_key = f"{key}_{group_count}"
             final_groups[new_key] = current_group
 
-
     return final_groups

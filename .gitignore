@@ -2,7 +2,7 @@
 /data
 
 # credentials
-credentials.json
+/credentials.json
 
 # environment
 .conda/

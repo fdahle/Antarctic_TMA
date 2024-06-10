@@ -18,12 +18,15 @@ def convert_image_to_footprint(image: ndarray, transform: ndarray, extend=0,
         image (ndarray): The input raster image as a NumPy array.
         transform (ndarray): The affine transform associated with the raster image,
                             which converts pixel coordinates to spatial coordinates.
+        extend (int): The number of pixels to extend the footprint by in all directions. Defaults to 0
         no_data_value (int): The value in the raster that represents no data.
-                             Pixels with this value are excluded from the footprint. Defaults to 0.
+            Pixels with this value are excluded from the footprint. Defaults to 0.
+        catch (bool): If True, the function returns None if the transformation matrix is missing.
+            If False, the function raises a ValueError. Defaults to False.
 
     Returns:
         Polygon: The largest contiguous polygon (footprint) derived from the input image,
-                 excluding areas with no data.
+            excluding areas with no data.
 
     Raises:
         ValueError: If the resulting shape is neither a Polygon nor a MultiPolygon, indicating

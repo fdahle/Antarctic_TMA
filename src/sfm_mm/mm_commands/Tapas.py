@@ -1,3 +1,5 @@
+"""Python module for Tapas in Micmac."""
+
 # Package imports
 import json
 import re
@@ -44,14 +46,25 @@ class Tapas(BaseCommand):
         self.validate_mm_parameters()
 
     def before_execution(self):
+        """
+        This function is called before the execution of the command.
+        """
+
         # nothing needs to be done before the execution
         pass
 
     def after_execution(self):
+        """
+        This function is called after the execution of the command.
+        """
+
         # nothing needs to be done after the execution
         pass
 
     def build_shell_dict(self):
+        """
+        This function builds the shell command.
+        """
 
         shell_dict = {}
 
@@ -72,6 +85,9 @@ class Tapas(BaseCommand):
         return shell_dict
 
     def extend_additional_args(self):
+        """
+        This function builds the shell command.
+        """
 
         # extend allowed arguments based on distortion model
         if self.mm_args["DistortionModel"] == "RadialBasic":
@@ -88,6 +104,16 @@ class Tapas(BaseCommand):
             self.allowed_args = self.allowed_args + self.additional_args + self.additional_args_hemi_equi
 
     def extract_stats(self, name, raw_output):
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
+
+        # initialize the stats dictionary
         stats = {
             "general_info": {
                 "total_images": 0,
@@ -101,6 +127,9 @@ class Tapas(BaseCommand):
                 "types": []
             }
         }
+
+        # init also stats_dict for later
+        stat_dict = {}
 
         # check if raw_output is a string
         if isinstance(raw_output, str):
@@ -125,7 +154,7 @@ class Tapas(BaseCommand):
             if "MdPppppF=" in line:
                 stats["calibration"] = {
                     "FocMm": float(re.search(r'FocMm(\d+\.\d+)', line).group(1)),
-                    "XSZ": [int(x) for x in re.findall(r'XSZ=\[(\d+),(\d+)\]', line)[0]],
+                    "XSZ": [int(x) for x in re.findall(r'XSZ=\[(\d+),(\d+)]', line)[0]],
                 }
 
             # get values per image
@@ -137,12 +166,12 @@ class Tapas(BaseCommand):
                 # create a new entry for the image if it does not exist
                 if image_name not in stats["image_stats"]:
                     stats["image_stats"][image_name] = {}
-                    stats["image_stats"][image_name]["error"] = []
-                    stats["image_stats"][image_name]["percentage_residuals"] = []
-                    stats["image_stats"][image_name]["nr_tps"] = []
-                    stats["image_stats"][image_name]["multiple_points"] = []
-                    stats["image_stats"][image_name]["multiple_points_res"] = []
-                    stats["image_stats"][image_name]["time"] = []
+                    stats["image_stats"][image_name]["error"] = []  # noqa
+                    stats["image_stats"][image_name]["percentage_residuals"] = []  # noqa
+                    stats["image_stats"][image_name]["nr_tps"] = []  # noqa
+                    stats["image_stats"][image_name]["multiple_points"] = []  # noqa
+                    stats["image_stats"][image_name]["multiple_points_res"] = []  # noqa
+                    stats["image_stats"][image_name]["time"] = []  # noqa
 
                 # extract values
                 error = _save_float_convert(re.search(r'ER2 ([\d.-]+)', line).group(1))
@@ -157,12 +186,12 @@ class Tapas(BaseCommand):
                     error = "-nan"
 
                 # save values to the dictionary
-                stats["image_stats"][image_name]["error"].append(error)
-                stats["image_stats"][image_name]["percentage_residuals"].append(perc_residuals)
-                stats["image_stats"][image_name]["nr_tps"].append(nr_tps)
-                stats["image_stats"][image_name]["multiple_points"].append(multiple_points)
-                stats["image_stats"][image_name]["multiple_points_res"].append(multiple_points_res)
-                stats["image_stats"][image_name]["time"].append(time)
+                stats["image_stats"][image_name]["error"].append(error)  # noqa
+                stats["image_stats"][image_name]["percentage_residuals"].append(perc_residuals)  # noqa
+                stats["image_stats"][image_name]["nr_tps"].append(nr_tps)  # noqa
+                stats["image_stats"][image_name]["multiple_points"].append(multiple_points)  # noqa
+                stats["image_stats"][image_name]["multiple_points_res"].append(multiple_points_res)  # noqa
+                stats["image_stats"][image_name]["time"].append(time)  # noqa
 
             # new stat dict required
             if "Stat on type of point" in line:
@@ -209,9 +238,18 @@ class Tapas(BaseCommand):
             file.write(json_output)
 
     def validate_mm_parameters(self):
+        """
+        Validate the input parameters of the command.
+        """
 
         if self.mm_args["DistortionModel"] not in self.lst_of_distortion_models:
             raise ValueError(f"DistortionModel {self.mm_args['DistortionModel']} is not a valid model.")
 
     def validate_required_files(self):
+        """
+        Validate the required files of the command.
+        """
+
+        # TODO
+
         pass

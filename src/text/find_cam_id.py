@@ -2,8 +2,8 @@
 import re
 from typing import Optional
 
-def find_cam_id(text: str) -> Optional[str]:
 
+def find_cam_id(text: str) -> Optional[str]:
     # split the text into their respective boxes
     text_per_box = text.split(";")
 
@@ -15,7 +15,6 @@ def find_cam_id(text: str) -> Optional[str]:
 
     # Iterate all text segments
     for text_part in text_per_box:
-
         # try to find a match with regex
         matches = re.findall(pattern, text_part)
         all_matches.extend(matches)

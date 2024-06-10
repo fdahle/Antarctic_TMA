@@ -25,6 +25,7 @@ def load_image(image_id: str, image_path: Optional[str] = None, image_type: str 
             Defaults to 'rasterio'.
         return_transform (bool, optional): If True, returns the image transform alongside the image.
             Defaults to False.
+        catch (bool, optional): If True, catches any exceptions and returns None. Defaults to False.
     Returns:
         numpy.ndarray: The loaded image as a numpy array.
         rasterio.transform.Affine or None: Image transform if 'return_transform' is True

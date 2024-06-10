@@ -26,11 +26,3 @@ def export_cameras(image_ids):
 
     # export to csv
     data[["image_id", "x", "y", "height"]].to_csv(csv_path, index=False)
-
-
-if __name__ == "__main__":
-    image_ids = ["CA180132V0094", "CA180132V0095", "CA180132V0096",
-                 "CA180132V0097", "CA180132V0098", "CA180132V0099",
-                 "CA180132V0100", "CA180132V0101"]
-
-    export_cameras(image_ids)

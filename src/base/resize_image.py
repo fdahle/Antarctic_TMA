@@ -1,14 +1,16 @@
+"""Resize an image"""
+
+# Package imports
 import copy
 import cv2
 import numpy as np
-
 from typing import Tuple, Union
 
 
 def resize_image(input_img: np.ndarray, new_size: Union[Tuple[int, int], float], size: str = "size",
                  interpolation: str = "nearest", verbose: bool = False) -> np.ndarray:
     """
-    Resizes an image to a specific size or proportion.
+    Resizes an image to a specific size or proportion by interpolating it using methods from OpenCV.
 
     Args:
         input_img (np.ndarray): The numpy array containing the image.

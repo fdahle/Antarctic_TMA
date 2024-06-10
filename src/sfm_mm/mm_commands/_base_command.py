@@ -1,11 +1,12 @@
+"""The base class for all MicMac commands."""
+
+# Package imports
 import glob
 import json
 import os.path
 import subprocess
 import shutil
-
 from abc import ABC, abstractmethod
-# from datetime import datetime
 
 
 class BaseCommand(ABC):

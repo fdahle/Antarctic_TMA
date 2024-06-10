@@ -1,3 +1,5 @@
+"""Estimates the fid mark values for a given image"""
+
 # Package imports
 import copy
 import pandas as pd

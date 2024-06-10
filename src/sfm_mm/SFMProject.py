@@ -210,6 +210,8 @@ class SFMProject(object):
             image_ids (List[str]): List of image IDs to process.
             image_folder (Optional[str]): Folder where original images are stored.
                 Defaults to DEFAULT_IMAGE_FLD.
+            create_masks(bool): Whether to create new masks instead of using existing ones.
+                Defaults to False.
             copy_masks (bool): Whether to copy mask files. Defaults to False.
             mask_folder (Optional[str]): Folder where mask files are stored.
                 Defaults to DEFAULT_MASK_FLD.
@@ -225,6 +227,9 @@ class SFMProject(object):
             copy_transform (bool): Whether to copy transform files. Defaults to False.
             transform_folder (Optional[str]): Folder where transform files are stored.
                 Defaults to DEFAULT_TRANSFORM_FLD.
+            create_camera_positions (bool): Whether to create camera positions. Defaults to False.
+            create_image_thumbnails (bool): Whether to create thumbnails of the images. Defaults to False.
+            create_mask_thumbnails (bool): Whether to create thumbnails of the masks. Defaults to False.
             overwrite (bool): Whether to overwrite existing files at the destination. Defaults to False.
             ignore_missing (bool): Whether to ignore missing files without raising an exception. Defaults to False.
         Returns:

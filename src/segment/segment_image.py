@@ -28,4 +28,4 @@ def segment_image(image, normalize=False):
     probabilities = probabilities.cpu().detach().numpy()
     probabilities = probabilities[0]
 
-
+    return probabilities

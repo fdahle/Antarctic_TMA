@@ -43,6 +43,7 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
 
     Args:
         images (List[np.ndarray]): A list of images to display.
+        image_types (Optional[List[str]], optional): A list of strings indicating the type of each image.
         points (Optional[List[List[Tuple[int, int]]]], optional): Points to mark on the images. Defaults to None.
         lines (Optional[List[List[Tuple[int, int, int, int]]]], optional): Lines to draw on the images.
             Defaults to None.

@@ -126,7 +126,7 @@ class Malt(BaseCommand):
         correl_pattern = re.compile(r'Correl Calc, Begin Opt')
         result_pattern = re.compile(
             r'TCor (\d+\.\d+) CTimeC (\d+\.\d+) TOpt (\d+\.\d+) Pts , R2 (\d+\.\d+), RN (\d+\.\d+) Pts , '
-            r'R-GEN (\d+\.\d+), Isol (\d+\.\d+)  PT  (\d+e\+\d+)')  # noqa
+            r'R-GEN (\d+\.\d+), Isol (\d+\.\d+) {2}PT {2}(\d+e\+\d+)')  # noqa
 
         # Iterate over each line to extract and organize information
         current_step = None

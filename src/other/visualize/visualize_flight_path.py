@@ -1,10 +1,10 @@
+# Package imports
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
+# Custom imports
 import src.base.connect_to_database as ctd
-
-_flight_path = 1829
 
 
 def visualize_flight_path(flight_path):
@@ -28,7 +28,3 @@ def visualize_flight_path(flight_path):
     plt.ylabel('Altitude')
     plt.grid(True)
     plt.show()
-
-
-if __name__ == "__main__":
-    visualize_flight_path(_flight_path)

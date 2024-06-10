@@ -2,7 +2,7 @@ import getpass
 import pandas as pd
 import os
 import shutil
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as Et
 
 from datetime import datetime
 from PIL import Image
@@ -115,7 +115,6 @@ def _check_image_presence(image_id, folder):
 
 
 def _create_or_update_thumbnail(original_path, thumbnail_path, size):
-
     if os.path.exists(thumbnail_path):
 
         with Image.open(thumbnail_path) as img:
@@ -152,7 +151,6 @@ def _generate_presence_html(image_id, project_folder):
 
 
 def _generate_output_html(project_folder):
-
     # define which results are checked (name:file)
     results = {
         "Point cloud relative": "AperiCloud_Relative.ply",
@@ -186,7 +184,6 @@ def _generate_output_html(project_folder):
 
 
 def _update_steps_html(project_folder):
-
     # define which steps are checked
     steps = ["AperiCloud", "GCPConvert", "Malt", "Nuage2Ply", "ReSampFid", "Schnaps", "Tarama", "Tapas", "Tawny"]
 
@@ -274,7 +271,6 @@ def _parse_homol_directory(homol_folder):
 
 
 def _generate_gcp_html(project_folder):
-
     # define path to the gcp files
     path_gcp_files_image = os.path.join(project_folder, "Measures-S2D.xml")
     path_gcp_files_real = os.path.join(project_folder, "Measures.xml")
@@ -309,14 +305,15 @@ def _generate_gcp_html(project_folder):
 
     return html_content
 
-def _parse_gcp_xml(xml_file, type):
-    tree = ET.parse(xml_file)
+
+def _parse_gcp_xml(xml_file, gcp_type):
+    tree = Et.parse(xml_file)
     root = tree.getroot()
 
     # Create a list to store the data
     data = []
 
-    if type == "image":
+    if gcp_type == "image":
         # Iterate through each 'MesureAppuiFlottant1Im' in the XML
         for measure in root.findall('MesureAppuiFlottant1Im'):
             image_id = measure.find('NameIm').text
@@ -333,7 +330,7 @@ def _parse_gcp_xml(xml_file, type):
         # Create a DataFrame
         df = pd.DataFrame(data, columns=['image_id', 'gcp', 'x', 'y'])
 
-    elif type == "world":
+    elif gcp_type == "world":
         # Iterate through each 'OneAppuisDAF' in the XML
         for point in root.findall('OneAppuisDAF'):
             gcp = point.find('NamePt').text
@@ -354,6 +351,7 @@ def _parse_gcp_xml(xml_file, type):
         raise ValueError("Invalid type argument. Use 'image' or 'world'.")
 
     return df
+
 
 if __name__ == "__main__":
     update_html(prj_fldr)

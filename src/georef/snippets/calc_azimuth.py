@@ -1,3 +1,5 @@
+"""Calculates the azimuth of an image based on its flight path relative to north."""
+
 # Package imports
 import numpy as np
 import psycopg2.extensions
@@ -15,8 +17,6 @@ debug_show_points = False
 
 def calc_azimuth(image_id: str, conn: Optional[psycopg2.extensions.connection] = None) -> Optional[float]:
     """
-    Calculates the azimuth of an image based on its flight path relative to north.
-
     This function calculates the azimuth of the image flight line by fitting a linear model to
     the geographic positions (extracted from a database) of all images with the same flight path identifier.
     Azimuth is measured in degrees from the north, clockwise.

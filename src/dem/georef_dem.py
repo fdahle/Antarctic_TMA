@@ -1,5 +1,7 @@
+"""Georeference a DEM"""
+
 import copy
-import os.path
+
 from scipy.interpolate import griddata
 import numpy as np
 from scipy.ndimage import zoom
@@ -13,8 +15,8 @@ import src.dem.minimize_difference as md
 
 buffer_val = 10000
 
-def georef_dem(dem_unref, transform_unref):
 
+def georef_dem(dem_unref, transform_unref):
     temp_fld = "/home/fdahle/Desktop/tmp"
 
     # remove outliers
@@ -24,7 +26,7 @@ def georef_dem(dem_unref, transform_unref):
     dem_unref[dem_unref == -99999.0] = np.nan
     dem_cleaned[dem_cleaned == -99999.0] = np.nan
 
-    #di.display_images([dem_unref, dem_cleaned], image_types=['dem', 'dem'])
+    # di.display_images([dem_unref, dem_cleaned], image_types=['dem', 'dem'])
 
     # get polygon for the unref_dem
     poly_unref = citf.convert_image_to_footprint(dem_cleaned, transform_unref, no_data_value=-99999.0)
@@ -33,10 +35,10 @@ def georef_dem(dem_unref, transform_unref):
     poly_large = poly_unref.buffer(buffer_val, join_style='mitre')
 
     # load georeferenced dem and large dem
-    dem_approx= lr.load_rema(poly_unref, zoom_level=32)
+    dem_approx = lr.load_rema(poly_unref, zoom_level=32)
     dem_large = lr.load_rema(poly_large, zoom_level=32)
 
-    #di.display_images([dem_unref, dem_approx, dem_large], image_types=['dem', 'dem', 'dem'])
+    # di.display_images([dem_unref, dem_approx, dem_large], image_types=['dem', 'dem', 'dem'])
 
     # upsample the dems with cubic interpolation to fit the approx dem
     zoom_factors = (dem_unref.shape[0] / dem_approx.shape[0], dem_unref.shape[1] / dem_approx.shape[1])
@@ -47,7 +49,7 @@ def georef_dem(dem_unref, transform_unref):
     approx_position = (int((dem_large.shape[0] - dem_approx.shape[0]) / 2),
                        int((dem_large.shape[1] - dem_approx.shape[1]) / 2))
 
-    #di.display_images([dem_unref, dem_approx, dem_large], image_types=['dem', 'dem', 'dem'])
+    # di.display_images([dem_unref, dem_approx, dem_large], image_types=['dem', 'dem', 'dem'])
 
     max_order = 4
     step = 50
@@ -100,9 +102,9 @@ def georef_dem(dem_unref, transform_unref):
             # calculate the mean
             mean_val = np.nanmean(difference)
 
-            #save_path = os.path.join(temp_fld, f"diff_{tile[0]}_{tile[1]}.tif")
-            #style_config = {"title": f"Shift: {tile[0]}, {tile[1]}, Mean Diff: {mean_val}"}
-            #di.display_images([dem_cleaned, dem_tile, difference], image_types=['dem', 'dem', 'rtg'],
+            # save_path = os.path.join(temp_fld, f"diff_{tile[0]}_{tile[1]}.tif")
+            # style_config = {"title": f"Shift: {tile[0]}, {tile[1]}, Mean Diff: {mean_val}"}
+            # di.display_images([dem_cleaned, dem_tile, difference], image_types=['dem', 'dem', 'rtg'],
             #                  style_config=style_config, save_path=save_path)
 
             if mean_val < best_val:
@@ -113,11 +115,10 @@ def georef_dem(dem_unref, transform_unref):
 
     print("Best tile: ", best_tile, " with difference: ", best_val)
 
-    #best_difference = best_difference - best_val
-    #best_dem = best_dem - best_val
+    # best_difference = best_difference - best_val
+    # best_dem = best_dem - best_val
 
     # minimize the difference
-
 
     best_difference[best_difference > 50] = 50
 
@@ -132,10 +133,6 @@ def georef_dem(dem_unref, transform_unref):
 
 
 def _clean_dem(dem):
-
-    # export dem as tif with cv2
-    import cv2
-    #cv2.imwrite("/home/fdahle/Desktop/tmp/dem.tif", dem)
 
     dem_cleaned = copy.deepcopy(dem)
     dem_cleaned[dem_cleaned < 0] = np.nan

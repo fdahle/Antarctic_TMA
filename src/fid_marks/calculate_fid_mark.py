@@ -1,3 +1,5 @@
+"""Calculate a fiducial mark from a given image"""
+
 # Package imports
 import cv2
 import numpy as np

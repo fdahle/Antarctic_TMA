@@ -1,3 +1,5 @@
+"""Calculates the approximate footprint of an image"""
+
 # Package imports
 import math
 import numpy as np

@@ -93,13 +93,19 @@ def verify_image_geometry(image: np.ndarray, transform: np.ndarray,
     elif pix_diff > pixel_difference:
         return False, f"pixel_diff:{round(pix_diff, 2)}"
 
-    # Fail reason 3: The pixel-size is too big or too small
+    # Fail reason 3: The pixel-size is too big
     elif np.abs(transform[0]) > max_pixel_size or np.abs(transform[4]) > max_pixel_size:
         pix_x = round(transform[0], 4)
         pix_y = round(transform[4], 4)
         return False, f"pixel_size:{pix_x},{pix_y}"
 
-    # Fail reason 4: The image is not a rectangle
+    # Fail reason 4: The pixel-size is too small
+    elif np.abs(transform[0]) < min_pixel_size or np.abs(transform[4]) < min_pixel_size:
+        pix_x = round(transform[0], 4)
+        pix_y = round(transform[4], 4)
+        return False, f"pixel_size:{pix_x},{pix_y}"
+
+    # Fail reason 5: The image is not a rectangle
     elif wrong_angles:
         wrong_angle_str = ",".join(f"{angle:.2f}" for angle in wrong_angles)
         return False, f"angle:{wrong_angle_str}"

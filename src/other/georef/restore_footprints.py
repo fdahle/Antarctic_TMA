@@ -61,8 +61,8 @@ for img_id in tqdm(image_ids):
     else:
         attributes = {
             "image_id": img_id,
-         }
+        }
 
     eg.export_geometry(footprint, path_new_shp_file,
                        attributes=attributes, key_field="image_id",
-                        attach=True)
+                       attach=True)

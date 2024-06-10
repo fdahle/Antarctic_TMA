@@ -1,3 +1,6 @@
+"""Python module for SaisieMasq in Micmac."""
+
+
 # Custom imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 

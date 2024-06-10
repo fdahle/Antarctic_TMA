@@ -1,29 +1,32 @@
+"""find tie points between two images"""
+
+# Package imports
 import copy
 import cv2
 import math
 import numpy as np
 import torch
 import warnings
-
 from scipy.spatial.distance import cdist
 from skimage import transform as tf
 from typing import List, Tuple, Optional
-
-import src.base.custom_print as cp
-import src.base.resize_image as ri
-
-import src.display.display_images as di
-
 from external.lightglue import LightGlue, SuperPoint
 from external.lightglue.utils import rbd
 from external.SuperGlue.matching import Matching
 
+# Custom imports
+import src.base.custom_print as cp
+import src.base.resize_image as ri
+import src.display.display_images as di
+
+# Constants
 OOM_REDUCE_VALUE = 0.9
 
 
-# TODO: FIX WARNING LEVELS OF PRINT
-
 class TiePointDetector:
+    """
+    The TiePointDetector class is used to find tie points between two images using the specified matching method.
+    """
 
     def __init__(self, matching_method: str, matching_additional: bool = True, matching_extra: bool = True,
                  keep_resized_points: bool = False, min_resized_points: int = 10, num_transform_points: int = 25,

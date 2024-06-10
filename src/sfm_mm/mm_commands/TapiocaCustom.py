@@ -202,9 +202,6 @@ class TapiocaCustom(BaseCommand):
         # init the tie point detector
         tpd = ftp.TiePointDetector("lightglue", catch=False)
 
-        # store checked combinations of images
-        combinations = {}
-
         # find tie points between overlapping images
         for key_id, other_ids in overlap_dict.items():
 

@@ -54,7 +54,7 @@ def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',
             try:
                 with urlopen(req) as response, open(filename, 'wb') as out_file:
                     out_file.write(response.read())
-            except Exception as e:
+            except (Exception,) as e:
                 print(f'Failed to download {filename}: {e}')
 
     # Fetch data

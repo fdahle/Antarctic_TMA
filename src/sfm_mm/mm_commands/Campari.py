@@ -1,3 +1,5 @@
+"""Python module for Campari in Micmac."""
+
 # Package imports
 import os
 import glob
@@ -33,14 +35,25 @@ class Campari(BaseCommand):
         self.validate_mm_parameters()
 
     def before_execution(self):
+        """
+        This function is called before the execution of the command.
+        """
+
         # nothing needs to be done before the execution
         pass
 
     def after_execution(self):
+        """
+        This function is called after the execution of the command.
+        """
+
         # nothing needs to be done after the execution
         pass
 
     def build_shell_dict(self):
+        """
+        This function builds the shell command.
+        """
 
         shell_dict = {}
 
@@ -62,6 +75,14 @@ class Campari(BaseCommand):
         return shell_dict
 
     def extract_stats(self, name, raw_output):
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
 
         # Initialize statistics dictionary
         stats = {
@@ -145,11 +166,17 @@ class Campari(BaseCommand):
             print(f"Campari: Stats saved to {json_path}")
 
     def validate_mm_parameters(self):
+        """
+        Validate the input parameters of the command.
+        """
 
         if "/" in self.mm_args["ImagePattern"]:
             raise ValueError("ImagePattern cannot contain '/'. Use a pattern like '*.tif' instead.")
 
     def validate_required_files(self):
+        """
+        Validate the required files of the command.
+        """
 
         # check all tif files in images-subfolder and copy them to the project folder if not already there
         homol_files = glob.glob(self.project_folder + "/images/*.tif")

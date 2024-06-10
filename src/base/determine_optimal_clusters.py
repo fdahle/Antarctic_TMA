@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def determine_optimal_clusters(tps, max_k=50, top_n_changes=3):
     distortions = []
     sil_scores = []

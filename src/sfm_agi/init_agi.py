@@ -1,12 +1,21 @@
 import os
 
 import Metashape
+
 PATH_PROJECT_FOLDERS = "/data_1/ATM/data_1/sfm/agi_projects"
 project_name = "test"
 
+
 def init_agi(project_name, images,
-             camera_positions={}, camera_accuracies={},
-             focal_lengths={}):
+             camera_positions=None, camera_accuracies=None,
+             focal_lengths=None):
+    # set default values for mutable arguments
+    if camera_positions is None:
+        camera_positions = {}
+    if camera_accuracies is None:
+        camera_accuracies = {}
+    if focal_lengths is None:
+        focal_lengths = {}
 
     # create path to the project
     project_fld = os.path.join(PATH_PROJECT_FOLDERS, project_name)
@@ -15,13 +24,13 @@ def init_agi(project_name, images,
     if not os.path.exists(project_fld):
         os.makedirs(project_fld)
 
-    project_file_path = project_fld + "/" +  project_name + ".psx"
+    project_file_path = project_fld + "/" + project_name + ".psx"
 
     # create a new metashape project
     doc = Metashape.Document()
 
     # save the project
-    #doc.save(project_file_path)
+    # doc.save(project_file_path)
 
     # add a chunk
     chunk = doc.addChunk()
@@ -87,11 +96,11 @@ def init_agi(project_name, images,
     # build ortho-mosaic
     chunk.buildOrthomosaic(surface_data=Metashape.ModelData, blending_mode=Metashape.MosaicBlending)
 
-    #export_path = os.path.join(PATH_PROJECT_FOLDER, project_name + ".las")
-    #chunk.exportPointCloud(path=export_path)
+    # export_path = os.path.join(PATH_PROJECT_FOLDER, project_name + ".las")
+    # chunk.exportPointCloud(path=export_path)
+
 
 def _save_tps(chunk):
-
     import numpy as np
     import src.display.display_images as di
     import src.load.load_image as li
@@ -139,11 +148,10 @@ def _save_tps(chunk):
 
 
 if __name__ == "__main__":
-
     image_ids = ["CA196532V0010", "CA196532V0011", "CA196532V0012",
-              "CA196532V0013", "CA196532V0014", "CA196532V0015",
-              "CA196532V0016", "CA196532V0017", "CA196532V0018",
-              "CA196532V0019", "CA196532V0020"]
+                 "CA196532V0013", "CA196532V0014", "CA196532V0015",
+                 "CA196532V0016", "CA196532V0017", "CA196532V0018",
+                 "CA196532V0019", "CA196532V0020"]
 
     # get only the first 3 images
     image_ids = image_ids[:3]
@@ -159,12 +167,12 @@ if __name__ == "__main__":
 
     # create conn to the database
     import src.base.connect_to_database as ctd
+
     conn = ctd.establish_connection()
 
     # create a dict with the focal lengths
     sql_string = f"SELECT image_id, focal_length FROM images_extracted WHERE image_id in {image_ids_string}"
     focal_length_data = ctd.execute_sql(sql_string, conn)
     focal_length_dict = focal_length_data.set_index('image_id')['focal_length'].to_dict()
-
 
     init_agi(project_name, images, focal_lengths=focal_length_dict)

@@ -1,3 +1,5 @@
+"""Export a point cloud as a ply file."""
+
 import os.path
 
 import numpy as np

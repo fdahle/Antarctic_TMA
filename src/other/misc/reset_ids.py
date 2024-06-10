@@ -32,7 +32,7 @@ def reset_ids(ids):
 
     # create ids string
     # Ensure each ID is quoted
-    ids_formatted = ', '.join([f"'{id}'" for id in ids])
+    ids_formatted = ', '.join([f"'{image_id}'" for image_id in ids])
 
     # create final sql string
     sql_string = f"UPDATE {table} SET {column_string} " \
@@ -44,11 +44,3 @@ def reset_ids(ids):
     conn = ctd.establish_connection()
 
     ctd.execute_sql(sql_string, conn)
-
-
-if __name__ == "__main__":
-    # get the ids
-    with open('/data_1/ATM/rotation_ids.txt', 'r') as file:
-        ids = [line.strip() for line in file]
-
-    reset_ids(ids)

@@ -1,10 +1,13 @@
+"""Compresses all TIFF files in a given directory"""
+
+# Package imports
 import os
 import warnings
-
 from PIL import Image, TiffTags
 from tqdm import tqdm
 from typing import NoReturn
 
+# Constants
 INPUT_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 METHOD = "lzw"
 QUALITY = 100

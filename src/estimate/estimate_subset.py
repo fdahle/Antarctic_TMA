@@ -1,3 +1,5 @@
+"""Estimates the subset values for a given image"""
+
 # Package imports
 import copy
 import pandas as pd

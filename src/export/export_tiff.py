@@ -1,3 +1,5 @@
+"""Exports a given image to a TIFF file"""
+
 import cv2
 import os
 import numpy as np
@@ -5,12 +7,15 @@ import numpy as np
 
 def export_tiff(img: np.ndarray, output_path: str, overwrite: bool = False) -> None:
     """
-    Exports a given image to a TIFF file.
+    Exports a given image to a TIFF file by using OpenCV's imwrite function. If the file already
+    exists, the function raises a FileExistsError unless the overwrite parameter is set to True.
 
     Args:
         img (np.ndarray): The image to export.
         output_path (str): The file path where the image should be saved.
         overwrite (bool, optional): If True, allows overwriting an existing file. Defaults to False.
+    Returns:
+        None
     """
 
     # Check if file exists and raise error if overwrite is False

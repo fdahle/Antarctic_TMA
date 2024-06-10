@@ -1,3 +1,5 @@
+"""Calculates the complexity of an image"""
+
 # Package imports
 import copy
 import numpy as np

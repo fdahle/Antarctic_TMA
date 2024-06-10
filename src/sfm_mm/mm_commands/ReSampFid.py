@@ -1,3 +1,6 @@
+"""Python module for ReSampFid Micmac."""
+
+
 # Package imports
 import glob
 import json
@@ -40,6 +43,9 @@ class ReSampFid(BaseCommand):
         self.validate_mm_parameters()
 
     def before_execution(self):
+        """
+        This function is called before the execution of the command.
+        """
 
         if self.debug:
             print("ResampFid: copy images")
@@ -66,6 +72,9 @@ class ReSampFid(BaseCommand):
                                     self.project_folder + f"/Ori-InterneScan/MeasuresIm-mask_{filename}.xml")
 
     def after_execution(self):
+        """
+        This function is called after the execution of the command.
+        """
 
         if self.debug:
             print("ResampFid: remove temporary images")
@@ -93,6 +102,9 @@ class ReSampFid(BaseCommand):
                                 self.project_folder + "/masks/OIS-Reech_" + filename)
 
     def build_shell_dict(self):
+        """
+        This function builds the shell command.
+        """
 
         shell_dict = {}
 
@@ -132,6 +144,14 @@ class ReSampFid(BaseCommand):
         return shell_dict
 
     def extract_stats(self, name, raw_output):
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
 
         # Initialize statistics dictionary
         stats = {
@@ -182,6 +202,9 @@ class ReSampFid(BaseCommand):
             print(f"ReSampFid: Stats saved to {json_path}")
 
     def validate_mm_parameters(self):
+        """
+        Validate the input parameters of the command.
+        """
 
         if self.debug:
             print("ReSampFid: Validate mm parameters", end='')
@@ -202,6 +225,9 @@ class ReSampFid(BaseCommand):
             print("\rReSampFid: Validate mm parameters - finished")
 
     def validate_required_files(self):
+        """
+        Validate the required files of the command.
+        """
 
         if self.debug:
             print("ReSampFid: Validate required files", end='')

@@ -1,3 +1,5 @@
+"""Modify csv files by adding, deleting, or checking for image_ids and associated data."""
+
 # Package imports
 import csv
 import os

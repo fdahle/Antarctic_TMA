@@ -1,13 +1,14 @@
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as Et
 
 path = "/data_1/ATM/data_1/sfm/projects/EGU2/Measures.xml"
 
 PT_VAL = 0
 INCERTITUDE_VAL = 200
 
+
 def three_dfy_xml(xml_path, pt_val, inc_val):
     # Load the XML file
-    tree = ET.parse(xml_path)
+    tree = Et.parse(xml_path)
     root = tree.getroot()
 
     # Iterate over each OneAppuisDAF element
@@ -26,6 +27,6 @@ def three_dfy_xml(xml_path, pt_val, inc_val):
     new_path = xml_path.replace('.xml', '_3d.xml')
     tree.write(new_path, encoding='utf-8', xml_declaration=True)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     three_dfy_xml(path, PT_VAL, INCERTITUDE_VAL)

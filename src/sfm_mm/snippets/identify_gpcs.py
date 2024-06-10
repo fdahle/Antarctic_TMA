@@ -23,6 +23,10 @@ def identify_gcps(image_ids, images, transforms, masks=None,
         image_ids (List[str]): A list of image IDs.
         images (List[np.ndarray]): A list of images in numpy array format.
         transforms (List[np.ndarray]): A list of transformation matrices corresponding to each image.
+        masks (Optional[List[np.ndarray]]): A list of masks for each image. Masks should be the same size as the
+            corresponding image and should contain 0s for points to be ignored.
+        debug (bool): A flag to enable debug print statements.
+        save_folder (Optional[str]): A folder to save debug images to.
     Returns:
         Dict[Tuple[float, float], Dict[str, List]]: A dictionary where keys are tuples of averaged absolute coordinates
         of identified GCPs, and values are dictionaries containing image IDs, relative positions, the average absolute

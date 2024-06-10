@@ -1,25 +1,26 @@
-import copy
+"""Georeference an image with a neighbouring geo-referenced image"""
 
+# Package imports
+import copy
 import cv2
 import numpy as np
-
 from rasterio.transform import Affine
 from typing import Optional, Tuple
 
-# import base functions
+# Custom imports
 import src.base.enhance_image as eh
 import src.base.find_tie_points as ftp
-
-# import display functions
 import src.display.display_images as di
-
-# import georef snippet functions
 import src.georef.snippets.calc_transform as ct
 
+# Debug settings
 debug_display_steps = False
 
 
 class GeorefImage:
+    """
+    Class for geo-referencing an image with neighbouring geo-referenced images.
+    """
 
     def __init__(self, enhance_image: bool = True, enhance_georef_images: bool = True,
                  transform_method: str = "rasterio", transform_order: int = 3,

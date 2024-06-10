@@ -1,3 +1,5 @@
+"""Python module for Nuage2Ply in Micmac."""
+
 # Package Imports
 import glob
 import os
@@ -31,6 +33,9 @@ class Nuage2Ply(BaseCommand):
         self.validate_mm_parameters()
 
     def before_execution(self):
+        """
+        This function is called before the execution of the command.
+        """
 
         if self.mm_args["XmlFile"] == "<AUTO>":
 
@@ -47,10 +52,16 @@ class Nuage2Ply(BaseCommand):
                 raise FileNotFoundError("No XML file found")
 
     def after_execution(self):
+        """
+        This function is called after the execution of the command.
+        """
         # nothing needs to be done after the execution
         pass
 
     def build_shell_dict(self):
+        """
+        This function builds the shell command.
+        """
 
         shell_dict = {}
 
@@ -71,10 +82,27 @@ class Nuage2Ply(BaseCommand):
         return shell_dict
 
     def extract_stats(self, name, raw_output):
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
+
         pass
 
     def validate_mm_parameters(self):
+        """
+        Validate the input parameters of the command.
+        """
+
         pass
 
     def validate_required_files(self):
+        """
+        Validate the required files of the command.
+        """
+
         pass

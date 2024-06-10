@@ -1,10 +1,26 @@
+"""rotate an image based on the position of a sidebar"""
+
 # Package imports
 import cv2 as cv2
 import numpy as np
 import mahotas as mht
 
 
-def correct_image_orientation(image, image_path):
+def correct_image_orientation(image: np.ndarray, image_path: str) -> bool:
+    """
+    This function determines whether an image needs to be rotated 180 degrees to correct
+    its orientation. A correctly rotated image has the sidebar on the left.
+    The decision is based on the comparison of homogeneity between the left and right sides of the
+    image, as the sidebar has a lower homogeneity. If rotation is required,
+    the image is rotated and saved back to the specified path.
+
+    Args:
+        image (np.ndarray): The image to check and possibly rotate.
+        image_path (str): Path where the rotated image should be saved.
+
+    Returns:
+        bool: True if the image was rotated, False otherwise.
+    """
 
     # first check if we need to rotate the image
     rotation_required = _check_sidebar(image)
@@ -20,7 +36,20 @@ def correct_image_orientation(image, image_path):
     return rotation_required
 
 
-def _check_sidebar(image, subset_width=300):
+def _check_sidebar(image: np.ndarray, subset_width: int = 300) -> bool:
+    """
+    This function extracts left and right subsets of the image, blurs and thresholds them to binary,
+    and computes their texture homogeneity using the Haralick texture feature. The image is considered
+    for rotation if the right sidebar is significantly more homogeneous than the left.
+
+    Args:
+        image (np.ndarray): The image to analyze.
+        subset_width (int, optional): Width of the sidebars to analyze. Defaults to 300.
+
+    Returns:
+        bool: True if the right sidebar is more homogeneous and significantly different, indicating rotation is needed.
+    """
+
     # by default no rotation
     must_rotate = False
 

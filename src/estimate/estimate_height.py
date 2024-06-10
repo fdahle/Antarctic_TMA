@@ -43,17 +43,14 @@ def estimate_height(image_id: str,
     if height_data is None:
 
         # get the properties of this image
-        sql_string = f"SELECT tma_number, view_direction, cam_id FROM images WHERE image_id='{image_id}'"
+        sql_string = f"SELECT tma_number FROM images WHERE image_id='{image_id}'"
         data_img_props = ctd.execute_sql(sql_string, conn)
 
         # get the attribute values for this image
         tma_number = data_img_props["tma_number"].iloc[0]
-        view_direction = data_img_props["view_direction"].iloc[0]
-        cam_id = data_img_props["cam_id"].iloc[0]
 
         # get the images with the same properties
-        sql_string = f"SELECT image_id FROM images WHERE tma_number={tma_number} AND " \
-                     f"view_direction='{view_direction}' AND cam_id={cam_id}"
+        sql_string = f"SELECT image_id FROM images WHERE tma_number={tma_number}"
         data_ids = ctd.execute_sql(sql_string, conn)
 
         # convert to list and flatten

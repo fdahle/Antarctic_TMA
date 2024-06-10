@@ -1,7 +1,9 @@
 # Package imports
 import numpy as np
+import psycopg2.extensions
 from math import atan2, degrees
 from shapely import wkt
+from typing import Optional
 
 # Custom imports
 import src.base.connect_to_database as ctd
@@ -11,7 +13,26 @@ import src.display.display_shapes as ds
 debug_show_points = False
 
 
-def calc_azimuth(image_id, conn=None):
+def calc_azimuth(image_id: str, conn: Optional[psycopg2.extensions.connection] = None) -> Optional[float]:
+    """
+    Calculates the azimuth of an image based on its flight path relative to north.
+
+    This function calculates the azimuth of the image flight line by fitting a linear model to
+    the geographic positions (extracted from a database) of all images with the same flight path identifier.
+    Azimuth is measured in degrees from the north, clockwise.
+
+    Args:
+        image_id (str): The unique identifier for the image, used to determine the flight path and extract
+            relevant positions.
+        conn (Optional[psycopg2.extensions.connection]): An existing database connection. If none is provided, the
+            function establishes a new connection.
+
+    Returns:
+        Optional[float]: The azimuth in degrees as a float, or None if the image_id is not found in the database.
+
+    Raises:
+        psycopg2.DatabaseError: If an error occurs in database connection or execution.
+    """
     # establish connection to psql
     if conn is None:
         conn = ctd.establish_connection()

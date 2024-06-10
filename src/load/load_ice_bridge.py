@@ -3,10 +3,13 @@ import base64
 import json
 import os
 import netrc
-from getpass import getpass
 from urllib.parse import urlparse, urlencode
 from urllib.request import urlopen, Request, build_opener, HTTPCookieProcessor
 
+# Custom imports
+import src.base.load_credentials as lc
+
+# Constants
 CMR_URL = 'https://cmr.earthdata.nasa.gov'
 URS_URL = 'https://urs.earthdata.nasa.gov'
 CMR_PAGE_SIZE = 2000
@@ -27,8 +30,7 @@ def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',
         except Exception:
             #username = input('Earthdata username: ')
             #password = getpass('Earthdata password: ')
-            username = 'FDahle'
-            password = 'Yypbgb5wCQ$gBwUx'
+            username, password = lc.load_credentials('earthdata')
             return base64.b64encode(f'{username}:{password}'.encode('ascii')).decode('ascii')
 
     def build_query_url():

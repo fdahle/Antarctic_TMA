@@ -7,6 +7,7 @@ import src.estimate.estimate_height as eh
 
 
 def estimate_heights():
+    """"""
 
     # establish connection to psql
     conn = ctd.establish_connection()
@@ -30,12 +31,14 @@ def estimate_heights():
         # get the image id
         image_id = row['image_id']
 
+        # update the progress bar
         pbar.set_postfix_str(f"Estimate height for {image_id} "
                              f"({updated_entries} already updated)")
 
         # estimate the height
         estimated_height = eh.estimate_height(image_id, conn)
 
+        # skip if the height could not be estimated
         if estimated_height is None:
             continue
 
@@ -44,9 +47,9 @@ def estimate_heights():
                      f"height={estimated_height}, " \
                      f"height_estimated=TRUE " \
                      f"WHERE image_id='{image_id}'"
-
         ctd.execute_sql(sql_string, conn)
 
+        # increase the counter
         updated_entries += 1
 
 

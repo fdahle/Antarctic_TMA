@@ -1,5 +1,6 @@
 import sys
 
+
 class CustomPrint:
     COLORS = {
         "HEADER": '\033[95m',

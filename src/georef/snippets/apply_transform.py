@@ -3,12 +3,10 @@ import copy
 import numpy as np
 import rasterio
 
-def apply_transform(image, transform, save_path, epsg_code=3031):
 
+def apply_transform(image, transform, save_path, epsg_code=3031):
     # copy transform to avoid changing the original
     transform = copy.deepcopy(transform)
-
-
 
     if type(transform) == np.ndarray:
 
@@ -34,5 +32,5 @@ def apply_transform(image, transform, save_path, epsg_code=3031):
                        count=1, dtype=image.dtype,
                        crs=crs, transform=r_transform,
                        nodata=0
-    ) as dst:
+                       ) as dst:
         dst.write(image, 1)

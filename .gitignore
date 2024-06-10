@@ -1,6 +1,9 @@
 # data
 /data
 
+# credentials
+credentials.json
+
 # environment
 .conda/
 

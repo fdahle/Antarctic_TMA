@@ -185,7 +185,6 @@ class GeorefCalc:
         if print_debug:
             print("Position index:", position_index)
 
-
         # calculate the reference point and the next point
         if position_index == 0:
             next_point = georeferenced_centers_sorted[1]

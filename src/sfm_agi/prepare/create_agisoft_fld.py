@@ -12,8 +12,8 @@ import src.load.load_image as li
 PATH_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 PATH_AGISOFT_FLD = "/home/fdahle/SFTP/staff-umbrella/ATM/agisoft"
 
-def create_agisoft_fld(image_ids, project_name=None):
 
+def create_agisoft_fld(image_ids, project_name=None):
     # check if the base folder exists
     if not os.path.exists(PATH_AGISOFT_FLD):
         raise FileNotFoundError(f"Folder {PATH_AGISOFT_FLD} does not exist (Is the server mounted?)")
@@ -111,15 +111,3 @@ def create_agisoft_fld(image_ids, project_name=None):
 
     # save camera positions
     data[["image_id", "x", "y", "height"]].to_csv(os.path.join(project_folder, "cameras.csv"), index=False)
-
-
-
-
-
-
-
-
-
-
-
-

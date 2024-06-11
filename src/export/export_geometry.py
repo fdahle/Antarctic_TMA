@@ -1,11 +1,12 @@
+"""export shapely geometry to file"""
+
+# Package imports
 import os
-import pandas as pd
-
-from typing import Union, Optional
-
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import shape
 from shapely.wkt import loads
+from typing import Union, Optional
 
 
 def export_geometry(geometry: Union[str, shape],

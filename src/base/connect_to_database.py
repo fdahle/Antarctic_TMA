@@ -1,7 +1,9 @@
+"""manages connection to the database"""
+
+# Package imports
 import pandas as pd
 import psycopg2
 import warnings
-
 from datetime import datetime
 from psycopg2 import extensions
 from typing import Optional
@@ -16,6 +18,11 @@ PSQL_DATABASE = "antarctica2"
 
 
 def establish_connection():
+    """
+    Establishes a connection to the PostgreSQL database using the global constants.
+    Returns:
+        psycopg2.extensions.connection: The connection object.
+    """
     return psycopg2.connect(
         database=PSQL_DATABASE,
         user=PSQL_USER,

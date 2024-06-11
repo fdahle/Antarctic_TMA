@@ -3,7 +3,6 @@ import os
 import Metashape
 
 PATH_PROJECT_FOLDERS = "/data_1/ATM/data_1/sfm/agi_projects"
-project_name = "test"
 
 
 def init_agi(project_name, images,
@@ -145,34 +144,3 @@ def _save_tps(chunk):
         image2 = li.load_image(image2_path)
         print(f"Tie points between {camera1_label} and {camera2_label}:")
         di.display_images([image1, image2], tie_points=points)
-
-
-if __name__ == "__main__":
-    image_ids = ["CA196532V0010", "CA196532V0011", "CA196532V0012",
-                 "CA196532V0013", "CA196532V0014", "CA196532V0015",
-                 "CA196532V0016", "CA196532V0017", "CA196532V0018",
-                 "CA196532V0019", "CA196532V0020"]
-
-    # get only the first 3 images
-    image_ids = image_ids[:3]
-
-    path_image_folder = "/data_1/ATM/data_1/aerial/TMA/downloaded"
-
-    # create lst with absolute paths
-    images = [os.path.join(path_image_folder, image + ".tif") for image in image_ids]
-
-    # create sql list string for image_ids
-    image_ids_string = "','".join(image_ids)
-    image_ids_string = "('" + image_ids_string + "')"
-
-    # create conn to the database
-    import src.base.connect_to_database as ctd
-
-    conn = ctd.establish_connection()
-
-    # create a dict with the focal lengths
-    sql_string = f"SELECT image_id, focal_length FROM images_extracted WHERE image_id in {image_ids_string}"
-    focal_length_data = ctd.execute_sql(sql_string, conn)
-    focal_length_dict = focal_length_data.set_index('image_id')['focal_length'].to_dict()
-
-    init_agi(project_name, images, focal_lengths=focal_length_dict)

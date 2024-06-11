@@ -1,3 +1,5 @@
+"""load satellite images"""
+
 # Package imports
 import os
 import numpy as np
@@ -6,9 +8,9 @@ import rasterio.mask
 import rasterio.merge
 import shapely
 from rasterio import Affine
-
 from typing import Optional, Tuple
 
+# Constants
 DEFAULT_SAT_FLD = "/data_1/ATM/data_1/satellite"
 
 

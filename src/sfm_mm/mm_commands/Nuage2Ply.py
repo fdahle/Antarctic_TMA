@@ -3,6 +3,7 @@
 # Package Imports
 import glob
 import os
+from typing import Any
 
 # Custom imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
@@ -21,7 +22,7 @@ class Nuage2Ply(BaseCommand):
                     "SeuilMask", "Dyn", "DoPly", "DoXYZ", "Normale", "NormByC", "ExagZ",
                     "RatioAttrCarte", "Mesh", "64B", "Offs", "NeighMask", "ForceRGB"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Initialize the base class
         super().__init__(*args, **kwargs)
 
@@ -32,7 +33,7 @@ class Nuage2Ply(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
         """
         This function is called before the execution of the command.
         """
@@ -51,16 +52,18 @@ class Nuage2Ply(BaseCommand):
             else:
                 raise FileNotFoundError("No XML file found")
 
-    def after_execution(self):
+    def after_execution(self) -> None:
         """
         This function is called after the execution of the command.
         """
         # nothing needs to be done after the execution
         pass
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
         """
         This function builds the shell command.
+        Returns:
+            dict[str, str]: Dictionary containing the command name and the command string.
         """
 
         shell_dict = {}
@@ -81,7 +84,7 @@ class Nuage2Ply(BaseCommand):
 
         return shell_dict
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
         """
         Extract statistics from the raw output of the command and save them to a JSON file.
         Args:
@@ -93,16 +96,18 @@ class Nuage2Ply(BaseCommand):
 
         pass
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
         """
         Validate the input parameters of the command.
         """
 
+        # TODO
         pass
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
         """
         Validate the required files of the command.
         """
 
+        # TODO
         pass

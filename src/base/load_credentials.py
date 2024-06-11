@@ -1,5 +1,9 @@
+"""load credentials from file"""
+
+# Package imports
 import json
 
+# Constants
 PATH_CREDENTIALS = '../../credentials.json'
 
 

@@ -1,7 +1,9 @@
+"""Enhance contrast an image"""
+
+# Package imports
 import copy
 import numpy as np
 import warnings
-
 from scipy import ndimage
 from skimage import exposure
 from typing import Optional, Tuple

@@ -1,3 +1,5 @@
+"""Python module for Malt in Micmac."""
+
 # Package imports
 import glob
 import json
@@ -40,10 +42,17 @@ class Malt(BaseCommand):
         self.validate_mm_parameters()
 
     def before_execution(self):
+        """
+        This function is called before the execution of the command.
+        """
+
         # nothing needs to be done before the execution
         pass
 
     def after_execution(self):
+        """
+        This function is called after the execution of the command.
+        """
 
         # define the folders
         input_fld = os.path.join(self.project_folder, "MEC-Malt")
@@ -83,6 +92,9 @@ class Malt(BaseCommand):
             print(f"Malt: Output exported to {output_fld}")
 
     def build_shell_dict(self):
+        """
+        This function builds the shell command.
+        """
 
         shell_dict = {}
 
@@ -111,6 +123,14 @@ class Malt(BaseCommand):
         return shell_dict
 
     def extract_stats(self, name, raw_output):
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
 
         # Initialize statistics dictionary
         stats = {
@@ -187,9 +207,18 @@ class Malt(BaseCommand):
             print(f"Malt: Stats saved to {json_path}")
 
     def validate_mm_parameters(self):
+        """
+        Validate the input parameters of the command.
+        """
 
         if "/" in self.mm_args["ImagePattern"]:
             raise ValueError("ImagePattern cannot contain '/'. Use a pattern like '*.tif' instead.")
 
     def validate_required_files(self):
+        """
+        Validate the required files of the command.
+        """
+
+        # TODO
+
         pass

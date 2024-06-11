@@ -1,3 +1,5 @@
+"""Estimate the cam id"""
+
 # Package imports
 import copy
 import pandas as pd

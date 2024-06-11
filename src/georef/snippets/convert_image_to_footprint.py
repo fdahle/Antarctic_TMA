@@ -1,7 +1,7 @@
-import numpy as np
-import rasterio.features
-import shapely.ops
+"""convert raster image to polygon footprint"""
 
+# Package imports
+import numpy as np
 from numpy import ndarray
 from rasterio.transform import Affine
 from shapely.geometry import Polygon

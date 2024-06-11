@@ -1,5 +1,9 @@
+"""remove border from images and masks for MicMac"""
+
+# Package imports
 import glob
 
+# Custom imports
 import src.export.export_tiff as et
 import src.load.load_image as li
 

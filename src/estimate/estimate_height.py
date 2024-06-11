@@ -1,3 +1,5 @@
+"""Estimate the height"""
+
 # Package imports
 import copy
 import pandas as pd

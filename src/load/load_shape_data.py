@@ -1,5 +1,10 @@
+"""load shape data from shapefiles"""
+
+# Package imports
 import geopandas as gpd
 import os
+
+# Set the PROJ_LIB environment variable to the path of the proj folder
 os.environ['PROJ_LIB'] = '/home/fdahle/miniconda3/envs/conda_antarctic/share/proj'
 
 

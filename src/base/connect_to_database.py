@@ -1,6 +1,6 @@
 """manages connection to the database"""
 
-# Package imports
+# Library imports
 import pandas as pd
 import psycopg2
 import warnings
@@ -17,7 +17,7 @@ PSQL_USER = "admin"
 PSQL_DATABASE = "antarctica2"
 
 
-def establish_connection():
+def establish_connection() -> object:
     """
     Establishes a connection to the PostgreSQL database using the global constants.
     Returns:

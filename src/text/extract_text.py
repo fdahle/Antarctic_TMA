@@ -1,4 +1,6 @@
-# Package imports
+"""Extract text from an image with OCR"""
+
+# Library imports
 import copy
 import cv2 as cv2
 import numpy as np

@@ -1,6 +1,6 @@
 """Extracts a height from the text"""
 
-# Package imports
+# Library imports
 import re
 from typing import Optional
 

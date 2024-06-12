@@ -1,6 +1,6 @@
 """Python module for Campari in Micmac."""
 
-# Package imports
+# Library imports
 import os
 import glob
 import json
@@ -8,7 +8,7 @@ import re
 import shutil
 from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
@@ -22,6 +22,7 @@ class Campari(BaseCommand):
                     "DetGCP", "Visc", "ExpTxt", "ImMinMax", "DegAdd", "DegFree", "DRMax", "PoseFigee"]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+
         # Initialize the base class
         super().__init__(*args, **kwargs)
 

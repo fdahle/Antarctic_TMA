@@ -1,18 +1,24 @@
+"""georeference images by calculating the footprint"""
+
+# Library imports
 import numpy as np
 import shapely
-
 from shapely.affinity import translate
 from shapely.geometry import Point, Polygon
 from typing import Optional, Tuple
 
-# import georef snippet functions
+# Local imports
 import src.georef.snippets.calc_transform as ct
 
+# debug plots
 debug_display_image_footprint = False
 print_debug = False
 
 
 class GeorefCalc:
+    """
+    A class for geo-referencing historical images by calculating their footprints.
+    """
 
     def __init__(self, min_nr_of_images: int = 3, max_range: int = 4,
                  transform_method: str = "rasterio", transform_order: str = 3):

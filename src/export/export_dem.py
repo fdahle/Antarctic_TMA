@@ -1,6 +1,6 @@
 """Create a DEM from a point cloud and export it as a GeoTIFF file"""
 
-# Package imports
+# Library imports
 import numpy as np
 import rasterio
 from rasterio.transform import from_origin

@@ -1,6 +1,6 @@
 """load credentials from file"""
 
-# Package imports
+# Library imports
 import json
 
 # Constants

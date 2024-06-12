@@ -1,13 +1,13 @@
 """Estimates the focal length for a given image"""
 
-# Package imports
+# Library imports
 import copy
 import pandas as pd
 import psycopg2
 from psycopg2 import extensions
 from typing import Optional, Union
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 
 # Constants

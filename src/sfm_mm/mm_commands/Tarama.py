@@ -1,10 +1,11 @@
 """Python module for Tarama in Micmac."""
 
-# Package imports
+# Library imports
 import re
 import json
+from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
@@ -17,7 +18,7 @@ class Tarama(BaseCommand):
     allowed_args = ["ImagePattern", "Orientation", "Zoom", "Repere", "Out", "ZMoy", "KNadir",
                     "IncMax", "UnUseAXC"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Initialize the base class
         super().__init__(*args, **kwargs)
 
@@ -31,7 +32,7 @@ class Tarama(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
         """
         This function is called before the execution of the command.
         """
@@ -39,7 +40,7 @@ class Tarama(BaseCommand):
         # nothing needs to be done before the execution
         pass
 
-    def after_execution(self):
+    def after_execution(self) -> None:
         """
         This function is called after the execution of the command.
         """
@@ -47,9 +48,11 @@ class Tarama(BaseCommand):
         # nothing needs to be done after the execution
         pass
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
         """
         This function builds the shell command.
+        Returns:
+            dict[str, str]: Dictionary containing the command name and the command string.
         """
 
         shell_dict = {}
@@ -70,7 +73,7 @@ class Tarama(BaseCommand):
 
         return shell_dict
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
         """
         Extract statistics from the raw output of the command and save them to a JSON file.
         Args:
@@ -111,7 +114,7 @@ class Tarama(BaseCommand):
         if self.debug:
             print(f"Tarama: Stats saved to {json_path}")
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
         """
         Validate the input parameters of the command.
         """
@@ -119,7 +122,7 @@ class Tarama(BaseCommand):
         if "/" in self.mm_args["ImagePattern"]:
             raise ValueError("ImagePattern cannot contain '/'. Use a pattern like '*.tif' instead.")
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
         """
         Validate the required files of the command.
         """

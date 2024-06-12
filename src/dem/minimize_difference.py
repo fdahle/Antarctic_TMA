@@ -1,8 +1,11 @@
+"""Minimize the difference between two DEMs"""
+
+# Library imports
 import numpy as np
 from scipy.optimize import minimize
 
 
-def minimize_difference(reference_dem, other_dem):
+def minimize_difference(reference_dem: np.ndarray, other_dem: np.ndarray) -> tuple[np.ndarray, float]:
     """
     Adjust the SfM DEM by a constant value to minimize the difference with the reference DEM.
 
@@ -19,9 +22,16 @@ def minimize_difference(reference_dem, other_dem):
     reference_dem = np.nan_to_num(reference_dem)
     other_dem = np.nan_to_num(other_dem)
 
-    def mse_difference(c):
+    def mse_difference(c: float) -> float:
+        """
+        Calculate the mean squared error between the adjusted SfM DEM and the reference DEM.
 
-        """Calculate the mean squared error between the adjusted SfM DEM and the reference DEM."""
+        Args:
+            c (float): The constant value to add to the other DEM.
+
+        Returns:
+            float: The mean squared error between the adjusted SfM DEM and the reference DEM.
+        """
         _adjusted_dem = other_dem + c
 
         # Create a mask to identify valid (non-NaN) values in both DEMs

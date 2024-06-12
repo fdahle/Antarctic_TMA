@@ -1,13 +1,13 @@
 """Calculates the azimuth of an image based on its flight path relative to north."""
 
-# Package imports
+# Library imports
 import numpy as np
 import psycopg2.extensions
 from math import atan2, degrees
 from shapely import wkt
 from typing import Optional
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.display.display_shapes as ds
 

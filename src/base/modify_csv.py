@@ -1,6 +1,6 @@
 """Modify csv files by adding, deleting, or checking for image_ids and associated data."""
 
-# Package imports
+# Library imports
 import csv
 import os
 import tempfile

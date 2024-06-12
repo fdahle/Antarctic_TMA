@@ -1,4 +1,4 @@
-# Package imports
+# Library imports
 import hashlib
 import numpy as np
 import os

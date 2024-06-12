@@ -29,7 +29,7 @@ def georef_dem(dem_unref, transform_unref):
     # di.display_images([dem_unref, dem_cleaned], image_types=['dem', 'dem'])
 
     # get polygon for the unref_dem
-    poly_unref = citf.convert_image_to_footprint(dem_cleaned, transform_unref, no_data_value=-99999.0)
+    poly_unref = citf.convert_image_to_footprint(dem_cleaned, transform_unref, no_data_value=-99999)
 
     # make the polygon larger
     poly_large = poly_unref.buffer(buffer_val, join_style='mitre')
@@ -139,8 +139,8 @@ def _clean_dem(dem):
 
     return dem_cleaned
 
-    print("INTERPOLATE")
 
+def _interpolate_dem(dem):
     # Perform interpolation
     dem_interpolated = np.copy(dem)
     dem_interpolated[invalid_mask] = griddata(

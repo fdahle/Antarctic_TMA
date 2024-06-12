@@ -1,12 +1,15 @@
-# Package imports
+"""extract an altimeter from an image"""
+
+# Library imports
 import copy
 import cv2
 import dlib
 import numpy as np
 import math
 from shapely.geometry import LineString
+from typing import Optional, Union
 
-# Custom imports
+# Local imports
 import src.display.display_images as di
 import src.text.altimeter_snippets as snippets
 
@@ -32,7 +35,21 @@ debug_show_special_lines = False  # show parallel & tip lines
 debug_show_pointer = False
 
 
-def extract_altimeter(image, return_position=False):
+def extract_altimeter(image: np.ndarray,
+                      return_position: bool = False) -> \
+        Optional[Union[int, tuple[Optional[int], Optional[list[int]]]]]:
+    """
+    Extracts the altimeter reading from an image.
+
+    Args:
+        image (np.ndarray): The input image containing the altimeter.
+        return_position (bool, optional): Whether to return the position of the detected altimeter. Defaults to False.
+
+    Returns:
+        Optional[Union[int, tuple[Optional[int], Optional[list[int]]]]]: The height reading from the altimeter,
+        or None if no altimeter is detected. If return_position is True, returns a tuple containing the height and the
+        bounding box of the detected altimeter.
+    """
     if debug_print:
         print("Estimate altimeter for image")
 
@@ -158,7 +175,17 @@ def extract_altimeter(image, return_position=False):
     return height if not return_position else (height, bounding_box)
 
 
-def _detect_altimeter(image: np.ndarray):
+def _detect_altimeter(image: np.ndarray) -> tuple[Optional[np.ndarray], Optional[list[int]]]:
+    """
+    Detects the altimeter within the image using dlib.
+
+    Args:
+        image (np.ndarray): The input image.
+
+    Returns:
+        tuple[Optional[np.ndarray], Optional[list[int]]]: The detected altimeter image and its bounding box,
+        or (None, None) if no altimeter is detected.
+    """
     # load the object detector for altimeter detection
     detector = dlib.simple_object_detector(PATH_ALTIMETER_DETECTOR)
 
@@ -193,7 +220,17 @@ def _detect_altimeter(image: np.ndarray):
     return altimeter, bounding_box
 
 
-def _locate_circle(altimeter: np.ndarray):
+def _locate_circle(altimeter: np.ndarray) -> tuple[Optional[tuple[int, int, int]], Optional[int]]:
+    """
+    Locates the circle in the altimeter image by finding the position of the numbers 3, 5, 8
+
+    Args:
+        altimeter (np.ndarray): The altimeter image.
+
+    Returns:
+        tuple[Optional[tuple[int, int, int]], Optional[int]]: The circle's center coordinates and radius,
+        or (None, None) if no circle is located.
+    """
     # load already the templates for 3, 5, 8
     template_3 = cv2.imread(PATH_TEMPLATES + '/3.jpg', 0)
     template_5 = cv2.imread(PATH_TEMPLATES + '/5.jpg', 0)
@@ -260,7 +297,17 @@ def _locate_circle(altimeter: np.ndarray):
     return None, None
 
 
-def _find_lines(altimeter: np.ndarray):
+def _find_lines(altimeter: np.ndarray) -> Optional[list[tuple[int, int, int, int]]]:
+    """
+    Finds lines in the altimeter image.
+
+    Args:
+        altimeter (np.ndarray): The altimeter image.
+
+    Returns:
+        Optional[list[tuple[int, int, int, int]]]: A list of detected lines, where each line
+            is represented by its endpoints [x1, y1, x2, y2], or None if no lines are found.
+    """
     # get the edge of the binary image using Canny
     edges = cv2.Canny(image=altimeter, threshold1=100, threshold2=200, apertureSize=5)
 
@@ -288,7 +335,20 @@ def _find_lines(altimeter: np.ndarray):
     return lines_list
 
 
-def _get_center_lines(circle, lines):
+def _get_center_lines(circle: tuple[int, int, int],
+                      lines: list[tuple[int, int, int, int]]) -> \
+        tuple[list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]:
+    """
+    Separates the detected lines into center and non-center lines.
+
+    Args:
+        circle (tuple[int, int, int]): The circle's center coordinates and radius.
+        lines (list[tuple[int, int, int, int]]): A list of detected lines.
+
+    Returns:
+        tuple[list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]: Two lists
+            containing the center lines and non-center lines, respectively.
+    """
     # get center of circle
     x_circle = circle[0]
     y_circle = circle[1]
@@ -320,7 +380,22 @@ def _get_center_lines(circle, lines):
     return lines_center, lines_non_center
 
 
-def _select_lines(selected_lines_center, selected_lines_non_center, circle):
+def _select_lines(selected_lines_center: list[tuple[int, int, int, int]],
+                  selected_lines_non_center: list[tuple[int, int, int, int]],
+                  circle: tuple[int, int, int]) -> tuple[list[tuple[int, int, int, int]],
+                                                         list[tuple[int, int, int, int]]]:
+    """
+    Selects lines that are parallel or form a tip from the detected lines.
+
+    Args:
+        selected_lines_center (list[tuple[int, int, int, int]]): A list of center lines.
+        selected_lines_non_center (list[tuple[int, int, int, int]]): A list of non-center lines.
+        circle (tuple[int, int, int]): The circle's center coordinates and radius.
+
+    Returns:
+        tuple[list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]: Two lists
+            containing the parallel lines and tip lines, respectively.
+    """
     # get center of circle
     x_circle = circle[0]
     y_circle = circle[1]
@@ -351,7 +426,21 @@ def _select_lines(selected_lines_center, selected_lines_non_center, circle):
     return parallel_lines, tip_lines
 
 
-def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
+def _lines2height(lines_tip: list[tuple[int, int, int, int]],
+                  lines_parallel: list[tuple[int, int, int, int]],
+                  circle: tuple[int, int, int], altimeter: np.ndarray) -> Optional[int]:
+    """
+    Calculates the height from the detected lines and the circle.
+
+    Args:
+        lines_tip (list[tuple[int, int, int, int]]): A list of tip lines.
+        lines_parallel (list[tuple[int, int, int, int]]): A list of parallel lines.
+        circle (tuple[int, int, int]): The circle's center coordinates and radius.
+        altimeter (np.ndarray): The altimeter image.
+
+    Returns:
+        Optional[int]: The calculated height, or None if the height could not be determined.
+    """
     if len(lines_tip) > 1:
         print("Too many lines tip found")
         return None
@@ -393,7 +482,16 @@ def _lines2height(lines_tip, lines_parallel, circle, altimeter: np.ndarray):
     return height
 
 
-def _pair_lines(lines):
+def _pair_lines(lines: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
+    """
+    Identifies pairs of parallel lines from the detected lines.
+
+    Args:
+        lines (list[list[int]]): A list of detected lines.
+
+    Returns:
+        list[list[int]]: A list of parallel lines.
+    """
     parallel_lines = []
 
     for i, line1 in enumerate(lines):
@@ -418,7 +516,16 @@ def _pair_lines(lines):
     return parallel_lines
 
 
-def _filter_parallel_lines(parallel_lines):
+def _filter_parallel_lines(parallel_lines: list[list[list[int]]]) -> list[list[int]]:
+    """
+    Filters the parallel lines to find the longest pair.
+
+    Args:
+        parallel_lines (list[list[list[int]]]): A list of parallel lines.
+
+    Returns:
+        list[list[int]]: The longest pair of parallel lines.
+    """
     top_length = 0
     top_pair = []
 
@@ -435,7 +542,18 @@ def _filter_parallel_lines(parallel_lines):
     return top_pair
 
 
-def _binarize_circle(img, min_th=0, max_th=255):
+def _binarize_circle(img: np.ndarray, min_th: int = 0, max_th: int = 255) -> np.ndarray:
+    """
+    Binarizes the image within the detected circle.
+
+    Args:
+        img (np.ndarray): The input image.
+        min_th (int, optional): Minimum threshold for binarization. Defaults to 0.
+        max_th (int, optional): Maximum threshold for binarization. Defaults to 255.
+
+    Returns:
+        np.ndarray: The binarized image.
+    """
     img = copy.deepcopy(img)
 
     ret, o1 = cv2.threshold(img, min_th, max_th, cv2.THRESH_BINARY)

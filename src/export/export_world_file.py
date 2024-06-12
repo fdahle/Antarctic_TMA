@@ -1,6 +1,6 @@
 """Export a world file from a transformation matrix."""
 
-# Package imports
+# Library imports
 import numpy as np
 
 

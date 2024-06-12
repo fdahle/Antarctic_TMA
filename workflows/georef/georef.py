@@ -1,4 +1,4 @@
-# Package imports
+# Library imports
 import copy
 import glob
 import os.path

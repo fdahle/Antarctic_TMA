@@ -1,4 +1,4 @@
-# Package imports
+# Library imports
 import base64
 import json
 import os
@@ -6,7 +6,7 @@ import netrc
 from urllib.parse import urlparse, urlencode
 from urllib.request import urlopen, Request, build_opener, HTTPCookieProcessor
 
-# Custom imports
+# Local imports
 import src.base.load_credentials as lc
 
 # Constants
@@ -27,9 +27,9 @@ def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',
             info = netrc.netrc()
             username, account, password = info.authenticators(urlparse(URS_URL).hostname)
             return base64.b64encode(f'{username}:{password}'.encode('ascii')).decode('ascii')
-        except Exception:
-            #username = input('Earthdata username: ')
-            #password = getpass('Earthdata password: ')
+        except (Exception,):
+            # username = input('Earthdata username: ')
+            # password = getpass('Earthdata password: ')
             username, password = lc.load_credentials('earthdata')
             return base64.b64encode(f'{username}:{password}'.encode('ascii')).decode('ascii')
 
@@ -42,18 +42,18 @@ def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',
         }
         return f"{CMR_FILE_URL}&{urlencode(query)}"
 
-    def download_files(urls):
+    def download_files(_urls):
         credentials = get_credentials()
         if not os.path.exists(download_fld):
             os.makedirs(download_fld)
-        for url in urls:
+        for url in _urls:
             filename = os.path.join(download_fld, url.split('/')[-1])
             print(f'Downloading {filename}...')
-            req = Request(url)
-            req.add_header('Authorization', f'Basic {credentials}')
+            _req = Request(url)
+            _req.add_header('Authorization', f'Basic {credentials}')
             try:
-                with urlopen(req) as response, open(filename, 'wb') as out_file:
-                    out_file.write(response.read())
+                with urlopen(_req) as _response, open(filename, 'wb') as out_file:
+                    out_file.write(_response.read())
             except (Exception,) as e:
                 print(f'Failed to download {filename}: {e}')
 

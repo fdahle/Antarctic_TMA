@@ -1,6 +1,6 @@
 """export shapely geometry to file"""
 
-# Package imports
+# Library imports
 import os
 import geopandas as gpd
 import pandas as pd

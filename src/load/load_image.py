@@ -1,3 +1,6 @@
+"""Load an image as a numpy array"""
+
+# Library imports
 import os
 import numpy as np
 import rasterio
@@ -56,7 +59,7 @@ def load_image(image_id: str, image_path: Optional[str] = None, image_type: str 
     return (img, transform) if return_transform else img
 
 
-def _create_absolute_path(image_id, fld, filetype):
+def _create_absolute_path(image_id: str, fld: str, filetype: str) -> str:
     """ Constructs the absolute path for the image. """
 
     # path is already a file -> return immediately
@@ -82,7 +85,7 @@ def _create_absolute_path(image_id, fld, filetype):
     return absolute_image_path
 
 
-def _read_image(absolute_image_path, driver):
+def _read_image(absolute_image_path: str, driver: str) -> tuple[np.ndarray, Union[RasterioAffine, Affine]]:
     """ Reads an image using the specified driver. """
 
     # read with rasterio

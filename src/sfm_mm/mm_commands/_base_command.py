@@ -1,30 +1,52 @@
 """The base class for all MicMac commands."""
 
-# Package imports
+# Library imports
 import glob
 import json
 import os.path
 import subprocess
 import shutil
 from abc import ABC, abstractmethod
+from typing import Any, Optional
 
 
 class BaseCommand(ABC):
-    # specifications defined in the child class
-    required_args = []
-    allowed_args = []
-    additional_args = []
+    """
+    The base class for all MicMac commands which contains the basic structure for the commands with
+    abstract methods that need to be implemented in the child classes.
+    """
 
-    def __init__(self, project_folder,
-                 mm_args,
-                 command_name,
-                 print_all_output=False,
-                 save_stats=False,
-                 save_raw=False,
-                 clean_up=True,
-                 auto_enter=False,
-                 debug=False,
-                 overwrite=False):
+    # specifications defined in the child class
+    required_args: list[str] = []
+    allowed_args: list[str] = []
+    additional_args: list[str] = []
+
+    def __init__(self,
+                 project_folder: str,
+                 mm_args: dict[str, Any],
+                 command_name: str,
+                 print_all_output: bool = False,
+                 save_stats: bool = False,
+                 save_raw: bool = False,
+                 clean_up: bool = True,
+                 auto_enter: bool = False,
+                 debug: bool = False,
+                 overwrite: bool = False):
+        """
+        Initializes the BaseCommand with given parameters.
+
+        Args:
+            project_folder (str): Path to the project folder.
+            mm_args (Dict[str, Any]): Dictionary of arguments for the MicMac command.
+            command_name (str): Name of the command.
+            print_all_output (bool, optional): Whether to print all output. Defaults to False.
+            save_stats (bool, optional): Whether to save statistics. Defaults to False.
+            save_raw (bool, optional): Whether to save raw output. Defaults to False.
+            clean_up (bool, optional): Whether to clean up temporary files after execution. Defaults to True.
+            auto_enter (bool, optional): Whether to automatically enter when prompted. Defaults to False.
+            debug (bool, optional): Whether to run in debug mode. Defaults to False.
+            overwrite (bool, optional): Whether to overwrite existing files. Defaults to False.
+        """
 
         self.project_folder = project_folder
         self.mm_args = mm_args
@@ -44,19 +66,35 @@ class BaseCommand(ABC):
         self.overwrite = overwrite
 
     @abstractmethod
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
+        """
+        This function builds the shell command.
+        Returns:
+            dict[str, str]: Dictionary containing the command name and the command string.
+        """
         pass
 
     @abstractmethod
-    def before_execution(self):
+    def before_execution(self) -> None:
+        """
+        This function is called before the execution of the command.
+        """
         pass
 
     @abstractmethod
-    def after_execution(self):
+    def after_execution(self) -> None:
+        """
+        This function is called after the execution of the command.
+        """
         pass
 
-    def execute_shell_cmd(self, mm_path=None):
+    def execute_shell_cmd(self, mm_path: Optional[str] = None) -> None:
+        """
+        Executes the shell command.
 
+        Args:
+            mm_path (Optional[str], optional): Path to the MicMac executable. Defaults to None.
+        """
         # Get the current date and time
         # start_time = datetime.now()
 
@@ -138,11 +176,12 @@ class BaseCommand(ABC):
             self._clean_up_files()
 
     # method is not abstract as only prevalent in some files
-    def extend_additional_args(self):
+    def extend_additional_args(self) -> None:
+        """Extends additional arguments for the command."""
         raise AssertionError("This method should only be called in child classes")
 
-    def _clean_up_files(self):
-        """Remove the temporary files created by MicMac."""
+    def _clean_up_files(self) -> None:
+        """Removes the temporary files created by MicMac."""
 
         # define the file patterns to be removed
         file_patterns = ["Tmp-MM-Dir", "mm3d-LogFile.txt", "MM-Error*.txt", "MkStdMM*", "TestOpenMM"]
@@ -160,7 +199,14 @@ class BaseCommand(ABC):
             elif os.path.isfile(full_path):
                 os.remove(full_path)
 
-    def _handle_error(self, raw_output):
+    def _handle_error(self, raw_output: list[str]) -> dict[str, Any]:
+        """
+        Handles errors during execution of micmac and display a more understandable error message.
+        Args:
+            raw_output (List[str]): The raw output from the shell command.
+        Returns:
+            Dict[str, Any]: The error object containing details of the error.
+        """
 
         # get the error dict
         # Get the directory of the current Python file
@@ -181,7 +227,9 @@ class BaseCommand(ABC):
                 if error_obj['MMErrorMsg'] in line:
                     return error_obj
 
-    def validate_mm_args(self):
+    def validate_mm_args(self) -> None:
+        """Validates the MicMac arguments by checking for required arguments and
+        if only allowed arguments were used."""
 
         # check if we have the required arguments
         for r_arg in self.required_args:
@@ -194,11 +242,22 @@ class BaseCommand(ABC):
                 raise ValueError(f"{arg} is not an allowed argument")
 
     @abstractmethod
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
+        """
+        Validate the required files of the command.
+        """
         pass
 
     @abstractmethod
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
         pass
 
 

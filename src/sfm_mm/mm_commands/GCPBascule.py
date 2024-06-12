@@ -1,12 +1,12 @@
 """Python module for GCPBascule in Micmac."""
 
-# Package imports
+# Library imports
 import os
 import glob
 import shutil
 from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 

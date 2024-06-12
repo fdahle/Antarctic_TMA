@@ -1,10 +1,31 @@
-# Package imports
+"""Apply transformation to an image"""
+
+# Library imports
 import copy
 import numpy as np
 import rasterio
+from rasterio.transform import Affine
+from typing import Union
 
 
-def apply_transform(image, transform, save_path, epsg_code=3031):
+def apply_transform(image: np.ndarray,
+                    transform: Union[np.ndarray, Affine],
+                    save_path: str,
+                    epsg_code: int = 3031) -> None:
+    """
+    Applies a transformation to an image and saves it as a GeoTIFF.
+
+    Args:
+        image (np.ndarray): The input image array.
+        transform (Union[np.ndarray, Affine]): The transformation to apply. Can be a numpy array
+            or a rasterio Affine object.
+        save_path (str): The path to save the transformed image.
+        epsg_code (int, optional): The EPSG code for the coordinate reference system. Defaults to 3031.
+
+    Returns:
+        None
+    """
+
     # copy transform to avoid changing the original
     transform = copy.deepcopy(transform)
 

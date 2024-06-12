@@ -1,4 +1,4 @@
-# Package imports
+# Library imports
 import copy
 import numpy as np
 from paddleocr import PaddleOCR

@@ -1,7 +1,7 @@
-# Package imports
+# Library imports
 from tqdm import tqdm
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.load.load_image as li
 import src.text.extract_text as et

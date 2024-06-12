@@ -1,10 +1,12 @@
-# Package imports
+"""Creates a CSV file defining the camera positions of the images for use in MicMac"""
+
+# Library imports
 import csv
 import os.path
 from pyproj import Transformer
 from typing import Union
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 
 # Variables

@@ -1,5 +1,7 @@
-import geopandas as gpd
+"""find overlapping images based on their IDs or geographical footprints."""
 
+# Library imports
+import geopandas as gpd
 from typing import Dict, Optional
 from shapely.geometry import Polygon
 

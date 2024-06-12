@@ -1,13 +1,13 @@
 """Estimate the height"""
 
-# Package imports
+# Library imports
 import copy
 import pandas as pd
 import psycopg2
 from typing import Optional, Union
 from psycopg2 import extensions
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 
 # Constants

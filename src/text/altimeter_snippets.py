@@ -1,17 +1,20 @@
-# Package imports
-import copy
+"""snippets for extracting altimeter data from images"""
+
+# Library imports
 import math
 import numpy as np
 from scipy import spatial
 from shapely.geometry import LineString
+from typing import Optional
 
 
-def angle_between_lines(line1: list[float], line2: list[float]) -> float:
+def angle_between_lines(line1: tuple[float, float, float, float],
+                        line2: tuple[float, float, float, float]) -> float:
     """
     Calculate the absolute angle between two lines in degrees.
     Args:
-        line1 (List[float]): Coordinates of the first line as [x1, y1, x2, y2].
-        line2 (List[float]): Coordinates of the second line as [x3, y3, x4, y4].
+        line1 (tuple[float, float, float, float]): Coordinates of the first line as [x1, y1, x2, y2].
+        line2 (tuple[float, float, float, float]): Coordinates of the second line as [x3, y3, x4, y4].
     Returns:
         angle (float): The angle between the two lines in degrees.
     """
@@ -51,13 +54,14 @@ def angle_trans(theta: float) -> float:
     return delta
 
 
-def check_middle_line_through_center(line_1: list[float], line_2: list[float],
+def check_middle_line_through_center(line_1: tuple[int, int, int, int],
+                                     line_2: tuple[int, int, int, int],
                                      x_circle: float, y_circle: float) -> bool:
     """
     Check if the middle line between two given lines passes through a specified circle center.
     Args:
-        line_1 (List[float]): Coordinates of the first line [x1, y1, x2, y2].
-        line_2 (List[float]): Coordinates of the second line [x3, y3, x4, y4].
+        line_1 (tuple[int, int, int, int]): Coordinates of the first line [x1, y1, x2, y2].
+        line_2 (tuple[int, int, int, int]): Coordinates of the second line [x3, y3, x4, y4].
         x_circle (float): X-coordinate of the circle's center.
         y_circle (float): Y-coordinate of the circle's center.
     Returns:
@@ -69,9 +73,9 @@ def check_middle_line_through_center(line_1: list[float], line_2: list[float],
                                           x_circle, y_circle)
 
     # get coefficients of the line
-    a = mid_line[0][1] - mid_line[1][1]
-    b = mid_line[1][0] - mid_line[0][0]
-    c = mid_line[0][0] * mid_line[1][1] - mid_line[1][0] * mid_line[0][1]
+    a = mid_line[1] - mid_line[3]
+    b = mid_line[2] - mid_line[0]
+    c = mid_line[0] * mid_line[3] - mid_line[2] * mid_line[1]
 
     if a == 0 and b == 0:
         return False
@@ -82,15 +86,17 @@ def check_middle_line_through_center(line_1: list[float], line_2: list[float],
         return False
 
 
-def delete_short_lines(lines: list[list[float]], threshold: int = 25) -> list[list[float]]:
+def delete_short_lines(lines: list[tuple[int, int, int, int]],
+                       threshold: int = 25) -> list[tuple[int, int, int, int]]:
     """
     Remove lines shorter than a specified threshold.
 
     Args:
-        lines (List[List[float]]): List of lines where each line is represented by [x1, y1, x2, y2].
+        lines (list[tuple[int, int, int, int]]): List of lines where each line is
+            represented by [x1, y1, x2, y2].
         threshold (int): Minimum length of the line to be kept.
     Returns:
-        lines (List[List[float]]): List of lines after removing the short ones.
+        lines (list[tuple[int, int, int, int]]): List of lines after removing the short ones.
     """
 
     short_lines = []
@@ -104,13 +110,14 @@ def delete_short_lines(lines: list[list[float]], threshold: int = 25) -> list[li
     return lines
 
 
-def do_lines_form_tip(line_1: list[float], line_2: list[float],
+def do_lines_form_tip(line_1: tuple[int, int, int, int],
+                      line_2: tuple[int, int, int, int],
                       x_circle: float, y_circle: float, r_circle: float) -> bool:
     """
     Determine if two lines form a 'tip' around a circle defined by its center and radius.
     Args:
-        line_1 (List[float]): First line coordinates [x1, y1, x2, y2].
-        line_2 (List[float]): Second line coordinates [x3, y3, x4, y4].
+        line_1 (tuple[int, int, int, int]): First line coordinates [x1, y1, x2, y2].
+        line_2 (tuple[int, int, int, int]): Second line coordinates [x3, y3, x4, y4].
         x_circle (float): X-coordinate of the circle center.
         y_circle (float): Y-coordinate of the circle center.
         r_circle (float): Radius of the circle.
@@ -163,7 +170,17 @@ def do_lines_form_tip(line_1: list[float], line_2: list[float],
         return False
 
 
-def get_angle(line):
+def get_angle(line: tuple[int, int, int, int]) -> Optional[float]:
+    """
+    Computes the angle of a line with respect to the vertical axis.
+
+    Args:
+        line (Tuple[int, int, int, int]): A tuple containing the coordinates of the line
+                                                  in the format (x1, y1, x2, y2).
+
+    Returns:
+        Optional[float]: The angle in radians, or None if the angle could not be determined.
+    """
     x1, y1, x2, y2 = line
 
     angle = None
@@ -183,10 +200,23 @@ def get_angle(line):
     return angle
 
 
-def get_middle_line(lines, x_circle, y_circle):
-    # lines_2 is a list contains two lines that has been paired
-    # mid_angle_theta is the angle to compute reading
-    # while mid_angle_delta is the angle to compute line slope etc.
+def get_middle_line(lines: tuple[tuple[int, int, int, int],
+                                 tuple[int, int, int, int]],
+                    x_circle: float,
+                    y_circle: float) -> tuple[tuple[int, int, int, int], float]:
+    """
+    Computes the middle line between two lines and the angle of this middle line.
+
+    Args:
+        lines (list[tuple[int, int, int, int]]): A list containing two lines,
+            where each line is represented as a tuple of coordinates (x1, y1, x2, y2).
+        x_circle (float): The x-coordinate of the circle's center.
+        y_circle (float): The y-coordinate of the circle's center.
+
+    Returns:
+        tuple[tuple[int, int, int, int], float]: A tuple containing the middle
+            line's coordinates as a tuple of points and the angle of the middle line in radians.
+    """
     x1, y1, x2, y2 = lines[0]
     x3, y3, x4, y4 = lines[1]
     # get the angles of line1 and line2
@@ -203,7 +233,7 @@ def get_middle_line(lines, x_circle, y_circle):
         # parallel lines, which means the long hand
         mid_p1 = [(x1 + x3) / 2, (y1 + y3) / 2]
         mid_p2 = [(x2 + x4) / 2, (y2 + y4) / 2]
-        mid_line = [mid_p1, mid_p2]
+        mid_line = (mid_p1[0], mid_p1[1], mid_p2[0], mid_p2[1])
     else:
         # not parallel, which means the shorthand
         mid_angle_delta = (delta1 + delta2) / 2
@@ -226,12 +256,25 @@ def get_middle_line(lines, x_circle, y_circle):
             p1_y = k * p1_x + b
             p2_y = k * p2_x + b
 
-        mid_line = [[p1_x, p1_y], [p2_x, p2_y]]
+        mid_line = (p1_x, p1_y, p2_x, p2_y)
 
     return mid_line, mid_angle_theta
 
 
-def intersection_of_lines(line1, line2):
+def intersection_of_lines(line1: tuple[int, int, int, int],
+                          line2: tuple[int, int, int, int]) -> \
+        tuple[Optional[float], Optional[float]]:
+    """
+    Calculates the intersection point of two lines.
+
+    Args:
+        line1 (tuple[int, int, int, int]): Coordinates of the first line in the format (x1, y1, x2, y2).
+        line2 (tuple[int, int, int, int]): Coordinates of the second line in the format (x3, y3, x4, y4).
+
+    Returns:
+        tuple[Optional[float], Optional[float]]: The intersection point (inter_x, inter_y).
+                                                 Returns (None, None) if lines are parallel or identical.
+    """
     x1, y1, x2, y2 = line1
     x3, y3, x4, y4 = line2
 
@@ -261,7 +304,19 @@ def intersection_of_lines(line1, line2):
     return inter_x, inter_y
 
 
-def merge_lines(lines):
+def merge_lines(lines: list[tuple[float, float, float, float]],
+                max_dist: int = 20, max_angle_diff: int = 1) -> list[tuple[float, float, float, float]]:
+    """
+    Merges similar lines into a single line based on pixel distance and angle difference.
+
+    Args:
+        lines (List[Tuple[float, float, float, float]]): A list of lines, where each line
+            is represented as a tuple of coordinates (x1, y1, x2, y2).
+        max_dist (int): The maximum distance between two lines to be considered similar.
+        max_angle_diff (int): The maximum angle difference between two lines to be considered similar.
+    Returns:
+        List[Tuple[float, float, float, float]]: A list of merged lines.
+    """
 
     while True:
         break_loop = False
@@ -283,14 +338,14 @@ def merge_lines(lines):
                 angle_diff = np.abs(get_angle(line_1) - get_angle(line_2))
 
                 # if lines are similar -> create new line
-                if dist < 20 and angle_diff < 1:
+                if dist < max_dist and angle_diff < max_angle_diff:
                     pts = ([[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
                     dist_mat = spatial.distance_matrix(pts, pts)
                     p1, p2 = np.unravel_index(dist_mat.argmax(), dist_mat.shape)
                     x1_new, y1_new = pts[p1]
                     x2_new, y2_new = pts[p2]
 
-                    lines[i] = [x1_new, y1_new, x2_new, y2_new]
+                    lines[i] = (x1_new, y1_new, x2_new, y2_new)
                     del lines[j]
                     lines_merged = True
                     break_loop = True
@@ -306,10 +361,24 @@ def merge_lines(lines):
     return lines
 
 
-def rearrange_line(line, center_x, center_y):
+def rearrange_line(line: tuple[float, float, float, float],
+                   center_x: float, center_y: float) -> tuple[float, float, float, float]:
+    """
+    Rearranges the line such that the point closer to the center comes first.
+
+    Args:
+        line (tuple[float, float, float, float]): A tuple containing the coordinates of the line
+            in the format (x1, y1, x2, y2).
+        center_x (float): The x-coordinate of the center point.
+        center_y (float): The y-coordinate of the center point.
+
+    Returns:
+        tuple[float, float, float, float]: A list of the rearranged line coordinates
+            in the format [x1, y1, x2, y2].
+    """
     x1, y1, x2, y2 = line
     dist_1 = math.dist([x1, y1], [center_x, center_y])
     dist_2 = math.dist([x2, y2], [center_x, center_y])
     if dist_1 > dist_2:
-        line = [x2, y2, x1, y1]
+        line = (x2, y2, x1, y1)
     return line

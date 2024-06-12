@@ -1,3 +1,5 @@
+"""show images with matplotlib"""
+
 import copy
 import math
 import matplotlib
@@ -134,12 +136,12 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
     c = ["darkred", "red", "lightcoral", "white", "palegreen", "green", "darkgreen"]
     v = [0, .15, .4, .5, 0.6, .9, 1.]
     ls = list(zip(v, c))
-    cmap_red_green = LinearSegmentedColormap.from_list('rg', ls, N=256)
+    cmap_red_green = LinearSegmentedColormap.from_list('rg', ls, N=256)  # noqa
 
     c = ["darkgreen", "green", "palegreen", "white", "lightcoral", "red", "darkred"]
     v = [0, .15, .4, .5, 0.6, .9, 1.]
     ls = list(zip(v, c))
-    cmap_green_red = LinearSegmentedColormap.from_list('rg', ls, N=256)
+    cmap_green_red = LinearSegmentedColormap.from_list('rg', ls, N=256)  # noqa
 
     # Iterate over images and their corresponding axes
     for idx, enum_img in enumerate(images):

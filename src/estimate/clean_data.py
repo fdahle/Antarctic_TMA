@@ -1,16 +1,25 @@
+"""Make data in images_extracted more consistent by updating focal lengths and
+heights based on the most common values."""
+
+# Library imports
 import pandas as pd
 import src.base.connect_to_database as ctd
 
+# Constants
 MIN_NR_IMAGES = 3
 MIN_PERCENTAGE = 80
 
 
-def clean_focal_length():
+def clean_focal_length() -> None:
     """
-
+    Adjusts focal lengths in the images_extracted table in the database to ensure consistency.
+    For each flight path, the focal length is updated to the most common focal length if it is present in more than
+    MIN_PERCENTAGE percent of the images in the flight path. At least MIN_NR_IMAGES images are required to update the
+    focal length.
     Returns:
-
+        None
     """
+
     # create connection to the database
     conn = ctd.establish_connection()
 
@@ -48,8 +57,6 @@ def clean_focal_length():
         focal_length_percentages = ((focal_length_counts / total_count) * 100).round(2)
         focal_length_percentage_dict[flight_path] = focal_length_percentages.to_dict()
 
-    print(focal_length_percentage_dict)
-
     # create copy of column focal_length
     data_fl['focal_length_new'] = data_fl['focal_length']
 
@@ -74,7 +81,18 @@ def clean_focal_length():
         ctd.execute_sql(sql_string, conn)
 
 
-def clean_fl_cam_id(min_percentage=50):
+def clean_fl_cam_id(min_percentage: int = 50) -> None:
+    """
+    Adjusts focal lengths in the images_extracted table based on cam_id to ensure consistency. For each cam_id,
+    the focal length is updated to the most common focal length if it is present in more than MIN_PERCENTAGE
+    percent of the images with that cam_id.
+
+    Args:
+        min_percentage (int, optional): Minimum percentage of a focal length occurrence to be considered valid.
+            Defaults to 50.
+    Returns:
+        None
+    """
     # create connection to the database
     conn = ctd.establish_connection()
 
@@ -86,9 +104,6 @@ def clean_fl_cam_id(min_percentage=50):
 
     #  order by cam_id
     grouped_count = grouped_count.sort_values(by=['cam_id'], ascending=False)
-
-    # print all columns
-    print(grouped_count.to_string())
 
     # get the unique cam_ids
     cam_ids = grouped_count['cam_id'].unique()
@@ -113,7 +128,17 @@ def clean_fl_cam_id(min_percentage=50):
             ctd.execute_sql(sql_string, conn)
 
 
-def clean_height_altitude():
+def clean_height_altitude() -> None:
+    """
+        Adjusts heights in the images_extracted table in the database to ensure consistency.
+        For each flight path, the heights is updated to the most common heights if it is present in more than
+        MIN_PERCENTAGE percent of the images in the flight path. At least MIN_NR_IMAGES images are required to
+        update the heights.
+        Args:
+        Returns:
+            None
+    """
+
     # create connection to the database
     conn = ctd.establish_connection()
 

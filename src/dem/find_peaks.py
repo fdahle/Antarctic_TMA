@@ -1,9 +1,24 @@
+"""Finds peaks in a digital elevation model (DEM) array"""
+
+# Library imports
 import numpy as np
 import scipy.ndimage as ndimage
-import scipy.signal as signal
 
-def find_peaks(dem, threshold_abs=0, threshold_rel=0.5):
 
+def find_peaks(dem: np.ndarray, threshold_abs: float = 0, threshold_rel: float = 0.5) -> list[tuple[int, int]]:
+    """
+    Finds peaks in a digital elevation model (DEM) array by applying a maximum filter and thresholding.
+    The peaks are further refined by applying a relative threshold.
+
+    Args:
+        dem (np.ndarray): 2D numpy array representing the DEM.
+        threshold_abs (float, optional): Absolute threshold for peak detection. Peaks below this value will be ignored.
+            Defaults to 0.
+        threshold_rel (float, optional): Relative threshold for refining peak detection. Defaults to 0.5.
+
+    Returns:
+        list[tuple[int, int]]: List of coordinates of the detected peaks as (col, row) tuples.
+    """
     neighborhood = ndimage.generate_binary_structure(2, 2)
     local_max = ndimage.maximum_filter(dem, footprint=neighborhood) == dem
 

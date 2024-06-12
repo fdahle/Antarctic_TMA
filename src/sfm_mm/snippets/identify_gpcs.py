@@ -1,34 +1,37 @@
-# Package imports
+"""Identifies Ground Control Points (GCPs) across a list of images"""
+
+# Library imports
 import copy
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.cluster import DBSCAN
-from typing import Tuple
+from typing import Optional
 
 # External imports
 from external.lightglue import SuperPoint
 
-# Custom imports
+# Local imports
 import src.sfm_mm.snippets.get_gcp_height as ggh
 
 
-def identify_gcps(image_ids, images, transforms, masks=None,
-                  debug=False, save_folder=None):
+def identify_gcps(image_ids: list[str], images: list[np.ndarray],
+                  transforms: list[np.ndarray],
+                  masks: Optional[list[np.ndarray]] = None,
+                  debug: bool = False) -> dict[tuple[float, float], dict[str, list]]:
     """
     Identifies Ground Control Points (GCPs) across a list of images. Points are identified using the SuperPoint
     algorithm and converted to absolute coordinates using the provided transformation matrices. Overlapping points
     are then identified to obtain a list of GCPs that are present in multiple images.
     Args:
-        image_ids (List[str]): A list of image IDs.
-        images (List[np.ndarray]): A list of images in numpy array format.
-        transforms (List[np.ndarray]): A list of transformation matrices corresponding to each image.
-        masks (Optional[List[np.ndarray]]): A list of masks for each image. Masks should be the same size as the
+        image_ids (List[list]): A list of image IDs.
+        images (list[np.ndarray]): A list of images in numpy array format.
+        transforms (list[np.ndarray]): A list of transformation matrices corresponding to each image.
+        masks (Optional[list[np.ndarray]]): A list of masks for each image. Masks should be the same size as the
             corresponding image and should contain 0s for points to be ignored.
         debug (bool): A flag to enable debug print statements.
-        save_folder (Optional[str]): A folder to save debug images to.
     Returns:
-        Dict[Tuple[float, float], Dict[str, List]]: A dictionary where keys are tuples of averaged absolute coordinates
+        dict[tuple[float, float], Dict[str, List]]: A dictionary where keys are tuples of averaged absolute coordinates
         of identified GCPs, and values are dictionaries containing image IDs, relative positions, the average absolute
         coordinates, and a list of original absolute coordinates of the GCPs.
     """
@@ -142,7 +145,7 @@ def identify_gcps(image_ids, images, transforms, masks=None,
     return overlapping_points
 
 
-def _find_key_points(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def _find_key_points(image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Finds keypoints and their scores in a given image using the SuperPoint extractor.
     Args:
@@ -168,7 +171,19 @@ def _find_key_points(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return key_points, scores
 
 
-def _identify_overlapping_gcps(data, threshold):
+def _identify_overlapping_gcps(data: pd.DataFrame, threshold: float) -> dict[tuple[float, float], dict[str, list]]:
+    """
+    Identifies overlapping Ground Control Points (GCPs) using clustering.
+
+    Args:
+        data (pd.DataFrame): DataFrame containing GCP data with columns 'x_abs', 'y_abs', 'conf', etc.
+        threshold (float): Threshold for clustering GCPs based on their proximity.
+
+    Returns:
+        Dict[tuple[float, float], dict[str, List]]: Dictionary where keys are tuples of averaged absolute coordinates
+        of identified GCPs, and values are dictionaries containing image IDs, relative positions, the average absolute
+        coordinates, and a list of original absolute coordinates of the GCPs.
+    """
 
     if threshold == 0:
         threshold = 0.001

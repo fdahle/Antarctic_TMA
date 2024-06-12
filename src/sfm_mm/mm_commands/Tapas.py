@@ -1,10 +1,10 @@
 """Python module for Tapas in Micmac."""
 
-# Package imports
+# Library imports
 import json
 import re
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
@@ -30,7 +30,7 @@ class Tapas(BaseCommand):
                                 "FishEyeStereo", "Four", "AddFour", "AddPolyDeg", "Ebner",  # noqa
                                 "Brown", "AutoCal", "Figee", "HemiEqui"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         # Initialize the base class with all arguments passed to ReSampFid
         super().__init__(*args, **kwargs)
@@ -45,7 +45,7 @@ class Tapas(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
         """
         This function is called before the execution of the command.
         """
@@ -53,7 +53,7 @@ class Tapas(BaseCommand):
         # nothing needs to be done before the execution
         pass
 
-    def after_execution(self):
+    def after_execution(self) -> None:
         """
         This function is called after the execution of the command.
         """
@@ -61,7 +61,7 @@ class Tapas(BaseCommand):
         # nothing needs to be done after the execution
         pass
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
         """
         This function builds the shell command.
         """
@@ -84,7 +84,7 @@ class Tapas(BaseCommand):
 
         return shell_dict
 
-    def extend_additional_args(self):
+    def extend_additional_args(self) -> None:
         """
         This function builds the shell command.
         """
@@ -103,7 +103,7 @@ class Tapas(BaseCommand):
         elif self.mm_args["DistortionModel"] == "HemiEqui":
             self.allowed_args = self.allowed_args + self.additional_args + self.additional_args_hemi_equi
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
         """
         Extract statistics from the raw output of the command and save them to a JSON file.
         Args:
@@ -237,7 +237,7 @@ class Tapas(BaseCommand):
         with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
             file.write(json_output)
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
         """
         Validate the input parameters of the command.
         """
@@ -245,7 +245,7 @@ class Tapas(BaseCommand):
         if self.mm_args["DistortionModel"] not in self.lst_of_distortion_models:
             raise ValueError(f"DistortionModel {self.mm_args['DistortionModel']} is not a valid model.")
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
         """
         Validate the required files of the command.
         """

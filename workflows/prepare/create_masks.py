@@ -1,9 +1,9 @@
-# Package imports
+# Library imports
 from ast import literal_eval
 from PIL import Image
 from tqdm import tqdm
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.base.create_mask as cm
 import src.load.load_image as li

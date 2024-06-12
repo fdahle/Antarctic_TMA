@@ -1,6 +1,6 @@
 """load shape data from shapefiles"""
 
-# Package imports
+# Library imports
 import geopandas as gpd
 import os
 

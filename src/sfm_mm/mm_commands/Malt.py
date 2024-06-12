@@ -1,13 +1,14 @@
 """Python module for Malt in Micmac."""
 
-# Package imports
+# Library imports
 import glob
 import json
 import os.path
 import re
 import shutil
+from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
@@ -27,7 +28,7 @@ class Malt(BaseCommand):
 
     lst_of_modes = ["Ortho", "UrbanMNE", "GeomImage"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Initialize the base class
         super().__init__(*args, **kwargs)
 
@@ -41,7 +42,7 @@ class Malt(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
         """
         This function is called before the execution of the command.
         """
@@ -49,7 +50,7 @@ class Malt(BaseCommand):
         # nothing needs to be done before the execution
         pass
 
-    def after_execution(self):
+    def after_execution(self) -> None:
         """
         This function is called after the execution of the command.
         """
@@ -91,9 +92,11 @@ class Malt(BaseCommand):
         if self.debug:
             print(f"Malt: Output exported to {output_fld}")
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
         """
         This function builds the shell command.
+        Returns:
+            dict[str, str]: Dictionary containing the command name and the command string.
         """
 
         shell_dict = {}
@@ -122,7 +125,7 @@ class Malt(BaseCommand):
 
         return shell_dict
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
         """
         Extract statistics from the raw output of the command and save them to a JSON file.
         Args:
@@ -143,7 +146,7 @@ class Malt(BaseCommand):
         image_pattern = re.compile(r'TA : (OIS-Reech_.+?\.tif)')
         step_pattern = re.compile(r'-------- BEGIN STEP,  , Num = (\d+), DeZoomTer = (\d+), DeZoomIm = (\d+)')  # noqa
         block_pattern = re.compile(r'DO ONE BLOC \[(\d+),(\d+)] \[(\d+),(\d+)] \[(\d+),(\d+)]')
-        correl_pattern = re.compile(r'Correl Calc, Begin Opt')
+        # correl_pattern = re.compile(r'Correl Calc, Begin Opt')
         result_pattern = re.compile(
             r'TCor (\d+\.\d+) CTimeC (\d+\.\d+) TOpt (\d+\.\d+) Pts , R2 (\d+\.\d+), RN (\d+\.\d+) Pts , '
             r'R-GEN (\d+\.\d+), Isol (\d+\.\d+) {2}PT {2}(\d+e\+\d+)')  # noqa
@@ -206,7 +209,7 @@ class Malt(BaseCommand):
         if self.debug:
             print(f"Malt: Stats saved to {json_path}")
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
         """
         Validate the input parameters of the command.
         """
@@ -214,7 +217,7 @@ class Malt(BaseCommand):
         if "/" in self.mm_args["ImagePattern"]:
             raise ValueError("ImagePattern cannot contain '/'. Use a pattern like '*.tif' instead.")
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
         """
         Validate the required files of the command.
         """

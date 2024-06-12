@@ -1,13 +1,13 @@
 """Calculates the approximate footprint of an image"""
 
-# Package imports
+# Library imports
 import math
 import numpy as np
 from shapely import geometry
 from typing import Union
 from vector3d.vector import Vector
 
-# Custom imports
+# Local imports
 import src.load.load_rema as lr
 
 

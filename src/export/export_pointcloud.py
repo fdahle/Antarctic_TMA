@@ -9,7 +9,8 @@ from typing import Union
 overwrite = False
 
 
-def export_pointcloud(input_data: Union[np.ndarray, o3d.data.PLYPointCloud], output_path: str) -> None:
+def export_pointcloud(input_data: Union[np.ndarray, o3d.data.PLYPointCloud],  # noqa
+                      output_path: str) -> None:
     """
     Export a point cloud as a ply file.
 
@@ -30,12 +31,12 @@ def export_pointcloud(input_data: Union[np.ndarray, o3d.data.PLYPointCloud], out
         raise FileExistsError(f"'{output_path}' already exists.")
 
     # Check if the input data is already a PointCloud object
-    if isinstance(input_data, o3d.geometry.PointCloud):
+    if isinstance(input_data, o3d.geometry.PointCloud):  # noqa
         point_cloud = input_data
     else:
         # Create a PointCloud object and set points
-        point_cloud = o3d.geometry.PointCloud()
-        point_cloud.points = o3d.utility.Vector3dVector(np.array(input_data))
+        point_cloud = o3d.geometry.PointCloud()  # noqa
+        point_cloud.points = o3d.utility.Vector3dVector(np.array(input_data))  # noqa
 
     # Save the point cloud to a PLY file
     o3d.io.write_point_cloud(output_path, point_cloud, write_ascii=True)

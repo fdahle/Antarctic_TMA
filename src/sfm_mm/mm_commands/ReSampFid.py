@@ -1,14 +1,14 @@
 """Python module for ReSampFid Micmac."""
 
-
-# Package imports
+# Library imports
 import glob
 import json
 import os.path
 import re
 import shutil
+from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 
@@ -21,7 +21,7 @@ class ReSampFid(BaseCommand):
     required_args = ["ImagePattern", "ScanResolution"]
     allowed_args = ["ImagePattern", "ScanResolution"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Initialize the base class with all arguments passed to ReSampFid
         super().__init__(*args, **kwargs)
 
@@ -42,7 +42,7 @@ class ReSampFid(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
         """
         This function is called before the execution of the command.
         """
@@ -71,7 +71,7 @@ class ReSampFid(BaseCommand):
                     shutil.copyfile(self.project_folder + f"/Ori-InterneScan/MeasuresIm-{filename}.xml",
                                     self.project_folder + f"/Ori-InterneScan/MeasuresIm-mask_{filename}.xml")
 
-    def after_execution(self):
+    def after_execution(self) -> None:
         """
         This function is called after the execution of the command.
         """
@@ -101,9 +101,11 @@ class ReSampFid(BaseCommand):
                     shutil.move(self.project_folder + "/OIS-Reech_mask_" + filename,
                                 self.project_folder + "/masks/OIS-Reech_" + filename)
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
         """
         This function builds the shell command.
+        Returns:
+            dict[str, str]: Dictionary containing the command name and the command string.
         """
 
         shell_dict = {}
@@ -143,7 +145,7 @@ class ReSampFid(BaseCommand):
 
         return shell_dict
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
         """
         Extract statistics from the raw output of the command and save them to a JSON file.
         Args:
@@ -201,7 +203,7 @@ class ReSampFid(BaseCommand):
         if self.debug:
             print(f"ReSampFid: Stats saved to {json_path}")
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
         """
         Validate the input parameters of the command.
         """
@@ -224,7 +226,7 @@ class ReSampFid(BaseCommand):
         if self.debug:
             print("\rReSampFid: Validate mm parameters - finished")
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
         """
         Validate the required files of the command.
         """

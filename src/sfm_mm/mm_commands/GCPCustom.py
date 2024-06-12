@@ -1,11 +1,14 @@
-# Package imports
+"""Python module for GCPCustom (custom function) in Micmac."""
+
+# Library imports
 import os
 import glob
 import json
 import numpy as np
 from lxml import etree
+from typing import Any
 
-# Custom imports
+# Local imports
 import src.load.load_image as li
 import src.load.load_transform as lt
 import src.sfm_mm.snippets.calc_resample_matrix as crm
@@ -19,7 +22,7 @@ class GCPCustom(BaseCommand):
     required_args = []
     allowed_args = ["ALLTransformsReq", "UseMasks"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         # Initialize the base class
         super().__init__(*args, **kwargs)
@@ -41,15 +44,28 @@ class GCPCustom(BaseCommand):
         # validate the input parameters
         # self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
+        """
+        This function is called before the execution of the command.
+        """
+
         # nothing needs to be done before the execution
         pass
 
-    def after_execution(self):
+    def after_execution(self) -> None:
+        """
+        This function is called after the execution of the command.
+        """
+
         # nothing needs to be done after the execution
         pass
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> None:
+        """
+        This function would normally build the shell command, but is not needed for this custom class.
+        Raises:
+            AssertionError: Because this custom class does not have a shell command.
+        """
         raise AssertionError("This custom class does not have a shell command.")
 
     def execute_custom_cmd(self):
@@ -83,7 +99,15 @@ class GCPCustom(BaseCommand):
         if self.save_stats:
             self.extract_stats(self.command_name, raw_output)
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
 
         # Split the raw_output into lines if it's a single string
         if isinstance(raw_output, str):
@@ -99,7 +123,18 @@ class GCPCustom(BaseCommand):
         with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
             file.write(json_output)
 
-    def validate_required_files(self):
+    def validate_mm_parameters(self) -> None:
+        """
+        Validate the input parameters of the command.
+        """
+
+        # TODO
+        pass
+
+    def validate_required_files(self) -> None:
+        """
+        Validate the required files of the command.
+        """
 
         # for each image we need a transform file
         images = glob.glob(self.project_folder + "/images_orig/*.tif")

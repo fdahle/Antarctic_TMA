@@ -1,4 +1,4 @@
-# Package imports
+# Library imports
 import sys
 from contextlib import contextmanager
 from io import StringIO

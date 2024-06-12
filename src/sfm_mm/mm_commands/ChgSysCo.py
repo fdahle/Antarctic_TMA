@@ -1,9 +1,9 @@
 """Python module for ChgSysCo in Micmac."""
 
-# Package imports
+# Library imports
 from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 

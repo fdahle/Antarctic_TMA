@@ -1,1 +1,1 @@
-# extend the georeferencing to the oblique images
+# extend the geo-referencing to the oblique images

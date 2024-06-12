@@ -1,4 +1,6 @@
-# Package imports
+"""Calculates the resampling matrix for image in MicMac"""
+
+# Library imports
 import cv2
 import numpy as np
 import xml.etree.ElementTree as Et
@@ -7,10 +9,23 @@ from skimage import transform as tf
 import src.display.display_images as di
 import src.load.load_image as li
 
+# Debug variables
 debug_show_images = False
 
 
-def calc_resample_matrix(project_folder, image_id, scan_res=0.025):
+def calc_resample_matrix(project_folder: str, image_id: str, scan_res: float = 0.025) -> np.ndarray:
+    """
+    Calculates the resampling matrix for an image based on its MicMac xml-file.
+    The matrix is used to resample the image based on the scan resolution.
+    Note that the xml files are expected to be in the format
+    "project_folder/Ori-InterneScan/MeasuresIm-{image_id}.tif.xml"
+    Args:
+        project_folder (str): The path to the project folder.
+        image_id (str): The ID of the image.
+        scan_res (float, optional): The scan resolution. Defaults to 0.025.
+    Returns:
+        np.ndarray: The affine transformation matrix.
+    """
     # load the image xml
     image_xml = Et.parse(project_folder + f"/Ori-InterneScan/MeasuresIm-{image_id}.tif.xml")
     img_root = image_xml.getroot()

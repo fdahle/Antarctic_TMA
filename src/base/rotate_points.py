@@ -1,6 +1,8 @@
+"""rotate points with a rotation matrix"""
+
+# Library imports
 import numpy as np
 import cv2
-
 from typing import Union, List, Tuple
 
 

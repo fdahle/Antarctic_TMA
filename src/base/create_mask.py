@@ -1,3 +1,5 @@
+"""generate a mask for an image"""
+
 import numpy as np
 
 from typing import Optional, Dict, Tuple, List

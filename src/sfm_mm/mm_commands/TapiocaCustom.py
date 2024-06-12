@@ -1,11 +1,14 @@
-# Package imports
+"""Python module for TapiocaCustom (custom function) in Micmac."""
+
+# Library imports
 import json
 import os
 import glob
 import numpy as np
 import re
+from typing import Any
 
-# custom imports
+# Local imports
 import src.base.find_overlapping_images as foi
 import src.base.find_tie_points as ftp
 import src.load.load_image as li
@@ -18,7 +21,7 @@ class TapiocaCustom(BaseCommand):
     required_args = []
     allowed_args = ["use_footprints", "use_masks", "max_id_range", "save_tps_images"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         # Initialize the base class
         super().__init__(*args, **kwargs)
@@ -30,16 +33,29 @@ class TapiocaCustom(BaseCommand):
         # validate the input arguments
         self.validate_mm_parameters()
 
-    def build_shell_dict(self):
-        raise AssertionError("This custom class does not have a shell command.")
+    def before_execution(self) -> None:
+        """
+        This function is called before the execution of the command.
+        """
 
-    def before_execution(self):
         # nothing required before execution
         pass
 
-    def after_execution(self):
+    def after_execution(self) -> None:
+        """
+        This function is called after the execution of the command.
+        """
+
         # nothing required after execution
         pass
+
+    def build_shell_dict(self) -> None:
+        """
+        This function would normally build the shell command, but is not needed for this custom class.
+        Raises:
+            AssertionError: Because this custom class does not have a shell command.
+        """
+        raise AssertionError("This custom class does not have a shell command.")
 
     def execute_custom_cmd(self):
 
@@ -65,7 +81,15 @@ class TapiocaCustom(BaseCommand):
         if self.save_stats:
             self.extract_stats(self.command_name, raw_output)
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
+        """
+        Extract statistics from the raw output of the command and save them to a JSON file.
+        Args:
+            name (str): Name of the command.
+            raw_output (list): Raw output of the command as a list of strings (one per line).
+        Returns:
+            None
+        """
 
         # Split the raw_output into lines if it's a single string
         if isinstance(raw_output, str):
@@ -116,7 +140,11 @@ class TapiocaCustom(BaseCommand):
         with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
             file.write(json_output)
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
+        """
+        Validate the input parameters of the command.
+        """
+
         print("Validate mm parameters", end='')
 
         if "save_tps_images" not in self.mm_args.keys():
@@ -127,7 +155,10 @@ class TapiocaCustom(BaseCommand):
 
         print("\rValidate mm parameters - finished")
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
+        """
+        Validate the required files of the command.
+        """
 
         if self.debug:
             print("Validate required files", end='')

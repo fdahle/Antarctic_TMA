@@ -1,4 +1,6 @@
-# Package imports
+"""georeference images with satellite images"""
+
+# Library imports
 import copy
 import cv2
 import numpy as np
@@ -7,7 +9,7 @@ from typing import Optional, Tuple, Union
 from shapely.geometry import Polygon
 from shapely.wkt import loads as load_wkt
 
-# Custom imports
+# Local imports
 import src.base.enhance_image as ei
 import src.base.find_tie_points as ftp
 import src.base.rotate_image as ri
@@ -30,7 +32,9 @@ debug_display_final = False
 
 
 class GeorefSatellite:
-
+    """
+    A class for geo-referencing historical images with modern geo-referenced satellite images.
+    """
     def __init__(self,
                  min_tps_final: int = 25,
                  locate_image: bool = True, location_max_order: int = 3, location_overlap: float = 1 / 3,

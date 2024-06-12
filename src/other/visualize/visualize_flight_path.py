@@ -1,13 +1,24 @@
-# Package imports
+"""visualize heights of a flight path"""
+
+# Library imports
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 
 
-def visualize_flight_path(flight_path):
+def visualize_flight_path(flight_path: str) -> None:
+    """
+    Visualizes the flight path altitude profile for a given flight path.
+
+    Args:
+        flight_path (str): The flight path identifier to visualize.
+
+    Returns:
+        None
+    """
 
     conn = ctd.establish_connection()
 

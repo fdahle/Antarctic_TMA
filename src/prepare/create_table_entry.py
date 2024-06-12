@@ -1,8 +1,10 @@
-# Package imports
+"""create an image entry in a psql table """
+
+# Library imports
 import sqlite3
 from typing import Any, Optional
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 
 

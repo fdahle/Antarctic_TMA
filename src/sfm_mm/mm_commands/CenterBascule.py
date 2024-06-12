@@ -1,12 +1,12 @@
 """Python module for CenterBascule in Micmac."""
 
-# Package imports
+# Library imports
 import json
 import os.path
 import re
 from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 

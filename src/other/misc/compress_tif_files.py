@@ -1,6 +1,6 @@
 """Compresses all TIFF files in a given directory"""
 
-# Package imports
+# Library imports
 import os
 import warnings
 from PIL import Image, TiffTags
@@ -59,9 +59,11 @@ def compress_tif_files(folder_path: str, compression_method: str = 'lzw', qualit
                         # Determine if compression is needed based on the compression method and
                         # current file compression
                         compression_needed = True
-                        if compression_method.lower() == 'lzw' and current_compression == TiffTags.COMPRESSION.TIFF_LZW:
+                        if compression_method.lower() == 'lzw' and \
+                                current_compression == TiffTags.COMPRESSION.TIFF_LZW:  # noqa
                             compression_needed = False
-                        elif compression_method.lower() == 'jpeg' and current_compression == TiffTags.COMPRESSION.JPEG:
+                        elif compression_method.lower() == 'jpeg' and \
+                                current_compression == TiffTags.COMPRESSION.JPEG:  # noqa
                             compression_needed = False
 
                         # compress the image

@@ -1,12 +1,15 @@
+"""Load REMA height data"""
+
+# Library imports
 import geopandas as gpd
 import os
 import numpy as np
 import rasterio
 import shapely
-
 from rasterio import mask, merge
 from typing import Tuple, Optional
 
+# Constants
 DEFAULT_REMA_FLD = "/data_1/ATM/data_1/DEM/REMA/mosaic"
 DEFAULT_REMA_SHP = "/data_1/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
 

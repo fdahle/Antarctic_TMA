@@ -1,9 +1,20 @@
-# Package imports
+"""find the cam id in a text"""
+
+# Library imports
 import re
 from typing import Optional
 
 
 def find_cam_id(text: str) -> Optional[str]:
+    """
+    Extracts a cam id from the text. Only returns a result if ONE match is found, otherwise None is
+    returned. A cam id must be in the patter XX-XXX where X is a digit.
+    Args:
+        text (str): A string that may contain cam ids, separated by semicolons.
+    Returns:
+        Optional[str]: The focal length if exactly one valid cam id is found
+            within the range; otherwise, None.
+    """
     # split the text into their respective boxes
     text_per_box = text.split(";")
 

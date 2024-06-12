@@ -1,6 +1,6 @@
 """Rotate an image"""
 
-# Package imports
+# Library imports
 import cv2
 import numpy as np
 

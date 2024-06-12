@@ -1,4 +1,6 @@
-# Package imports
+"""find the focal length in a text"""
+
+# Library imports
 import re
 from typing import Optional
 

@@ -1,6 +1,6 @@
 """Resize an image"""
 
-# Package imports
+# Library imports
 import copy
 import cv2
 import numpy as np

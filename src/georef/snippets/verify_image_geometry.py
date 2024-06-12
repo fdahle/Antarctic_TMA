@@ -1,8 +1,11 @@
-# Package imports
+"""Verify the geometry of a footprint with certain constraints."""
+
+# Library imports
 import copy
 import numpy as np
 import rasterio.transform
 
+# Debug variables
 debug_print_values = False
 
 

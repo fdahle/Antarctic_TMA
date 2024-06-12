@@ -1,3 +1,5 @@
+"""Resamples tie points to absolute values"""
+
 import numpy as np
 from typing import Union
 

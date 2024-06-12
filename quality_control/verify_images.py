@@ -5,13 +5,13 @@ src_path = (Path(__file__).parent.parent / 'src').resolve()
 if str(src_path) not in sys.path:
     sys.path.append(str(src_path))
 
-# Package imports
+# Library imports
 import math
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import streamlit as st
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 
 # Constants

@@ -1,17 +1,44 @@
+"""Extract image-ids from database for SfM processing."""
+
+# Local imports
 import src.base.connect_to_database as ctd
 
+# Constants
 USE_SHP_HEIGHT = True
 
 
-def extract_ids_for_sfm(min_nr, image_xml, resampled, min_complexity=0,
-                        position=True, height=True, focal_length=True,
-                        maximum_id_distance=1):
+def extract_ids_for_sfm(min_nr: int, image_xml: bool, resampled: bool, min_complexity: int = 0,
+                        position: bool = True, height: bool = True, focal_length: bool = True,
+                        maximum_id_distance: int = 1) -> dict:
+    """
+    Extracts image IDs for structure from motion (SfM) processing from the psql database
+    based on various filtering criteria.
 
+    Args:
+        min_nr (int): Minimum number of images required for a tma_number group.
+        image_xml (bool): Filter based on the presence of image XML files.
+        resampled (bool): Filter based on the presence of resampled image files.
+        min_complexity (int, optional): Minimum complexity value for images. Defaults to 0.
+        position (bool, optional): Filter based on the presence of exact position data.
+            Defaults to True.
+        height (bool, optional): Filter based on the presence of height data. Defaults to True.
+        focal_length (bool, optional): Filter based on the presence of focal length data.
+            Defaults to True.
+        maximum_id_distance (int, optional): Maximum allowed distance between consecutive image IDs.
+            Defaults to 1.
+
+    Returns:
+        dict: A dictionary where keys are tma_numbers and values are lists of image IDs.
+    """
+
+    # Check the input values
     if maximum_id_distance < 1:
         raise ValueError("The maximum ID distance must be at least 1.")
 
+    # Establish a connection to the database
     conn = ctd.establish_connection()
 
+    # Get the data from the database
     sql_string = "SELECT images.image_id, images.tma_number, " \
                  "images_extracted.complexity, " \
                  "images_file_paths.path_xml_file, " \

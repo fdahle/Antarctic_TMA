@@ -1,9 +1,9 @@
-# Package imports
+# Library imports
 import pandas as pd
 from datetime import datetime
 from tqdm import tqdm
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.load.load_image as li
 import src.fid_marks.extract_fid_mark as efm

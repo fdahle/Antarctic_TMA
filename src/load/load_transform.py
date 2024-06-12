@@ -1,4 +1,6 @@
-# Package imports
+"""load a transformation matrix from file"""
+
+# Library imports
 import os
 import numpy as np
 from typing import Optional

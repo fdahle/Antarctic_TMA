@@ -1,6 +1,6 @@
 """Calculates the complexity of an image"""
 
-# Package imports
+# Library imports
 import copy
 import numpy as np
 import torch
@@ -9,7 +9,7 @@ from typing import Optional
 # External imports
 from external.SuperGlue.matching import Matching
 
-# Custom imports
+# Local imports
 import src.base.resize_image as ri
 
 # Constants

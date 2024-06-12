@@ -1,8 +1,8 @@
-# Package imports
+# Library imports
 import os
 from tqdm import tqdm
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.prepare.create_table_entry as cte
 

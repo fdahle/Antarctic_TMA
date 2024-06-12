@@ -1,13 +1,13 @@
 """Georeference an image with a neighbouring geo-referenced image"""
 
-# Package imports
+# Library imports
 import copy
 import cv2
 import numpy as np
 from rasterio.transform import Affine
 from typing import Optional, Tuple
 
-# Custom imports
+# Local imports
 import src.base.enhance_image as eh
 import src.base.find_tie_points as ftp
 import src.display.display_images as di

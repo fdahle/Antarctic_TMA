@@ -1,4 +1,4 @@
-# Package imports
+# Library imports
 import glob
 import os
 import numpy as np
@@ -6,7 +6,7 @@ import shapely
 from shapely.geometry import LineString
 from tqdm import tqdm
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.georef.snippets.calc_azimuth as ca
 import src.georef.snippets.calc_camera_position as ccp

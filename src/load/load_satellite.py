@@ -1,6 +1,6 @@
 """load satellite images"""
 
-# Package imports
+# Library imports
 import os
 import numpy as np
 import rasterio

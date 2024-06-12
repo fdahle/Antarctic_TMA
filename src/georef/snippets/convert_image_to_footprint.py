@@ -1,6 +1,6 @@
 """convert raster image to polygon footprint"""
 
-# Package imports
+# Library imports
 import numpy as np
 from numpy import ndarray
 from rasterio.transform import Affine

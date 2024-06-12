@@ -1,6 +1,6 @@
 """Enhance contrast an image"""
 
-# Package imports
+# Library imports
 import copy
 import numpy as np
 import warnings

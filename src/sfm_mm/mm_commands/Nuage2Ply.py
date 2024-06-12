@@ -1,11 +1,11 @@
 """Python module for Nuage2Ply in Micmac."""
 
-# Package Imports
+# Library imports
 import glob
 import os
 from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 

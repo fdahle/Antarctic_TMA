@@ -1,9 +1,9 @@
-# Package imports
+# Library imports
 import numpy as np
 import os
 from tqdm import tqdm
 
-# Custom imports
+# Local imports
 import src.export.export_world_file as ewf
 
 # Variables

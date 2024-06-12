@@ -1,6 +1,6 @@
 """find tie points between two images"""
 
-# Package imports
+# Library imports
 import copy
 import cv2
 import math
@@ -14,7 +14,7 @@ from external.lightglue import LightGlue, SuperPoint
 from external.lightglue.utils import rbd
 from external.SuperGlue.matching import Matching
 
-# Custom imports
+# Local imports
 import src.base.custom_print as cp
 import src.base.resize_image as ri
 import src.display.display_images as di

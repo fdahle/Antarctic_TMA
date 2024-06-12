@@ -1,4 +1,6 @@
-# Package imports
+"""extract a subset for fiducial marker detection"""
+
+# Library imports
 import cv2
 import dlib
 import numpy as np

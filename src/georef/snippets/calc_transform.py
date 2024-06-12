@@ -1,22 +1,45 @@
+"""Calculates the transformation matrix from gcps"""
+
+# Library imports
 import numpy as np
 import rasterio
-
 from affine import Affine
 from osgeo import gdal, osr
 from rasterio.transform import from_gcps
 from sklearn.cluster import KMeans
+from typing import Optional
 
 
-def calc_transform(image, tps, conf=None, transform_method="rasterio",
-                   gdal_order=1, no_data_value=0, epsg_code=3031,
-                   simplify_points=False, n_clusters=-1):
+def calc_transform(image: np.ndarray, tps: np.ndarray, conf: Optional[np.ndarray] = None,
+                   transform_method: str = "rasterio", gdal_order: int = 1, no_data_value: int = 0,
+                   epsg_code: int = 3031, simplify_points: bool = False,
+                   n_clusters: int = -1) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calculates the transformation matrix and residuals for geo-referencing an image using Ground Control Points (GCPs).
 
+    Args:
+        image (np.ndarray): The input image array.
+        tps (np.ndarray): 2D numpy array of tie points with each row representing a tie point as (x, y, x_abs, y_abs).
+        conf (Optional[np.ndarray], optional): Array of confidence values for each tie point. Defaults to None.
+        transform_method (str, optional): Method to calculate the transformation. Options are "rasterio" or "gdal".
+            Defaults to "rasterio".
+        gdal_order (int, optional): Order of the polynomial for GDAL transformation. Defaults to 1.
+        no_data_value (int, optional): No data value for the image. Defaults to 0.
+        epsg_code (int, optional): EPSG code for the coordinate reference system. Defaults to 3031.
+        simplify_points (bool, optional): Flag to enable simplification of tie points using clustering.
+            Defaults to False.
+        n_clusters (int, optional): Number of clusters for simplifying tie points.
+            If -1, the optimal number of clusters is calculated. Defaults to -1.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: The transformation matrix and an array of residuals.
+    """
     # Simplify GCPs if requested
     if simplify_points:
 
         # try to find an optimal number of tie-points
         if n_clusters == -1:
-            n_clusters = __optimal_clusters(tps)
+            n_clusters = _get_optimal_clusters(tps)
 
         # should be at least 50 clusters but maximum as many as the number of points
         n_clusters = np.maximum(n_clusters, 50)
@@ -145,3 +168,11 @@ def calc_transform(image, tps, conf=None, transform_method="rasterio",
     residuals = np.array(residuals)
 
     return transform, residuals
+
+
+def _get_optimal_clusters(tps: np.ndarray) -> int:
+
+    # TODO
+    print(tps)
+    return tps.shape[0]
+    pass

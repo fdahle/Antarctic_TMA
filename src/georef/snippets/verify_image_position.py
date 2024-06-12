@@ -1,13 +1,17 @@
+"""verify a position of a footprint for a flightpath"""
+
+# Library imports
 import numpy as np
 import statistics
-
 from shapely.geometry import LineString, Polygon
 from shapely.ops import nearest_points
 from shapely.wkt import loads
 from typing import List, Union
 
+# Local imports
 import src.display.display_shapes as ds
 
+# Debug variables
 debug_plot_shapes = True
 debug_print_distance = True
 

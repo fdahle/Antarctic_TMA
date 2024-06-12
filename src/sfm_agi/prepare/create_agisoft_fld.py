@@ -1,9 +1,12 @@
-# Package imports
+"""Prepare a folder for Agisoft Metashape"""
+
+# Library imports
 import cv2
 import os
 import shutil
+from typing import Optional
 
-# Custom imports
+# Local imports
 import src.base.connect_to_database as ctd
 import src.base.create_mask as cm
 import src.load.load_image as li
@@ -13,7 +16,18 @@ PATH_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
 PATH_AGISOFT_FLD = "/home/fdahle/SFTP/staff-umbrella/ATM/agisoft"
 
 
-def create_agisoft_fld(image_ids, project_name=None):
+def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None) -> None:
+    """
+    Prepares a folder for SfM using Agisoft Metashape by copying images and creating masks. Furthermore, it creates
+    a camera file with the camera positions and a focal length file.
+    Args:
+        image_ids (List[str]): List of image IDs to be processed.
+        project_name (Optional[str]): Name of the project. If None, the project name is derived from the image IDs.
+            Defaults to None.
+    Returns:
+        None
+    """
+
     # check if the base folder exists
     if not os.path.exists(PATH_AGISOFT_FLD):
         raise FileNotFoundError(f"Folder {PATH_AGISOFT_FLD} does not exist (Is the server mounted?)")

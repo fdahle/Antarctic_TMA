@@ -1,10 +1,11 @@
 """Python module for ReduceCustom (custom function) in Micmac."""
 
-# Package imports
+# Library imports
 import glob
 import json
+from typing import Any
 
-# Custom imports
+# Local imports
 import src.load.load_image as li
 import src.export.export_tiff as et
 from src.sfm_mm.mm_commands._base_command import BaseCommand
@@ -15,7 +16,7 @@ class ReduceCustom(BaseCommand):
     required_args = ["Pxl"]
     allowed_args = ["Pxl"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         # Initialize the base class
         super().__init__(*args, **kwargs)
@@ -30,23 +31,25 @@ class ReduceCustom(BaseCommand):
         # validate the input parameters
         self.validate_mm_parameters()
 
-    def before_execution(self):
+    def before_execution(self) -> None:
         """
         This function is called before the execution of the command.
         """
         # nothing needs to be done before the execution
         pass
 
-    def after_execution(self):
+    def after_execution(self) -> None:
         """
         This function is called after the execution of the command.
         """
         # nothing needs to be done after the execution
         pass
 
-    def build_shell_dict(self):
+    def build_shell_dict(self) -> dict[str, str]:
         """
-        This function builds the shell command.
+        This function would normally build the shell command, but is not needed for this custom class.
+        Raises:
+            AssertionError: Because this custom class does not have a shell command.
         """
         raise AssertionError("This custom class does not have a shell command.")
 
@@ -98,7 +101,7 @@ class ReduceCustom(BaseCommand):
         if self.save_stats:
             self.extract_stats(self.command_name, raw_output)
 
-    def extract_stats(self, name, raw_output):
+    def extract_stats(self, name: str, raw_output: list[str]) -> None:
         """
         Extract statistics from the raw output of the command and save them to a JSON file.
         Args:
@@ -112,8 +115,8 @@ class ReduceCustom(BaseCommand):
         if isinstance(raw_output, str):
             raw_output = raw_output.splitlines()
 
-        stats={}
-        print("TODO")
+        stats = {}
+        print("TODO", raw_output)
 
         # Serialize the dictionary to a JSON string
         json_output = json.dumps(stats, indent=4)
@@ -122,7 +125,7 @@ class ReduceCustom(BaseCommand):
         with open(f"{self.project_folder}/stats/{name}_stats.json", "w") as file:
             file.write(json_output)
 
-    def validate_mm_parameters(self):
+    def validate_mm_parameters(self) -> None:
         """
         Validate the input parameters of the command.
         """
@@ -130,7 +133,7 @@ class ReduceCustom(BaseCommand):
         # TODO
         pass
 
-    def validate_required_files(self):
+    def validate_required_files(self) -> None:
         """
         Validate the required files of the command.
         """

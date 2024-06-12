@@ -1,4 +1,6 @@
-# Package imports
+"""extract a fiducial mark from an image"""
+
+# Library imports
 import copy
 import cv2
 import math

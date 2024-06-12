@@ -1,4 +1,6 @@
-# Package imports
+"""create an image xml for MicMac resampling"""
+
+# Library imports
 import pandas as pd
 from lxml import etree
 

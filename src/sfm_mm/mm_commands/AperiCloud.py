@@ -1,6 +1,6 @@
 """Python module for AperiCloud in Micmac."""
 
-# Package imports
+# Library imports
 import os
 import glob
 import shutil
@@ -8,7 +8,7 @@ import re
 import json
 from typing import Any
 
-# Custom imports
+# Local imports
 from src.sfm_mm.mm_commands._base_command import BaseCommand
 
 

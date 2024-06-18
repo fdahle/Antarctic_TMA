@@ -37,7 +37,7 @@ def extract_text(
         min_confidence: Optional[float] = None, min_area: Optional[int] = None,
         padding_x: Optional[int] = None, padding_y: Optional[int] = None,
         catch: bool = False) -> \
-        tuple[list[str | Any], list[Any], list[ndarray]] | None:
+        tuple[Optional[list[str | Any]], Optional[list[Any]], Optional[list[ndarray]]]:
     """
     Extracts text from an image using OCR. The image is divided into four subsets (north, east, south, west) and
     further into smaller subsets. Text is extracted from the smaller subsets and merged to find the final text.
@@ -470,7 +470,23 @@ def extract_text(
 
 
 # function to rotate points for 90 degrees
-def _rot90points(in_x, in_y, k, hw):
+def _rot90points(in_x: float, in_y: float, k: int, hw: tuple[int, int]) -> tuple[float, float]:
+    """
+    Rotates a point (in_x, in_y) 90 degrees counterclockwise k times within a given height and width.
+
+    Args:
+        in_x (float): The x-coordinate of the point to rotate.
+        in_y (float): The y-coordinate of the point to rotate.
+        k (int): The number of 90-degree counterclockwise rotations.
+        hw (Tuple[int, int]): A tuple (height, width) representing the dimensions of the space.
+
+    Returns:
+        Tuple[float, float]: The new coordinates (x, y) after rotation.
+
+    Raises:
+        ValueError: If an invalid value for k is provided.
+    """
+
     x = copy.deepcopy(in_x)
     y = copy.deepcopy(in_y)
 

@@ -18,7 +18,7 @@ def load_credentials(account_id: str) -> tuple[str, str]:
         account_id (str): The ID of the account for which to retrieve credentials.
 
     Returns:
-        tuple[str, str]: A tuple the username and password for the specified account ID.
+        account_info (object): An object containing the retrieved credentials.
 
     Raises:
         KeyError: If a key is not found in the credentials file.
@@ -31,12 +31,10 @@ def load_credentials(account_id: str) -> tuple[str, str]:
         # Retrieve credentials by account ID
         if account_id in credentials_data:
 
-            account = credentials_data[account_id]
+            # Get the account information
+            account_info = credentials_data[account_id]
 
-            username = account['username']
-            password = account['password']
-
-            return username, password
+            return account_info
 
         else:
             raise KeyError(f"There is no account '{account_id}' in the credentials file.")

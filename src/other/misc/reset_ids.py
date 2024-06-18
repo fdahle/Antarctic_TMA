@@ -1,3 +1,5 @@
+"""reset rows in the psql database"""
+
 # Local imports
 import src.base.connect_to_database as ctd
 
@@ -17,9 +19,15 @@ columns = ["subset_n_x", "subset_n_y", "subset_n_estimated", "subset_n_extractio
            "fid_mark_8_x", "fid_mark_8_y", "fid_mark_8_estimated", "fid_mark_8_extraction_date"]
 
 
-def reset_ids(ids):
+def reset_ids(ids: list[str]) -> None:
     """
-    This function resets specified columns in specified tables for the given ids.
+    Resets specified columns in the 'images_fid_points' table for the given IDs.
+
+    Args:
+        ids (list[str]): A list of image IDs whose columns need to be reset.
+
+    Returns:
+        None
     """
 
     answer = input(f"There are {len(ids)} ids in the list. "

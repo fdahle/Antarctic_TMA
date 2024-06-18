@@ -1,9 +1,20 @@
+"""Exports camera positions and heights"""
+
+# local imports
 import src.base.connect_to_database as ctd
 
-csv_path = "/home/fdahle/SFTP/staff-umbrella/ATM/images_orig/cameras.csv"
 
+def export_cameras(image_ids: list[str], csv_path: str) -> None:
+    """
+    Exports camera positions and heights to a CSV file that can be used in Agisoft Metashape.
 
-def export_cameras(image_ids):
+    Args:
+        image_ids (List[str]): List of image IDs to export.
+        csv_path (str): Path to the CSV file where data will be exported.
+
+    Returns:
+        None
+    """
     conn = ctd.establish_connection()
 
     # convert list of image ids to one string

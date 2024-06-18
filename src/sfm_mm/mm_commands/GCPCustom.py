@@ -68,7 +68,10 @@ class GCPCustom(BaseCommand):
         """
         raise AssertionError("This custom class does not have a shell command.")
 
-    def execute_custom_cmd(self):
+    def execute_custom_cmd(self) -> None:
+        """
+        This function executes the custom functions of the command.
+        """
 
         # validate the required files
         self.validate_required_files()
@@ -114,7 +117,7 @@ class GCPCustom(BaseCommand):
             raw_output = raw_output.splitlines()
 
         stats = {}
-        print("TODO")
+        print("TODO", raw_output)
 
         # Serialize the dictionary to a JSON string
         json_output = json.dumps(stats, indent=4)

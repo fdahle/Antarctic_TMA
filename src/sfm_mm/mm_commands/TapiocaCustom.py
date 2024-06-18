@@ -17,6 +17,10 @@ from src.sfm_mm.mm_commands._context_manager import log_and_print
 
 
 class TapiocaCustom(BaseCommand):
+    """
+    TapiocaCustom is a custom command used for computing tie points
+    between overlapping images using SuperGlue/LightGlue.
+    """
 
     required_args = []
     allowed_args = ["use_footprints", "use_masks", "max_id_range", "save_tps_images"]
@@ -57,7 +61,10 @@ class TapiocaCustom(BaseCommand):
         """
         raise AssertionError("This custom class does not have a shell command.")
 
-    def execute_custom_cmd(self):
+    def execute_custom_cmd(self) -> None:
+        """
+        This function executes the custom functions of the command.
+        """
 
         # validate the required files
         self.validate_required_files()

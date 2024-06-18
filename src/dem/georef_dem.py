@@ -17,7 +17,6 @@ buffer_val = 10000
 
 
 def georef_dem(dem_unref, transform_unref):
-    temp_fld = "/home/fdahle/Desktop/tmp"
 
     # remove outliers
     dem_cleaned = _clean_dem(dem_unref)

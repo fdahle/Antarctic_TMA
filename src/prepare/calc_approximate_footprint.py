@@ -243,10 +243,10 @@ class CameraCalculator:
             print("point:", i, '-', p.x, p.y, p.z)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def __del__(self):
+    def __del__(self) -> None:
         pass
 
     @staticmethod

@@ -30,7 +30,9 @@ def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',
         except (Exception,):
             # username = input('Earthdata username: ')
             # password = getpass('Earthdata password: ')
-            username, password = lc.load_credentials('earthdata')
+            account_info = lc.load_credentials('earthdata')
+            username = account_info['username']
+            password = account_info['password']
             return base64.b64encode(f'{username}:{password}'.encode('ascii')).decode('ascii')
 
     def build_query_url():

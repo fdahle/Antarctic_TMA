@@ -274,6 +274,9 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
         if save_type not in ["png", "svg"]:
             raise ValueError("Unsupported save_type. Expected 'png' or 'svg'.")
 
+        if save_path.endswith(".png") or save_path.endswith(".svg"):
+            save_path = save_path[:-4]
+
         # Save the figure to the specified path with the specified file type
         plt.savefig(f"{save_path}.{save_type}", format=save_type)
         plt.close()  # Close the plot explicitly after saving to avoid displaying it

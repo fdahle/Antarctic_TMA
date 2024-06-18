@@ -1,3 +1,5 @@
+"""extract image ids from database based on area of interest"""
+
 import geopandas as gpd
 import pandas as pd
 

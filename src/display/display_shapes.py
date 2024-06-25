@@ -19,7 +19,7 @@ base_style_config = {
 }
 
 
-def display_shapes(shapes: Union[List[BaseGeometry], List[str]],
+def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame],
                    normalize: bool = False,
                    style_config: Optional[Dict[str, Any]] = None,
                    save_path: Optional[str] = None,
@@ -68,22 +68,26 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str]],
     # convert all input data to geo-series but also save the geoms for normalizing
     geoms = []
     gs_shapes = []  # shapes as geo-series
-    for i, shape in enumerate(shapes):
+    if isinstance(shapes, gpd.GeoDataFrame):
+        for geom in shapes.geometry:
+            geoms.append(geom)
+        gs_shapes.append(shapes.geometry)
+    else:
+        for i, shape in enumerate(shapes):
+            # Convert WKT strings to Shapely geometry first
+            if isinstance(shape, str):
+                shape = wkt_loads(shape)
 
-        # Convert WKT strings to Shapely geometry first
-        if isinstance(shape, str):
-            shape = wkt_loads(shape)
-
-        # Convert elements to plottable geo-series
-        if isinstance(shape, BaseGeometry):
-            geoms.append(shape)
-            gs_shapes.append(gpd.GeoSeries([shape]))  # noqa
-        elif isinstance(shape, list):
-            gs_shapes.append(gpd.GeoSeries(shape))  # noqa
-            for item in shape:
-                geoms.append(item)
-        else:
-            raise ValueError("Invalid input shape type. Expected Shapely geometry or WKT string.")
+            # Convert elements to plottable geo-series
+            if isinstance(shape, BaseGeometry):
+                geoms.append(shape)
+                gs_shapes.append(gpd.GeoSeries([shape]))  # noqa
+            elif isinstance(shape, list):
+                gs_shapes.append(gpd.GeoSeries(shape))  # noqa
+                for item in shape:
+                    geoms.append(item)
+            else:
+                raise ValueError("Invalid input shape type. Expected Shapely geometry, WKT string, or GeoDataFrame.")
 
     # find global min_x and min_y
     all_geoms = unary_union(geoms)

@@ -16,6 +16,10 @@ def save_tie_points(chunk, save_path=None):
     points = point_cloud.points
     #tracks = point_cloud.tracks
 
+    if points is None:
+        raise Exception("No tie points available")
+        return
+
     point_ids = [-1] * len(point_cloud.tracks)
     for point_id in range(0, len(points)):
         point_ids[points[point_id].track_id] = point_id

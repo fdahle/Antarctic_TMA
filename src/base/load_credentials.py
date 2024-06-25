@@ -7,7 +7,7 @@ import json
 PATH_CREDENTIALS = '../../credentials.json'
 
 
-def load_credentials(account_id: str) -> tuple[str, str]:
+def load_credentials(account_id: str) -> dict:
     """
     Load credentials for a specific account ID from a JSON file.
 
@@ -18,7 +18,7 @@ def load_credentials(account_id: str) -> tuple[str, str]:
         account_id (str): The ID of the account for which to retrieve credentials.
 
     Returns:
-        account_info (object): An object containing the retrieved credentials.
+        account_info (dict): An object containing the retrieved credentials.
 
     Raises:
         KeyError: If a key is not found in the credentials file.

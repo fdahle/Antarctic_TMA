@@ -43,12 +43,14 @@ def extract_ids_for_sfm(min_nr: int, image_xml: bool, resampled: bool, min_compl
                  "images_extracted.complexity, " \
                  "images_file_paths.path_xml_file, " \
                  "images_file_paths.path_downloaded_resampled, " \
-                 "images_extracted.position_exact, " \
+                 "images_georef_3.position_exact, " \
                  "images_extracted.focal_length, images_extracted.height " \
                  "FROM images JOIN images_extracted " \
                  "on images.image_id = images_extracted.image_id " \
                  "JOIN images_file_paths ON " \
-                 "images.image_id = images_file_paths.image_id"
+                 "images.image_id = images_file_paths.image_id " \
+                 "JOIN images_georef_3 ON " \
+                 "images.image_id = images_georef_3.image_id"
     data = ctd.execute_sql(sql_string, conn)
 
     # get the height data from shp file

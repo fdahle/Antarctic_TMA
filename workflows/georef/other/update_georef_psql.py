@@ -16,7 +16,7 @@ import src.load.load_image as li
 # Variables
 input_fld = "/data_1/ATM/data_1/georef/"
 methods = ["sat"]
-overwrite = False
+overwrite = True
 
 
 def update_georef_psql():
@@ -60,9 +60,9 @@ def update_georef_psql():
 
                 # check if the method is better
                 better_method = False
-                if method == "sat" and row["georef_type"] in ["img", "calc"]:
+                if method == "sat" and row["georef_type"].iloc[0] in ["img", "calc"]:
                     better_method = True
-                if method == "img" and row["georef_type"] == "calc":
+                if method == "img" and row["georef_type"].iloc[0] == "calc":
                     better_method = True
 
                 if better_method:

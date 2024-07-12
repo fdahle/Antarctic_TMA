@@ -34,7 +34,7 @@ import src.load.load_image as li
 import src.load.load_shape_data as lsd
 
 # define save folder
-DEFAULT_SAVE_FOLDER = "/data_1/ATM/data_1/georef"
+DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 
 # settings for adapted georef
 MIN_COMPLEXITY = 0.05
@@ -336,7 +336,7 @@ def georef_adapted(input_ids,
     if verify_image_positions:
 
         # load footprint and ids of images that are already geo-referenced by satellite
-        path_sat_shapefile = "/data_1/ATM/data_1/georef/sat.shp"
+        path_sat_shapefile = "/data/ATM/data_1/georef/sat.shp"
         sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
 
         # iterate all images
@@ -492,7 +492,7 @@ def _load_processed_images(filename):
 
 if __name__ == "__main__":
     # load all ids from the csv file as pandas dataframe
-    csv_path = "/data_1/ATM/data_1/georef/sat_processed_images.csv"
+    csv_path = "/data/ATM/data_1/georef/sat_processed_images.csv"
     processed_images = pd.read_csv(csv_path, delimiter=";")
 
     # remove all images that are already geo-referenced

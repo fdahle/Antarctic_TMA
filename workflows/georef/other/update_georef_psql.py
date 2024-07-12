@@ -14,7 +14,7 @@ import src.georef.snippets.convert_image_to_footprint as citf
 import src.load.load_image as li
 
 # Variables
-input_fld = "/data_1/ATM/data_1/georef/"
+input_fld = "/data/ATM/data_1/georef/"
 methods = ["sat"]
 overwrite = True
 

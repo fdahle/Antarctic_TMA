@@ -3,7 +3,7 @@ import json
 
 import src.sfm_mm.SFMProject as SfmP
 
-PATH_SFM_PROJECTS = "/data_1/ATM/data_1/sfm/mm_projects"
+PATH_SFM_PROJECTS = "/data/ATM/data_1/sfm/mm_projects"
 
 # 1848_4
 # input_name = "1848_4"

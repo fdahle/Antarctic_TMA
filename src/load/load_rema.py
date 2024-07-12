@@ -10,8 +10,8 @@ from rasterio import mask, merge
 from typing import Tuple, Optional
 
 # Constants
-DEFAULT_REMA_FLD = "/data_1/ATM/data_1/DEM/REMA/mosaic"
-DEFAULT_REMA_SHP = "/data_1/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
+DEFAULT_REMA_FLD = "/data/ATM/data_1/DEM/REMA/mosaic"
+DEFAULT_REMA_SHP = "/data/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
 
 
 def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,
@@ -83,7 +83,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     # what happens if no rema files are found
     if len(mosaic_files) == 0:
         if return_empty_rema:
-            return None
+            return None, None
         else:
             raise ValueError("No satellite images were found")
 
@@ -113,4 +113,4 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
 
     cropped = cropped[0, :, :]
 
-    return cropped
+    return cropped, transform_cropped

@@ -10,7 +10,7 @@ import src.load.load_transform as lt
 import src.georef.snippets.verify_image_geometry as vig
 import src.georef.snippets.verify_image_position as vip
 
-georef_folder = "/data_1/ATM/data_1/georef"
+georef_folder = "/data/ATM/data_1/georef"
 georef_type = "sat"
 
 DISTANCE_THRESHOLD = 100

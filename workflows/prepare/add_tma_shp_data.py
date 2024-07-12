@@ -6,10 +6,10 @@ import src.base.connect_to_database as ctd
 import src.load.load_shape_data as lsd
 
 # Constants
-PATH_SHP_FILE = "/data_1/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
+PATH_SHP_FILE = "/data/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
 
 # Variables
-path_images = "/data_1/ATM/data_1/aerial/TMA/downloaded"  # path to the images
+path_images = "/data/ATM/data_1/aerial/TMA/downloaded"  # path to the images
 _overwrite = False  # overwrite existing entries
 _catch = False  # catch exceptions
 
@@ -59,7 +59,7 @@ def add_tma_shp_data(path_shp_file: str, overwrite: bool = False, catch: bool = 
         shape_row = shape_data[shape_data["ENTITY_ID"] == entity_id].to_dict(orient='records')[0]
 
         # get the image params for this image_id
-        image_path = "/data_1/ATM/data_1/aerial/TMA/downloaded/" + image_id + ".tif"
+        image_path = "/data/ATM/data_1/aerial/TMA/downloaded/" + image_id + ".tif"
         tma = image_id[2:6]
         roll = image_id[6:9]
         frame = int(image_id[9:13])

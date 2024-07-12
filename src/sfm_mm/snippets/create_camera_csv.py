@@ -48,12 +48,9 @@ def create_camera_csv(image_ids: list[Union[int, str]], csv_path: str, prefix: s
     str_image_ids = ",".join(["'" + str(image_id) + "'" for image_id in image_ids])
 
     # get all camera parameters from the database
-    sql_string = "SELECT images.image_id, " \
-                 "ST_AsText(position_exact) AS position_exact, " \
-                 "azimuth_exact, height " \
-                 "FROM images " \
-                 "JOIN images_extracted ON images.image_id = images_extracted.image_id " \
-                 "WHERE images.image_id IN (" + str_image_ids + ")"
+    sql_string = "SELECT images.image_id, ST_AsText(position_exact) AS position_exact, azimuth_exact, height " \
+                 " FROM images JOIN images_extracted ON images.image_id = images_extracted.image_id " \
+                 " WHERE images.image_id IN (" + str_image_ids + ")"
     data = ctd.execute_sql(sql_string, conn)
 
     # add a prefix to the image_ids

@@ -1,10 +1,13 @@
 """Exports camera positions and heights"""
 
+# Package imports
+import pandas as pd
+
 # local imports
 import src.base.connect_to_database as ctd
 
 
-def export_cameras(image_ids: list[str], csv_path: str) -> None:
+def export_cameras(image_ids: list[str], csv_path: str, extension="tif") -> None:
     """
     Exports camera positions and heights to a CSV file that can be used in Agisoft Metashape.
 
@@ -29,11 +32,46 @@ def export_cameras(image_ids: list[str], csv_path: str) -> None:
 
     data = data_base.merge(data_extracted, on="image_id")
 
-    data['height'] = 4998
+    # add extension to image_id
+    data['image_id'] = data['image_id'] + "." + extension
+
+    # set the heigth
+    #data['height'] = 4998
 
     # split position_exact into x, y
     data['x'] = data['position_exact'].str.split(" ").str[0].str[6:].astype(float)
     data['y'] = data['position_exact'].str.split(" ").str[1].str[:-1].astype(float)
 
+    def get_z(row):
+        feet_to_meters = 0.3048  # Conversion factor from feet to meters
+        if pd.notnull(row['height']):
+            return row['height'] * feet_to_meters
+        elif pd.notnull(row['altimeter_value']):
+            return row['altimeter_value'] * feet_to_meters
+        elif pd.notnull(row['altitude']) and row['altitude'] != -99999:
+            return row['altitude'] * feet_to_meters
+        return 22000 * feet_to_meters
+
+    # Apply the function to get z values
+    data['z'] = data.apply(get_z, axis=1)
+
+    # round to 3 decimals
+    data['x'] = data['x'].round(3)
+    data['y'] = data['y'].round(3)
+    data['z'] = data['z'].round(3)
+
+    columns = ["image_id", "x", "y", "z"]
+
+    add_rotation = True
+    if add_rotation:
+
+        data['yaw'] = 339.14
+        data['pitch'] = 0
+        data['roll'] = 0
+
+        columns.append("yaw")
+        columns.append("pitch")
+        columns.append("roll")
+
     # export to csv
-    data[["image_id", "x", "y", "height"]].to_csv(csv_path, index=False)
+    data[columns].to_csv(csv_path, index=False)

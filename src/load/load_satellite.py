@@ -11,7 +11,7 @@ from rasterio import Affine
 from typing import Optional, Tuple
 
 # Constants
-DEFAULT_SAT_FLD = "/data_1/ATM/data_1/satellite"
+DEFAULT_SAT_FLD = "/data/ATM/data_1/satellite"
 
 
 def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,

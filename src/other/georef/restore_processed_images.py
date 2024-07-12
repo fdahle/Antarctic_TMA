@@ -10,10 +10,10 @@ import src.base.modify_csv as mc
 georef_type = "sat"
 
 # path to the processed_images.csv
-path_csv_file = f"/data_1/ATM/data_1/georef/{georef_type}_processed_images.csv"
+path_csv_file = f"/data/ATM/data_1/georef/{georef_type}_processed_images.csv"
 
 # path to the geo-referenced images
-path_fld_georef_images = f"/data_1/ATM/data_1/georef/{georef_type}"
+path_fld_georef_images = f"/data/ATM/data_1/georef/{georef_type}"
 
 for file in os.listdir(path_fld_georef_images):
 

@@ -5,7 +5,6 @@ import pandas as pd
 import psycopg2
 import warnings
 from datetime import datetime
-from psycopg2 import extensions
 from typing import Optional
 
 # Global psql constants
@@ -13,13 +12,13 @@ PSQL_HOST = "127.0.0.1"
 # PSQL_PORT = "7777"
 PSQL_PORT = "5432"
 PSQL_PASSWORD = "password"
-PSQL_USER = "admin"
-PSQL_DATABASE = "antarctica2"
+PSQL_USER = "postgres"
+PSQL_DATABASE = "tma_db"
 
 
-def establish_connection() -> object:
+def establish_connection() -> psycopg2.extensions.connection:
     """
-    Establishes a connection to the PostgreSQL database using the global constants.
+    Establishes a connection to the PostgresSQL database using the global constants.
     Returns:
         psycopg2.extensions.connection: The connection object.
     """

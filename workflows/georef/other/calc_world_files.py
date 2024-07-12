@@ -8,7 +8,7 @@ import src.export.export_world_file as ewf
 
 # Variables
 overwrite = False
-path_input_fld = "/data_1/ATM/data_1/georef/sat"
+path_input_fld = "/data/ATM/data_1/georef/sat"
 
 
 def calc_world_files():

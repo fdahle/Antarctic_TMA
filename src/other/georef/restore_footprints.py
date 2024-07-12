@@ -20,7 +20,7 @@ use_attributes_from_shp = True
 
 # get all image ids from folder if image_id is not provided
 if image_id is None:
-    path_fld = f"/data_1/ATM/data_1/georef/{img_type}"
+    path_fld = f"/data/ATM/data_1/georef/{img_type}"
     pattern = os.path.join(path_fld, '*.tif')
     tif_files = glob.glob(pattern)
     image_ids = [os.path.basename(file)[:-4] for file in tif_files]
@@ -29,10 +29,10 @@ else:
 
 if use_attributes_from_shp:
     # get the attributes from the shapefile
-    path_shp_file = f"/data_1/ATM/data_1/georef/{img_type}.shp"
+    path_shp_file = f"/data/ATM/data_1/georef/{img_type}.shp"
     shape_data = lsd.load_shape_data(path_shp_file)
 
-path_new_shp_file = f"/data_1/ATM/data_1/georef/{img_type}_new.shp"
+path_new_shp_file = f"/data/ATM/data_1/georef/{img_type}_new.shp"
 
 for img_id in tqdm(image_ids):
 
@@ -40,7 +40,7 @@ for img_id in tqdm(image_ids):
     image = li.load_image(img_id)
 
     # load the transform
-    transform_path = f"/data_1/ATM/data_1/georef/{img_type}/{img_id}_transform.txt"
+    transform_path = f"/data/ATM/data_1/georef/{img_type}/{img_id}_transform.txt"
     transform = lt.load_transform(transform_path)
 
     # convert the image to a footprint

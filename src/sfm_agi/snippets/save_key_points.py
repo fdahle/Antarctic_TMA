@@ -6,13 +6,13 @@ from plyfile import PlyData
 import src.load.load_image as li
 import src.display.display_images as di
 
-def save_key_points(image_ids, project_path):
 
+def save_key_points(image_ids, project_fld, kp_folder):
     # get name of last folder
-    project_name = os.path.basename(os.path.normpath(project_path))
+    project_name = os.path.basename(os.path.normpath(project_fld))
 
     # define path to the zip file
-    path_zip = os.path.join(project_path, f"{project_name}.files/0/0/point_cloud/point_cloud.zip")
+    path_zip = os.path.join(project_fld, f"{project_name}_relative.files/0/0/point_cloud/point_cloud.zip")
 
     ply_dict = {}
 
@@ -53,14 +53,13 @@ def save_key_points(image_ids, project_path):
 
     # Load the images
     for i, key in enumerate(ply_dict.keys()):
-
         image_id = image_ids[i]
 
         # Load the image
         img = li.load_image(image_id)
 
         # define save path
-        save_path = f"{project_path}/key_points/{image_id}"
+        save_path = f"{kp_folder}/{image_id}"
 
-        # Display the image
+        # Display the image (and save it)
         di.display_images(img, points=[ply_dict[key]], save_path=save_path)

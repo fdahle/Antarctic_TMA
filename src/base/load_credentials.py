@@ -4,7 +4,7 @@
 import json
 
 # Constants
-PATH_CREDENTIALS = '../../credentials.json'
+PATH_CREDENTIALS = '/home/fdahle/Documents/Github/Antarctic_TMA/credentials.json'
 
 
 def load_credentials(account_id: str) -> dict:

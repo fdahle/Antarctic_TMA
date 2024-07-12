@@ -13,7 +13,7 @@ import src.load.load_image as li
 overwrite = False
 
 # Debug variables
-debug_display_fid_marks = False
+debug_display_fid_marks = True
 
 
 def calculate_fid_marks():

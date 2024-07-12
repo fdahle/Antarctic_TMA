@@ -10,7 +10,7 @@ def create_adapted_mask(existing_mask, image_id, conn=None):
     # copy the existing mask
     new_mask = copy.deepcopy(existing_mask)
 
-    inverted_mask = cv2.bitwise_not(existing_mask)
+    inverted_mask = cv2.bitwise_not(new_mask)
 
     kernel_size = 25
     iterations = 1
@@ -20,9 +20,11 @@ def create_adapted_mask(existing_mask, image_id, conn=None):
     dilated_mask = cv2.dilate(inverted_mask, kernel, iterations=iterations)
 
     kerneled_mask = cv2.bitwise_not(dilated_mask)
+    kerneled_mask = kerneled_mask.astype(np.uint8)
+    kerneled_mask = kerneled_mask * 255
 
     # create a placeholder mask that we fill with the text boxes
-    placeholder_mask = np.ones_like(existing_mask)
+    placeholder_mask = np.ones_like(new_mask)
 
     # create connection to the database if not provided
     if conn is None:

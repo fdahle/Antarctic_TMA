@@ -7,7 +7,7 @@ import src.base.connect_to_database as ctd
 import src.sfm_mm.prepare.create_image_xml as cix
 
 # Variables
-output_folder = "/data_1/ATM/data_1/sfm/xml/images/"
+output_folder = "/data/ATM/data_1/sfm/xml/images/"
 overwrite = False
 
 

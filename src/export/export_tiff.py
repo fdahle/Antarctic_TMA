@@ -22,6 +22,9 @@ def export_tiff(img: np.ndarray, output_path: str, overwrite: bool = False) -> N
     if os.path.exists(output_path) and not overwrite:
         raise FileExistsError(f"The file {output_path} already exists. Set 'overwrite' to True to overwrite the file.")
 
+    print(output_path)
+    print(img.shape)
+
     # Export the image to a TIFF file
     cv2.imwrite(output_path, img)
     print(f"Image successfully exported to {output_path}.")

@@ -16,8 +16,8 @@ import src.text.altimeter_snippets as snippets
 # Constants
 CENTER_RADIUS_SIZE = 25
 MIN_BINARY_THRESHOLD = 150
-PATH_ALTIMETER_DETECTOR = "/data_1/ATM/data_1/machine_learning/dlib/altimeter/detector.svm"
-PATH_TEMPLATES = "/data_1/ATM/data_1/machine_learning/dlib/altimeter/templates"
+PATH_ALTIMETER_DETECTOR = "/data/ATM/data_1/machine_learning/dlib/altimeter/detector.svm"
+PATH_TEMPLATES = "/data/ATM/data_1/machine_learning/dlib/altimeter/templates"
 
 # Variables
 matching_confidence_value = 20000000

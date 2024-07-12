@@ -9,8 +9,9 @@ from tkinter import Tk, Label, Button
 
 import src.load.load_image as li
 
-img_path = "/data_1/ATM/data_1/aerial/TMA/downloaded/"
-#img_path = "/data_1/ATM/data_1/sfm/projects/EGU/images_orig"
+base_fld = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/"
+img_path = base_fld + "data_1/aerial/TMA/downloaded/"
+#img_path = "/data/ATM/data_1/sfm/projects/EGU/images_orig"
 input_img_type = "tif"
 img_size = (800, 800)
 

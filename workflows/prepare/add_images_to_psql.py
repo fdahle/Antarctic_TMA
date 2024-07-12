@@ -7,7 +7,7 @@ import src.base.connect_to_database as ctd
 import src.prepare.create_table_entry as cte
 
 # Constants
-PATH_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
+PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 
 # Variables
 tables_for_adding = ["images_extracted"]

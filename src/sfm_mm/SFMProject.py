@@ -17,15 +17,15 @@ import src.sfm_mm.snippets.create_camera_csv as ccc
 """
 
 # constants for the default image folders
-DEFAULT_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
-DEFAULT_RESAMPLED_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded_resampled"
-DEFAULT_MASK_FLD = "/data_1/ATM/data_1/aerial/TMA/masked"
-DEFAULT_RESAMPLED_MASK_FLD = "/data_1/ATM/data_1/aerial/TMA/masked_resampled"
-DEFAULT_XML_FLD = "/data_1/ATM/data_1/sfm/xml/images/"
-DEFAULT_TRANSFORM_FLD = "/data_1/ATM/data_1/georef/sat/"
+DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
+DEFAULT_RESAMPLED_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded_resampled"
+DEFAULT_MASK_FLD = "/data/ATM/data_1/aerial/TMA/masked"
+DEFAULT_RESAMPLED_MASK_FLD = "/data/ATM/data_1/aerial/TMA/masked_resampled"
+DEFAULT_XML_FLD = "/data/ATM/data_1/sfm/xml/images/"
+DEFAULT_TRANSFORM_FLD = "/data/ATM/data_1/georef/sat/"
 
 # constant for the default camera folder
-DEFAULT_CAM_FLD = "/data_1/ATM/data_1/sfm/xml/camera"
+DEFAULT_CAM_FLD = "/data/ATM/data_1/sfm/xml/camera"
 
 
 class SFMProject(object):

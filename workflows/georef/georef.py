@@ -39,7 +39,7 @@ import src.load.load_shape_data as lsd
 import src.load.load_transform as lt
 
 # define save folder
-DEFAULT_SAVE_FOLDER = "/data_1/ATM/data_1/georef"
+DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 
 # define input bounds or image ids
 INPUT_TYPE = "all"  # can be either "bounds" or "ids or all
@@ -343,7 +343,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         if verify_image_positions:
 
             # load footprint and ids of images that are already geo-referenced by satellite
-            path_sat_shapefile = "/data_1/ATM/data_1/georef/sat.shp"
+            path_sat_shapefile = "/data/ATM/data_1/georef/sat.shp"
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
 
             # iterate all images
@@ -605,7 +605,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         georeferenced_ids = []
 
         if "sat" in calc_types:
-            path_sat_shapefile = "/data_1/ATM/data_1/georef/sat.shp"
+            path_sat_shapefile = "/data/ATM/data_1/georef/sat.shp"
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
             sat_shapes = sat_shape_data.geometry
             sat_ids = sat_shape_data['image_id'].tolist()
@@ -614,7 +614,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
             georeferenced_ids.extend(sat_ids)
 
         if "img" in calc_types:
-            path_img_shapefile = "/data_1/ATM/data_1/georef/img.shp"
+            path_img_shapefile = "/data/ATM/data_1/georef/img.shp"
             img_shape_data = lsd.load_shape_data(path_img_shapefile)
             img_shapes = img_shape_data.geometry
             img_ids = img_shape_data['image_id'].tolist()
@@ -864,7 +864,7 @@ if __name__ == "__main__":
     # load image ids with bounds
     if INPUT_TYPE == "bounds":
         # load all approximate positions of images
-        path_approx_shape = "/data_1/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
+        path_approx_shape = "/data/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
         image_positions = lsd.load_shape_data(path_approx_shape)
 
         # filter the ids inside the bounds

@@ -5,7 +5,7 @@ import src.display.display_images as di
 import src.load.load_image as li
 
 
-def save_tie_points(chunk, save_path=None):
+def save_tie_points(chunk, save_path):
 
     # get data from the chunk
     cameras = chunk.cameras
@@ -103,10 +103,7 @@ def save_tie_points(chunk, save_path=None):
         image1 = li.load_image(camera1.label)
         image2 = li.load_image(camera2.label)
 
-        if save_path is not None:
-            image_path = f"{save_path}/{camera1.label}_{camera2.label}.png"
-        else:
-            image_path = None
+        image_path = f"{save_path}/{camera1.label}_{camera2.label}.png"
 
         # Display tie points
         di.display_images([image1, image2], tie_points=matches_array,

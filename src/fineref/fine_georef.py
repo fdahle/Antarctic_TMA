@@ -8,7 +8,7 @@ import src.display.display_images as di
 
 
 def fine_georef(image, transform):
-    path_img = "/data_1/ATM/data_1/aerial/icebridge/DMS_1381716_00183_20121028_16160486.tif"
+    path_img = "/data/ATM/data_1/aerial/icebridge/DMS_1381716_00183_20121028_16160486.tif"
 
     # remove 0, 0, 1 from the transform matrix
     transform = np.asarray(transform)

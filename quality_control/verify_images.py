@@ -15,7 +15,7 @@ import streamlit as st
 import src.base.connect_to_database as ctd
 
 # Constants
-PATH_MAIN_FOLDER = "/data_1/ATM/data_1/aerial/TMA"  # images in this folder and sub-folders will be checked
+PATH_MAIN_FOLDER = "/data/ATM/data_1/aerial/TMA"  # images in this folder and sub-folders will be checked
 
 
 def verify_images():

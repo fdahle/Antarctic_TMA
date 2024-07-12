@@ -11,7 +11,7 @@ from rasterio.transform import Affine as RasterioAffine
 from typing import Union, Optional
 
 # Global constant for default image path
-DEFAULT_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
+DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 
 
 def load_image(image_id: str, image_path: Optional[str] = None, image_type: str = "tif",

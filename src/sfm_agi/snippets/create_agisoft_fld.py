@@ -12,7 +12,7 @@ import src.base.create_mask as cm
 import src.load.load_image as li
 
 # Constants
-PATH_IMAGE_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
+PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 PATH_AGISOFT_FLD = "/home/fdahle/SFTP/staff-umbrella/ATM/agisoft"
 
 
@@ -104,10 +104,8 @@ def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None)
         cv2.imwrite(os.path.join(project_folder, "masks", f"{image_id}_mask.tif"), mask)
 
     # get some information about the images
-    sql_string = "SELECT image_id, " \
-                 "ST_AsText(position_exact) AS position_exact, focal_length, height " \
-                 "FROM images_extracted " \
-                 "WHERE image_id IN ('" + "', '".join(image_ids) + "')"
+    sql_string = ("SELECT image_id, ST_AsText(position_exact) AS position_exact,"
+                  " focal_length, height FROM images_extracted WHERE image_id IN ('") + "', '".join(image_ids) + "')"
     data = ctd.execute_sql(sql_string, conn)
 
     # convert height from feet to meters

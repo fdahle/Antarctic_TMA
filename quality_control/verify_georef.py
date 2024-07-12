@@ -15,7 +15,7 @@ import streamlit as st
 # Local imports
 import base.connect_to_database as ctd  # noqa
 
-BASE_FLD = "/data_1/ATM/data_1/georef"
+BASE_FLD = "/data/ATM/data_1/georef"
 
 
 def compute_pie(data):

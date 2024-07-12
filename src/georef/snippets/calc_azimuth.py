@@ -41,7 +41,7 @@ def calc_azimuth(image_id: str, conn: Optional[psycopg2.extensions.connection] =
 
     # get the position of all images with the same flightpath
     sql_string = "SELECT image_id, ST_AsText(position_exact) AS position_exact FROM images_extracted " \
-                 "WHERE SUBSTRING(image_id, 3, 4)='" + flight_path + "'"
+                 " WHERE SUBSTRING(image_id, 3, 4)='" + flight_path + "'"
     data = ctd.execute_sql(sql_string, conn)
 
     # remove the values where the position is empty

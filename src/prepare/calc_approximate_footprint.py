@@ -390,7 +390,7 @@ class CameraCalculator:
             rays (vector3d.vector.Vector[]): Array of 4 ray-vectors
             _origin (vector3d.vector.Vector): Position of the camera. The computation were developed
                                             assuming the camera was at the axes origin (0, 0, altitude) and the
-                                            results translated by the camera's real position afterwards.
+                                            results translated by the camera's real position afterward.
         Returns:
             vector3d.vector.Vector
         """

@@ -6,12 +6,12 @@ import sys
 import subprocess
 import tempfile
 
-PATH_FOLDER_PROJECTS = "/data_1/ATM/data_1/sfm/agi_projects"
+PATH_FOLDER_PROJECTS = "/data/ATM/data_1/sfm/agi_projects"
+
 
 def agi_wrapper(project_name, images,
                 camera_positions=None, camera_accuracies=None,
                 focal_lengths=None):
-
     # Serialize data structures to pass as arguments
     images = json.dumps(images)
     camera_positions = json.dumps(camera_positions if camera_positions is not None else {})
@@ -39,7 +39,6 @@ def agi_wrapper(project_name, images,
                               stderr=subprocess.PIPE,
                               universal_newlines=True) as p:
             for stdout_line in p.stdout:
-
                 print(stdout_line, end="")
                 temp_log_file.write(stdout_line)
 

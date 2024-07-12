@@ -7,7 +7,7 @@ from tqdm import tqdm
 import src.base.connect_to_database as ctd
 
 # Constants
-BASE_FLD = "/data_1/ATM/data_1"
+BASE_FLD = "/data/ATM/data_1"
 PATH_DOWNLOADED_FLD = os.path.join(BASE_FLD, "aerial/TMA/downloaded")
 PATH_MASK_FLD = os.path.join(BASE_FLD, "aerial/TMA/masked")
 PATH_SEGMENTED_FLD = os.path.join(BASE_FLD, "aerial/TMA/segmented/unet")

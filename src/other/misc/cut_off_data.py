@@ -1,8 +1,8 @@
 import os
 import src.load.load_image as li
 import src.export.export_tiff as et
-input_path_img = "/data_1/ATM/data_1/sfm/projects/src_test2/images"
-input_path_mask = "/data_1/ATM/data_1/sfm/projects/src_test2/masks"
+input_path_img = "/data/ATM/data_1/sfm/projects/src_test2/images"
+input_path_mask = "/data/ATM/data_1/sfm/projects/src_test2/masks"
 
 for file in os.listdir(input_path_img):
     base_path = os.path.join(input_path_img, file)

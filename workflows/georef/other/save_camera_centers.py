@@ -3,7 +3,7 @@ from shapely import wkt
 
 import src.base.connect_to_database as ctd
 
-save_path = "/data_1/ATM/data_1/georef/centers/centers.shp"
+save_path = "/data/ATM/data_1/georef/centers/centers.shp"
 
 def save_camera_centers():
 

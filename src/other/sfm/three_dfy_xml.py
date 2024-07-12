@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as Et
 
-path = "/data_1/ATM/data_1/sfm/projects/EGU2/Measures.xml"
+path = "/data/ATM/data_1/sfm/projects/EGU2/Measures.xml"
 
 PT_VAL = 0
 INCERTITUDE_VAL = 200

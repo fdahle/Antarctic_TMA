@@ -8,7 +8,7 @@ from tqdm import tqdm
 from typing import NoReturn
 
 # Constants
-INPUT_FLD = "/data_1/ATM/data_1/aerial/TMA/downloaded"
+INPUT_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 METHOD = "lzw"
 QUALITY = 100
 

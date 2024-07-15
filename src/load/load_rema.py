@@ -36,6 +36,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     Returns:
         Optional[np.ndarray]: The cropped REMA image as a NumPy array or None if no images are found
             and return_empty_rema is True.
+
     """
 
     # check for correct zoom level

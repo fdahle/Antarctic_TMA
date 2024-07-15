@@ -9,21 +9,24 @@ os.environ['KMP_WARNINGS'] = '0'
 # Local imports
 import src.base.connect_to_database as ctd  # noqa
 import src.georef.snippets.calc_azimuth as ca  # noqa
-import src.sfm_agi.run_agi_relative as rar  # noqa
-import src.sfm_agi.run_agi_absolute as raa  # noqa
+import src.sfm_agi.old.run_agi_relative as rar  # noqa
+import src.sfm_agi.old.run_agi_absolute as raa  # noqa
 
 # define the image ids
-# image_ids = ["CA180132V0094", "CA180132V0095", "CA180132V0096", "CA180132V0097"]
+#image_ids = ["CA180132V0094", "CA180132V0095", "CA180132V0096", "CA180132V0097",
 #              "CA180132V0098", "CA180132V0099", "CA180132V0100", "CA180132V00101"]
 
 # image_ids = ['CA184932V0241', 'CA184932V0242', 'CA184932V0243', 'CA184932V0244']
 
-image_ids = ['CA184832V0146', 'CA184832V0147', 'CA184832V0148', 'CA184832V0149', 'CA184832V0150']
+image_ids = ['CA184832V0146', 'CA184832V0147', 'CA184832V0148',
+             'CA184832V0149', 'CA184832V0150',
+             'CA184731L0035', 'CA184731L0036', 'CA184731L0037',
+             'CA184731L0038', 'CA184731L0039', 'CA184731L0040',]
 
 # get the first six characters of the first image id
-# project_name = image_ids[0][:6]
+#project_name = image_ids[0][:6]
 
-project_name = "test_gcps5"
+project_name = "oblique_test"
 
 # get only the first 3 images
 # image_ids = image_ids[:3]
@@ -95,4 +98,8 @@ for image_id in image_ids:
 #                     camera_positions=position_data, camera_rotations=rotation_dict,
 #                     camera_footprints=footprints)
 
-raa.run_agi_absolute(project_name, images, focal_lengths=focal_length_dict)
+import src.sfm_agi.run_agi as ra
+ra.run_agi(project_name, images, focal_lengths=focal_length_dict,
+           camera_footprints=footprints,)
+
+#raa.run_agi_absolute(project_name, images, focal_lengths=focal_length_dict)

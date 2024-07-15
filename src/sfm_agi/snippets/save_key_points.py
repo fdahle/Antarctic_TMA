@@ -12,7 +12,7 @@ def save_key_points(image_ids, project_fld, kp_folder):
     project_name = os.path.basename(os.path.normpath(project_fld))
 
     # define path to the zip file
-    path_zip = os.path.join(project_fld, f"{project_name}_relative.files/0/0/point_cloud/point_cloud.zip")
+    path_zip = os.path.join(project_fld, f"{project_name}.files/0/0/point_cloud/point_cloud.zip")
 
     ply_dict = {}
 

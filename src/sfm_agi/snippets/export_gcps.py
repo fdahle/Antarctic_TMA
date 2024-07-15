@@ -7,7 +7,7 @@ import src.dem.get_elevation_for_points as gefp
 import src.sfm_agi.snippets.georef_ortho as go
 
 
-def export_gcps(dem, ortho, bounding_box,
+def export_gcps(dem, ortho, bounding_box, zoom_level,
                 resolution, footprints, output_path):
 
     # get first band of ortho if it has more than one band
@@ -46,6 +46,7 @@ def export_gcps(dem, ortho, bounding_box,
                                                         point_type="relative")
     elevations_relative = elevations_relative.reshape(-1, 1)
     elevations_absolute = gefp.get_elevation_for_points(absolute_coords,
+                                                        zoom_level=zoom_level,
                                                         point_type="absolute")
     elevations_absolute = elevations_absolute.reshape(-1, 1)
 

@@ -2,7 +2,9 @@ import numpy as np
 
 import src.load.load_rema as lr
 
-def get_elevation_for_points(points, dem=None, point_type="relative") -> np.ndarray:
+def get_elevation_for_points(points, dem=None,
+                             zoom_level=10,
+                             point_type="relative") -> np.ndarray:
     """Get the elevation for a list of points.
 
     Args:
@@ -23,7 +25,7 @@ def get_elevation_for_points(points, dem=None, point_type="relative") -> np.ndar
 
         # get the bounds and load the dem
         bounds = (min_x, min_y, max_x, max_y)
-        dem, dem_transform = lr.load_rema(bounds, zoom_level=32)
+        dem, dem_transform = lr.load_rema(bounds, zoom_level=zoom_level)
 
         if dem is None:
             raise ValueError("No DEM found")

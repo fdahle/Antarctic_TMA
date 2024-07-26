@@ -186,7 +186,7 @@ def calculate_fid_mark(image: np.ndarray, key: str,
                     continue
 
             # calculate a global line by using the innermost corners of each line
-            # afterwards line is [x1, y1, x2 ,y2]
+            # afterward, the line is [x1, y1, x2 ,y2]
             if sub_direction in ["n", "s"]:
                 mid_line = [mid_line_1[0], mid_line_1[1], mid_line_2[2], mid_line_2[3]]  # noqa
             if sub_direction in ["e", "w"]:

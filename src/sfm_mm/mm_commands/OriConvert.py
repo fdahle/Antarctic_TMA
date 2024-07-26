@@ -13,7 +13,7 @@ class OriConvert(BaseCommand):
     """
     OriConvert is a versatile command used to:
     - Transform embedded GPS data from text format to MicMac's Xml orientation format.
-    - Transform the GPS coordinate system, potentially into a euclidean coordinate system.
+    - Transform the GPS coordinate system, potentially into a Euclidean coordinate system.
     - Generate image pattern for selecting a sample of the image block.
     - Compute relative speed of each camera in order to determine and correct GPS systematic error (delay).
     - Importing external orientation from others software: to come.

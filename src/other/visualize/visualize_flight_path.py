@@ -2,7 +2,7 @@
 
 # Library imports
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('TkAgg')  # noqa: E402
 import matplotlib.pyplot as plt
 
 # Local imports

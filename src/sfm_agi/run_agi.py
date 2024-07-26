@@ -592,7 +592,8 @@ def run_agi(project_name, images,
         #         for track in point.tracks:
         #             camera = chunk.cameras[track.camera_id]
         #             projection = track.projection
-        #             f.write(f"{point.coord[0]},{point.coord[1]},{point.coord[2]},{camera.label},{projection[0]},{projection[1]}\n")
+        #             f.write(f"{point.coord[0]},{point.coord[1]},{point.coord[2]},
+        #                       {camera.label},{projection[0]},{projection[1]}\n")
 
     # set to absolute mode
     chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa

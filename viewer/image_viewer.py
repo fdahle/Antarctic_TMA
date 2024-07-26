@@ -9,7 +9,7 @@ from tkinter import Tk, Label, Button
 
 import src.load.load_image as li
 
-base_fld = "/media/fdahle/beb5a64a-5335-424a-8f3c-779527060523/ATM/"
+base_fld = "/data/ATM/"
 img_path = base_fld + "data_1/aerial/TMA/downloaded/"
 #img_path = "/data/ATM/data_1/sfm/projects/EGU/images_orig"
 input_img_type = "tif"
@@ -17,13 +17,8 @@ img_size = (800, 800)
 
 view_directions = ["V", "R", "L"]
 
-input_ids = ["CA196232V0035", "CA194632V0227", "CA184432V0180", "CA196232V0009", "CA194832V0074",
-             "CA165231L0012", "CA194832V0066", "CA194733R0181","CA194633R0222", "CA173433R0226",
-             "CA214732V0015", "CA196731L0080", "CA194732V0128", "CA164431L0040"]
-input_ids = ["CA199432V0208"]
-input_ids = []
-input_type = "image"
-#input_ids = [1801]  # ['CA172031L0258']
+input_ids = ['CA184732V0050', 'CA184633R0318']
+input_type = 'ids'
 #input_type = "flight_path"
 
 shuffle = False

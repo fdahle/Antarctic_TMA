@@ -18,6 +18,7 @@ from external.SuperGlue.matching import Matching
 import src.base.custom_print as cp
 import src.base.resize_image as ri
 import src.display.display_images as di
+import src.export.export_tiff as et
 
 # Constants
 OOM_REDUCE_VALUE = 0.9
@@ -132,6 +133,11 @@ class TiePointDetector:
                 # mask initial tie-points
                 tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
 
+                # path_initial_tps = "/data/ATM/papers/georef_paper/revision/initial_tps.npy"
+                # path_initial_conf = "/data/ATM/papers/georef_paper/revision/initial_conf.npy"
+                # np.save(path_initial_tps, tps)
+                # np.save(path_initial_conf, conf)
+
                 # display the initial tie-points
                 if self.display:
                     style_config = {"title": f"{len(conf)} initial Tie-points"}
@@ -150,6 +156,11 @@ class TiePointDetector:
                     # mask additional tie-points
                     tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional,
                                                                             mask1, mask2)
+
+                    # path_additional_tps = "/data/ATM/papers/georef_paper/revision/additional_tps.npy"
+                    # path_additional_conf = "/data/ATM/papers/georef_paper/revision/additional_conf.npy"
+                    # np.save(path_additional_tps, tps)
+                    # np.save(path_additional_conf, conf)
 
                     # display the additional tie-points
                     if self.display:
@@ -177,6 +188,11 @@ class TiePointDetector:
 
                     # mask extra tie-points
                     tps_extra, conf_extra = self._mask_tie_points(tps_extra, conf_extra, mask1, mask2)
+
+                    # path_extra_tps = "/data/ATM/papers/georef_paper/revision/extra_tps.npy"
+                    # path_extra_conf = "/data/ATM/papers/georef_paper/revision/extra_conf.npy"
+                    # np.save(path_extra_tps, tps)
+                    # np.save(path_extra_conf, conf)
 
                     # display the additional tie-points
                     if self.display:
@@ -416,6 +432,10 @@ class TiePointDetector:
         # Determine indices to keep (logical OR to find any zeros, then invert)
         keep_indices = np.logical_not(np.logical_or(filter_values_1 == 0, filter_values_2 == 0))
 
+        # export mask indices
+        # path_indices = "/data/ATM/papers/georef_paper/revision/resized_mask_indices.npy"
+        # np.save(path_indices, keep_indices)
+
         # Filter the tie points and confidences
         filtered_tps = tps[keep_indices]
         filtered_conf = conf[keep_indices]
@@ -483,6 +503,10 @@ class TiePointDetector:
         max_counter = math.ceil(num_y) * math.ceil(num_x)
         tile_counter = 0
 
+        # save the tiles for visualization
+        base_tiles_coords = []
+        other_tiles_coords = []
+
         # iterate all tiles
         for y_counter in range(0, math.ceil(num_y)):
             for x_counter in range(0, math.ceil(num_x)):
@@ -496,13 +520,20 @@ class TiePointDetector:
                 min_base_tile_y = y_counter * self.max_height - reduce_y * y_counter
                 max_base_tile_y = (y_counter + 1) * self.max_height - reduce_y * y_counter
 
+                base_tiles_coords.append((min_base_tile_x, min_base_tile_y, max_base_tile_x, max_base_tile_y))
+
                 # find tie-points in the current base tile
                 base_indices = np.where((pts_base[:, 0] >= min_base_tile_x) & (pts_base[:, 0] <= max_base_tile_x) &
                                         (pts_base[:, 1] >= min_base_tile_y) & (pts_base[:, 1] <= max_base_tile_y))
                 base_points = pts_base[base_indices]
 
+                # skip if no tie-points in base tile
                 if len(base_points) == 0:
                     self.logger.print("  No tie-points in base tile")
+
+                    # add empty tile to other tiles
+                    other_tiles_coords.append((0, 0, 0, 0))
+
                     continue
 
                 # get the equivalent tie-points of the other tile
@@ -548,6 +579,8 @@ class TiePointDetector:
                     # if current step returns too many tie-points limit percentiles and look again
                     step = step + 5
 
+                other_tiles_coords.append((min_other_tile_x, min_other_tile_y, max_other_tile_x, max_other_tile_y))
+
                 # extract the tiles from the images
                 base_tile = base_img[min_base_tile_y:max_base_tile_y, min_base_tile_x:max_base_tile_x]
                 other_tile = other_img[min_other_tile_y:max_other_tile_y, min_other_tile_x:max_other_tile_x]
@@ -577,6 +610,16 @@ class TiePointDetector:
 
         # convert tie-points to int
         pts_additional = pts_additional.astype(int)
+
+        # export data for additional matching
+        # path_img1 = "/data/ATM/papers/georef_paper/revision/additional_img1.tif"
+        # path_img2 = "/data/ATM/papers/georef_paper/revision/additional_img2.tif"
+        # path_tiles1 = "/data/ATM/papers/georef_paper/revision/additional_tiles1.npy"
+        # path_tiles2 = "/data/ATM/papers/georef_paper/revision/additional_tiles2.npy"
+        # et.export_tiff(img1, path_img1, overwrite=True)
+        # et.export_tiff(img2, path_img2, overwrite=True)
+        # np.save(path_tiles1, np.asarray(base_tiles_coords))
+        # np.save(path_tiles2, np.asarray(other_tiles_coords))
 
         self.logger.print(f"{len(conf_additional)} additional matches found ({np.round(np.mean(conf_additional), 3)})")
 
@@ -654,6 +697,10 @@ class TiePointDetector:
         max_counter = math.ceil(num_y) * math.ceil(num_x)
         tile_counter = 0
 
+        # save the tiles for visualization
+        base_tiles_coords = []
+        other_tiles_coords = []
+
         # iterate all tiles
         for y_counter in range(0, math.ceil(num_y)):
             for x_counter in range(0, math.ceil(num_x)):
@@ -666,6 +713,9 @@ class TiePointDetector:
                 max_base_tile_x = (x_counter + 1) * self.max_width - reduce_x * x_counter
                 min_base_tile_y = y_counter * self.max_height - reduce_y * y_counter
                 max_base_tile_y = (y_counter + 1) * self.max_height - reduce_y * y_counter
+
+                # add base tile to list
+                base_tiles_coords.append((min_base_tile_x, min_base_tile_y, max_base_tile_x, max_base_tile_y))
 
                 # create bounding box from extent
                 extent_points = np.asarray([  # noqa
@@ -687,13 +737,25 @@ class TiePointDetector:
                 # check range of bounding box
                 if (min_other_tile_x < 0 and max_other_tile_x < 0) or (min_other_tile_y < 0 and max_other_tile_y < 0):
                     self.logger.print("  Skip tile (x or y below zero)")
+
+                    # add empty tile to other tiles
+                    other_tiles_coords.append((0, 0, 0, 0))
+
                     continue
                 if (min_other_tile_x > other_img.shape[1] and max_other_tile_x > other_img.shape[1]) or \
                         (min_other_tile_y > other_img.shape[0] and max_other_tile_y > other_img.shape[0]):
                     self.logger.print("  Skip tile (x or y over image shape)")
+
+                    # add empty tile to other tiles
+                    other_tiles_coords.append((0, 0, 0, 0))
+
                     continue
                 if (max_other_tile_x - min_other_tile_x < 10) or (max_other_tile_y - min_other_tile_y < 10):
                     self.logger.print("  Skip tile (tile too small)")
+
+                    # add empty tile to other tiles
+                    other_tiles_coords.append((0, 0, 0, 0))
+
                     continue
 
                 # fit bounding box to image
@@ -710,7 +772,13 @@ class TiePointDetector:
                     other_mask_tile = other_mask[min_other_tile_y:max_other_tile_y, min_other_tile_x:max_other_tile_x]
                     if np.sum(other_mask_tile) == 0:  # noqa
                         self.logger.print("  Skip tile (tile is masked)")
+
+                        # add empty tile to other tiles
+                        other_tiles_coords.append((0, 0, 0, 0))
+
                         continue
+
+                other_tiles_coords.append((min_other_tile_x, min_other_tile_y, max_other_tile_x, max_other_tile_y))
 
                 # extract tie-points for the tile
                 pts_tile_1, pts_tile_2, conf_tile = self._perform_one_match(base_tile, other_tile)  # noqa
@@ -736,6 +804,16 @@ class TiePointDetector:
 
         # convert tie-points to int
         pts_extra = pts_extra.astype(int)
+
+        # export data for extra matching
+        # path_img1 = "/data/ATM/papers/georef_paper/revision/extra_img1.tif"
+        # path_img2 = "/data/ATM/papers/georef_paper/revision/extra_img2.tif"
+        # path_tiles1 = "/data/ATM/papers/georef_paper/revision/extra_tiles1.npy"
+        # path_tiles2 = "/data/ATM/papers/georef_paper/revision/extra_tiles2.npy"
+        # et.export_tiff(img1, path_img1, overwrite=True)
+        # et.export_tiff(img2, path_img2, overwrite=True)
+        # np.save(path_tiles1, np.asarray(base_tiles_coords))
+        # np.save(path_tiles2, np.asarray(other_tiles_coords))
 
         self.logger.print(f"{len(conf_extra)} extra matches found ({np.round(np.mean(conf_extra), 3)})")
 
@@ -788,6 +866,16 @@ class TiePointDetector:
 
         # merge the tie-points of left and right image
         pts = np.concatenate((pts0, pts1), axis=1)
+
+        # export initial points
+        # path_tps = "/data/ATM/papers/georef_paper/revision/resized_tps.npy"
+        # path_conf = "/data/ATM/papers/georef_paper/revision/resized_conf.npy"
+        # path_img1 = "/data/ATM/papers/georef_paper/revision/resized_img1.tif"
+        # path_img2 = "/data/ATM/papers/georef_paper/revision/resized_img2.tif"
+        # et.export_tiff(img1_resized, path_img1, overwrite=True)
+        # et.export_tiff(img2_resized, path_img2, overwrite=True)
+        # np.save(path_tps, pts)
+        # np.save(path_conf, conf)
 
         # adapt the tie points to account for resizing
         pts[:, 0] = pts[:, 0] * 1 / resize_factor1  # noqa

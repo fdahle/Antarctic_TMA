@@ -1,10 +1,10 @@
-# Package imports
-import cv2
+# Library imports
+import cv2  # noqa
 import numpy as np
 from scipy.ndimage import zoom
 from shapely.geometry import Polygon
 
-# Custom imports
+# Local imports
 import src.base.find_tie_points as ftp
 import src.georef.snippets.apply_transform as at
 import src.georef.snippets.calc_transform as ct

@@ -2,8 +2,8 @@ import geopandas as gpd
 import Metashape
 from shapely.geometry import Point, Polygon
 
-def create_footprints(chunk, save_fld):
 
+def create_footprints(chunk, save_fld):
     points_path = save_fld + "/cameras_aligned.shp"
     footprints_path = save_fld + "/footprints_aligned.shp"
     flat_footprints_path = save_fld + "/footprints_flat.shp"
@@ -47,10 +47,10 @@ def create_footprints(chunk, save_fld):
             import math
 
             # Get rotation matrix and convert to yaw, pitch, roll
-            R = camera.transform.rotation()
-            pitch = -math.asin(R[2, 0])
-            roll = math.atan2(R[2, 1], R[2, 2])
-            yaw = math.atan2(R[1, 0], R[0, 0])
+            rot_mat = camera.transform.rotation()
+            pitch = -math.asin(rot_mat[2, 0])
+            roll = math.atan2(rot_mat[2, 1], rot_mat[2, 2])
+            yaw = math.atan2(rot_mat[1, 0], rot_mat[0, 0])
             yaw, pitch, roll = math.degrees(yaw), math.degrees(pitch), math.degrees(roll)
 
             print(yaw, pitch, roll)
@@ -80,7 +80,6 @@ def create_footprints(chunk, save_fld):
                     break
                 corner = chunk.crs.project(transform.mulp(corner))
                 corners.append(corner)
-
 
                 # Calculate intersection with Z = 0 plane
                 t = -ray_origin.z / (ray_target.z - ray_origin.z)

@@ -134,8 +134,6 @@ if __name__ == "__main__":
              "35_15", "35_14", "35_13", "35_12", "35_11", "34_17", "34_16", "34_15",
              "34_14", "34_13", "34_12", "34_11"]
 
-    tiles = ["38_11"]
-
     _zoom_level = 10
 
     # iterate rows to download the equivalent satellite images

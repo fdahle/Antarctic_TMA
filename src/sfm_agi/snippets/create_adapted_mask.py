@@ -5,8 +5,8 @@ import numpy as np
 import src.base.connect_to_database as ctd
 import src.base.create_mask as cm
 
-def create_adapted_mask(existing_mask, image_id, conn=None):
 
+def create_adapted_mask(existing_mask, image_id, conn=None):
     # copy the existing mask
     new_mask = copy.deepcopy(existing_mask)
 
@@ -42,7 +42,7 @@ def create_adapted_mask(existing_mask, image_id, conn=None):
 
     # create the mask with the text boxes
     text_mask = cm.create_mask(placeholder_mask, ignore_boxes=text_boxes,
-                          use_default_fiducials=True, default_fid_position=0)
+                               use_default_fiducials=True, default_fid_position=0)
 
     text_mask = text_mask * 255
 

@@ -13,12 +13,12 @@ import src.base.load_credentials as lc
 CMR_URL = 'https://cmr.earthdata.nasa.gov'
 URS_URL = 'https://urs.earthdata.nasa.gov'
 CMR_PAGE_SIZE = 2000
-CMR_FILE_URL = f'{CMR_URL}/search/granules.json?provider=NSIDC_ECS&' \
+CMR_FILE_URL = f'{CMR_URL}/search/granules.json?provider=NSIDC_ECS&' \  # noqa: Spelling Error
                f'sort_key[]=start_date&sort_key[]=producer_granule_id&' \
                f'scroll=true&page_size={CMR_PAGE_SIZE}'
 
 
-def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',
+def load_ice_bridge(bbox, download_fld, short_name='IODMS1B', version='1',  # noqa: Spelling Error
                     time_start='2009-10-16T00:00:00Z',
                     time_end='2018-04-19T23:59:59Z'):
     # Authentication and URL setup

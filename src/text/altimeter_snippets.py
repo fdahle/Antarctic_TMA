@@ -304,8 +304,8 @@ def intersection_of_lines(line1: tuple[int, int, int, int],
     return inter_x, inter_y
 
 
-def merge_lines(lines: list[tuple[float, float, float, float]],
-                max_dist: int = 20, max_angle_diff: int = 1) -> list[tuple[float, float, float, float]]:
+def merge_lines(lines: list[tuple[int, int, int, int]],
+                max_dist: int = 20, max_angle_diff: int = 1) -> list[tuple[int, int, int, int]]:
     """
     Merges similar lines into a single line based on pixel distance and angle difference.
 

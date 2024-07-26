@@ -82,7 +82,7 @@ def find_peaks_in_dem(dem: np.ndarray, cell_size=10,
 
 if __name__ == "__main__":
     import numpy as np
-    import src.dem.find_peaks_in_DEM as fp
+    import src.dem.find_peaks_in_DEM as fpiD
     import src.load.load_image as li
 
     path_dem = "/home/fdahle/Desktop/agi_test/output/dem_relative.tif"
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         dem = src.read(1)
 
     # find the peaks of a dem
-    peaks = fp.find_peaks_in_DEM(dem, no_data_value=no_data_val)
+    peaks = fpiD.find_peaks_in_DEM(dem, no_data_value=no_data_val)
 
     import src.display.display_images as di
 

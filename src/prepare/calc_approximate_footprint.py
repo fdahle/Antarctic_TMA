@@ -54,10 +54,11 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
     if isinstance(center, tuple):
         center = geometry.Point(center)
 
+    # perhaps alpha could be that for real footprints: 360 - azimuth + 180
+
     # create camera matrix
     camera_params = {
-        # "alpha": 90 + azimuth,
-        "alpha": 360 - azimuth + 180,
+        "alpha": azimuth,
         "beta": 0,
         "gamma": gamma,
         "fovV": 60,
@@ -72,7 +73,8 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
     }
 
     # convert altitude from feet to meter & save
-    altitude = int(altitude / 3.281)
+    if altitude > 15000:
+        altitude = int(altitude / 3.281)
     camera_params["zPos"] = altitude
 
     # calculate an initial approx_footprint based on camera_params
@@ -82,7 +84,7 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
     if adapt_with_rema:
 
         # get average elevation data for this initial approx_footprint based on rema data
-        rema_data = lr.load_rema(polygon, zoom_level=32)
+        rema_data, _ = lr.load_rema(polygon, zoom_level=32)
         avg_ground_height = np.average(rema_data)
 
         # convert to feet

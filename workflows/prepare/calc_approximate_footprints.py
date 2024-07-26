@@ -10,9 +10,11 @@ import src.display.display_shapes as ds
 
 # CONSTANTS
 ADAPT_WITH_REMA = True
+USE_AVG_HEIGHT = True
 
 # Variables
 overwrite = False
+avg_height = 20722
 
 # Debug variables
 debug_display_footprint = False
@@ -74,7 +76,14 @@ def calc_approximate_footprints():
 
         # skip if any of the parameters are None
         if azimuth is None or view_direction is None or altitude is None or focal_length is None:
+            print("PARAMETER NONE")
             continue
+
+        if altitude < 0:
+            altitude = avg_height
+
+        # adapt azimuth
+        azimuth = 360 - azimuth + 90
 
         # calculate the approximate footprint
         try:
@@ -82,7 +91,7 @@ def calc_approximate_footprints():
                                                        azimuth, view_direction,
                                                        altitude, focal_length,
                                                        ADAPT_WITH_REMA)
-        except (Exception,):
+        except (Exception,) as e:
             continue
 
         if debug_display_footprint:

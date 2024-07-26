@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 
 
 def convert_image_to_footprint(image: ndarray, transform: ndarray, extend=0,
-                               no_data_value: int = 0, catch=False) -> Polygon:
+                               no_data_value: int = 0, catch=False) -> Polygon | None:
     """
     Converts a raster image into a footprint polygon by creating a mask to identify
     valid data points, converting these points to polygons, and then simplifying and

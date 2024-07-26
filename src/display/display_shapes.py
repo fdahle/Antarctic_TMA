@@ -1,7 +1,7 @@
 """show shapes with matplotlib"""
 
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('TkAgg')  # noqa: E402
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pyproj

@@ -28,6 +28,7 @@ DEBUG_PRINT = False
 
 # Variables
 resolution_relative = 0.001
+epsg_code = 3031
 
 # Steps
 STEPS = {
@@ -58,13 +59,11 @@ DEBUG = {
     "save_tie_points": False,
 }
 
-epsg_code = 3031
 
 def run_agi_relative(project_name, images,
                      camera_positions=None, camera_accuracies=None,
                      camera_rotations=None, camera_footprints=None,
                      focal_lengths=None):
-
     if RESUME and OVERWRITE:
         raise ValueError("Both RESUME and OVERWRITE cannot be set to True.")
 
@@ -573,8 +572,8 @@ def run_agi_relative(project_name, images,
         #        for track in point.tracks:
         #            camera = chunk.cameras[track.camera_id]
         #            projection = track.projection
-        #            f.write(f"{point.coord[0]},{point.coord[1]},{point.coord[2]},{camera.label},{projection[0]},{projection[1]}\n")
-
+        #            f.write(f"{point.coord[0]},{point.coord[1]},{point.coord[2]},
+        #                      {camera.label},{projection[0]},{projection[1]}\n")
 
     if STEPS["build_pointcloud"]:
         chunk.buildPointCloud()
@@ -588,6 +587,7 @@ def run_agi_relative(project_name, images,
         chunk.exportPointCloud(**export_params)
 
         doc.save()
+
 
 if __name__ == "__main__":
     sys_project_name = sys.argv[1]

@@ -5,7 +5,9 @@ import cv2
 import numpy as np
 
 
-def rotate_image(image: np.ndarray, angle: float, expand: bool = True) -> (np.ndarray, np.ndarray):
+def rotate_image(image: np.ndarray,
+                 angle: float,
+                 expand: bool = True) -> (np.ndarray, np.ndarray):
     """
     Rotates an image by a given angle, optionally expanding the image to fit the rotated result.
 

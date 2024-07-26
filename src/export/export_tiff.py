@@ -9,7 +9,8 @@ import numpy as np
 def export_tiff(img: np.ndarray, output_path: str,
                 overwrite: bool = False,
                 transform: Affine = None,
-                crs: str = 'EPSG:3031', no_data=-9999) -> None:
+                use_lzw: bool = False,
+                crs: str = 'EPSG:3031', no_data=None) -> None:
     """
     Exports a given image to a TIFF file by using Rasterio's write function. If the file already
     exists, the function raises a FileExistsError unless the overwrite parameter is set to True.
@@ -19,7 +20,9 @@ def export_tiff(img: np.ndarray, output_path: str,
         output_path (str): The file path where the image should be saved.
         overwrite (bool, optional): If True, allows overwriting an existing file. Defaults to False.
         transform (rasterio.transform.Affine, optional): The transform to apply to the image. Defaults to None.
+        use_lzw (bool, optional): If True, applies LZW compression to the TIFF file. Defaults to False.
         crs (str, optional): The coordinate reference system to apply to the image. Defaults to 'EPSG:4326'.
+        no_data (optional): The value to use for no data pixels. Defaults to None.
     Returns:
         None
     """
@@ -28,20 +31,22 @@ def export_tiff(img: np.ndarray, output_path: str,
     if os.path.exists(output_path) and not overwrite:
         raise FileExistsError(f"The file {output_path} already exists. Set 'overwrite' to True to overwrite the file.")
 
-    print(output_path)
-    print(img.shape)
-
     # Define metadata for the TIFF file
     metadata = {
         'driver': 'GTiff',
         'dtype': img.dtype,
-        'nodata': no_data,
         'width': img.shape[1],
         'height': img.shape[0],
         'count': 1 if len(img.shape) == 2 else img.shape[2],  # Handle both single band and multi-band images
         'crs': crs if transform else None,
         'transform': transform if transform else Affine.identity()
     }
+
+    if use_lzw:
+        metadata['compress'] = 'lzw'
+
+    if no_data is not None:
+        metadata['nodata'] = no_data
 
     # Export the image to a TIFF file using Rasterio
     with rasterio.open(output_path, 'w', **metadata) as dst:
@@ -50,5 +55,3 @@ def export_tiff(img: np.ndarray, output_path: str,
         else:  # Multi-band
             for i in range(img.shape[2]):
                 dst.write(img[:, :, i], i + 1)
-
-    print(f"Image successfully exported to {output_path}.")

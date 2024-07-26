@@ -45,7 +45,7 @@ def extract_ids_by_area(aoi: Union[Polygon, List[float]],
     if image_positions is None:
 
         # get the image positions as wkt points from the database
-        sql_string = "SELECT image_id, ST_AsText(position_approx) as position" \
+        sql_string = "SELECT image_id, ST_AsText(footprint_exact) as position" \
                      " FROM images_extracted"
         data = ctd.execute_sql(sql_string, conn)
 
@@ -58,7 +58,10 @@ def extract_ids_by_area(aoi: Union[Polygon, List[float]],
     # check if aoi is already a polygon
     if isinstance(aoi, Polygon):
         poly = aoi
+    elif isinstance(aoi, str):
+        poly = load_wkt(aoi)
     else:
+        print(aoi)
         # convert BoundingBox to polygon
         poly = Polygon([(aoi[0], aoi[1]), (aoi[0], aoi[3]),
                         (aoi[2], aoi[3]), (aoi[2], aoi[1]),

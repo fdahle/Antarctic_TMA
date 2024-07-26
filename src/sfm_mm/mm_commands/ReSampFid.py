@@ -123,7 +123,7 @@ class ReSampFid(BaseCommand):
 
             shell_string = shell_string + " " + str(key) + "=" + str(val)
 
-        # save shell command
+        # save the shell command
         shell_dict["ReSampFid"] = shell_string
 
         # create additional shell command for masks

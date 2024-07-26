@@ -1,10 +1,10 @@
 import numpy as np
 from rasterio.warp import reproject, Resampling
 
+
 def get_difference(dem1, dem2,
                    transform1=None, transform2=None,
                    no_data_val=-9999, epsg_code=3031):
-
     if transform1 == transform2:
 
         if dem1.shape == dem2.shape:

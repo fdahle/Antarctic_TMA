@@ -1,16 +1,21 @@
 """generate a mask for an image"""
 
+# Library imports
 import numpy as np
 
-from typing import Optional, Dict, Tuple, List
+# Local imports
+import src.base.connect_to_database as ctd
 
 
 def create_mask(image: np.ndarray,
-                fid_marks: Optional[Dict[str, Tuple[int, int]]] = None,
-                ignore_boxes: Optional[List[Tuple[int, int, int, int]]] = None,
+                fid_marks: str | tuple[int, int] | None = None,
+                ignore_boxes: list[tuple[int, int, int, int]] | None = None,
                 use_default_fiducials: bool = False,
                 default_fid_position: int = 500,
-                min_border_width: int = None) -> np.ndarray:
+                min_border_width: int = None,
+                use_database: bool = False,
+                image_id=None,
+                ) -> np.ndarray:
     """
     This function generates a mask for an image based on provided fiducial marks (everything outside
     these marks is masked). If no marks are provided, it is possible to use default positions.
@@ -26,19 +31,54 @@ def create_mask(image: np.ndarray,
     Args:
         image: A numpy array representing the image to mask.
         fid_marks: An optional dictionary of fiducial marks with keys as string identifiers
-                   and values as tuples representing positions (x, y). If None, default positions are used.
+            and values as tuples representing positions (x, y). If None, default positions are used.
         ignore_boxes: An optional list of boxes to ignore, each specified as a tuple of four integers
-                      (x1, y1, x2, y2) representing the top left (x1, y1) and bottom right (x2, y2) corners.
+            (x1, y1, x2, y2) representing the top left (x1, y1) and bottom right (x2, y2) corners.
         use_default_fiducials: A boolean flag to use default fiducial marks if no fiducial marks are provided.
         default_fid_position: An optional integer defining the default position for fiducial marks
-                              if none are provided. Defaults to 500.
+            if none are provided. Defaults to 500.
         min_border_width: An optional integer defining the minimum border width to apply to the mask.
+        use_database: A boolean flag indicating whether to fetch fiducial marks and ignore boxes
+            from a database.
+        image_id: An optional identifier for the image to fetch fiducial marks and ignore boxes
+            from the database if `use_database` is True.
     Returns:
         A numpy array representing the masked image, where regions outside the specified fiducial
         marks and ignore boxes are set to zero.
     Raises:
         ValueError: If `use_default_fiducials` is False and any required fiducial mark is missing.
+                    If `use_database` is True and `image_id` is None.
     """
+
+    # replace the values with database values
+    if use_database:
+
+        conn = ctd.establish_connection()
+
+        if image_id is None:
+            raise ValueError("Image ID is required when using the database.")
+
+        # get mask data for img
+        sql_string_fid_marks = f"SELECT * FROM images_fid_points WHERE image_id='{image_id}'"
+        data_fid_marks = ctd.execute_sql(sql_string_fid_marks, conn)
+
+        sql_string_extracted = f"SELECT * FROM images_extracted WHERE image_id='{image_id}'"
+        data_extracted = ctd.execute_sql(sql_string_extracted, conn)
+
+        # Get the fid marks for the specific image_id
+        fid_marks_row = data_fid_marks.loc[data_fid_marks['image_id'] == image_id].squeeze()
+
+        # Create fid mark dict using dictionary comprehension
+        fid_marks = {str(i): (fid_marks_row[f'fid_mark_{i}_x'], fid_marks_row[f'fid_mark_{i}_y']) for i in range(1, 5)}
+
+        # get the text boxes of the image
+        text_string = data_extracted.loc[data_extracted['image_id'] == image_id]['text_bbox'].iloc[0]
+
+        if len(text_string) > 0 and "[" not in text_string:
+            text_string = "[" + text_string + "]"
+
+        # create list for parts to ignor
+        ignore_boxes = [list(group) for group in eval(text_string.replace(";", ","))]
 
     # create base mask
     mask = np.ones_like(image)

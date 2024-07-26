@@ -3,8 +3,9 @@
 import copy
 import math
 import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.colors as mcolors
+
+matplotlib.use('TkAgg')  # noqa: E402
+import matplotlib.colors as mcolors  # noqa: SpellCheckingInspection
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -15,8 +16,11 @@ from typing import List, Tuple, Optional, Dict, Any, Union
 
 base_style_config = {
     "axis_marker": True,
+    "overlay_alpha": 0.5,
     "point_color": (255, 0, 0),
     "point_size": 7,
+    "polygon_color": (255, 0, 0),
+    "polygon_line_width": 1,
     "plot_shape": "auto",
     "line_color": (255, 0, 0),
     "line_width": 1,
@@ -29,10 +33,13 @@ base_style_config = {
 
 def display_images(images: Union[np.ndarray, List[np.ndarray]],
                    image_types: Optional[List[str]] = None,
+                   overlays: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
                    points: Optional[List[List[Tuple[int, int]]]] = None,
                    lines: Optional[List[List[Tuple[int, int, int, int]]]] = None,
                    bounding_boxes: Optional[List[List[Union[Tuple[int, int, int, int], List[int]]]]] = None,
                    polygons: Optional[List[List[ShapelyPolygon]]] = None,
+                   polygons_text: Optional[List[List[str]]] = None,
+                   polygons_color=None,
                    tie_points: Optional[np.ndarray] = None,
                    tie_points_conf: Optional[List[float]] = None,
                    reduce_tie_points: bool = False,
@@ -174,13 +181,45 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
             ax.imshow(img, cmap=cmap_red_green)
         elif img_type == "gtr":  # green to red
             ax.imshow(img, cmap=cmap_green_red)
+        elif img_type == "segmented":
+            cmap, norm = _create_segmented_cmap()
+            ax.imshow(img, cmap=cmap, norm=norm, interpolation=None)
         else:  # Default or undefined types
             ax.imshow(img)
+
+        # Optionally draw overlay image
+        if overlays is not None and idx < len(overlays):
+            overlay_img = overlays[idx]
+            ax.imshow(overlay_img, cmap=cmap_red_green,
+                      alpha=style_config['overlay_alpha'])
+
+        # Optionally draw tie-points
+        if tie_points is not None and idx == 0:  # Draw tie-points only from the context of the first image
+            for tp_idx, point in enumerate(new_tps):
+                p1 = (point[0], point[1])  # Coordinates in the first image
+                p2 = (point[2], point[3])  # Corresponding coordinates in the second image
+
+                # Determine color for tie points
+                if tie_points_conf is not None:
+                    conf = new_conf[tp_idx]  # noqa
+                    # Interpolate color from red (low confidence) to green (high confidence)
+                    color = (1 - conf, conf, 0)  # Red to green, based on conf
+                else:
+                    color = _normalize_color(style_config['line_color'])
+
+                # Create and add ConnectionPatch with RGBA color
+                con = ConnectionPatch(xyA=p1, coordsA=axes[0].transData, xyB=p2,
+                                      coordsB=axes[1].transData,
+                                      color=color,  # Append alpha to normalized color
+                                      linewidth=style_config['line_width'],
+                                      zorder=1)
+                fig.add_artist(con)
 
         # Optionally draw points on the image
         if points and idx < len(points):
             for point in points[idx]:
-                ax.plot(point[0], point[1], 'o', color=_normalize_color(style_config['point_color']),
+                ax.plot(point[0], point[1], 'o',
+                        color=_normalize_color(style_config['point_color']),
                         markersize=style_config['point_size'])
 
         # Optionally draw lines on the image
@@ -204,48 +243,57 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
                 for line, color in zip(image_lines, line_colors):
                     ax.plot([line[0], line[2]], [line[1], line[3]],
                             color=_normalize_color(color),
-                            linewidth=style_config['line_width'])
+                            linewidth=style_config['line_width'],
+                            zorder=5)
 
         # Optionally draw bounding boxes on the image
         if bounding_boxes and idx < len(bounding_boxes):
             for bbox in bounding_boxes[idx]:
                 rect = plt.Rectangle((bbox[0], bbox[1]), bbox[2] - bbox[0], bbox[3] - bbox[1],
-                                     linewidth=style_config['line_width'],
-                                     edgecolor=_normalize_color(style_config['line_color']),
+                                     linewidth=style_config['polygon_line_width'],
+                                     edgecolor=_normalize_color(style_config['polygon_color']),
                                      facecolor='none')
                 ax.add_patch(rect)
 
-        # Optionally draw tie-points
-        if tie_points is not None and idx == 0:  # Draw tie-points only from the context of the first image
-            for tp_idx, point in enumerate(new_tps):
-                p1 = (point[0], point[1])  # Coordinates in the first image
-                p2 = (point[2], point[3])  # Corresponding coordinates in the second image
-
-                # Determine color for tie points
-                if tie_points_conf is not None:
-                    conf = new_conf[tp_idx]  # noqa
-                    # Interpolate color from red (low confidence) to green (high confidence)
-                    color = (1 - conf, conf, 0)  # Red to green, based on conf
-                else:
-                    color = (1, 0, 0)  # Default to red if no tie_points_conf provided
-
-                # Create and add ConnectionPatch with RGBA color
-                con = ConnectionPatch(xyA=p1, coordsA=axes[0].transData, xyB=p2,
-                                      coordsB=axes[1].transData,
-                                      color=color,  # Append alpha to normalized color
-                                      linewidth=style_config['line_width'])
-                fig.add_artist(con)
-
         # Optionally draw polygons on the image
         if polygons and idx < len(polygons):
-            for poly in polygons[idx]:
+            for poly_idx, poly in enumerate(polygons[idx]):
                 if not isinstance(poly, ShapelyPolygon):
+                    print("Warning: Skipping invalid polygon.")
                     continue  # Skip if not a ShapelyPolygon
+
+                # Get the exterior coordinates of the polygon
                 exterior_coords = np.array(poly.exterior.coords)
-                polygon_patch = Polygon(exterior_coords, linewidth=style_config['line_width'],
-                                        edgecolor=_normalize_color(style_config['line_color']),
-                                        facecolor='none')
+
+                # determine polygon color
+                if polygons_color is None:
+                    # get default color
+                    poly_color = _normalize_color(style_config['polygon_color'])
+                else:
+                    poly_color = _normalize_color(polygons_color[poly_idx])
+
+                # ignore empty polygons (0 width or height)
+                if (np.amin(exterior_coords[:, 0]) == np.amax(exterior_coords[:, 0]) or
+                        np.amin(exterior_coords[:, 1]) == np.amax(exterior_coords[:, 1])):
+                    continue
+
+                polygon_patch = Polygon(exterior_coords,
+                                        linewidth=style_config['polygon_line_width'],
+                                        edgecolor=poly_color,
+                                        facecolor='none',
+                                        zorder=50)
                 ax.add_patch(polygon_patch)
+
+                # Optionally add text to the polygon
+                if polygons_text and idx < len(polygons_text) and poly_idx < len(polygons_text[idx]):
+                    # Calculate the centroid of the polygon
+                    centroid = poly.centroid
+
+                    text = polygons_text[idx][poly_idx]
+                    ax.text(centroid.x, centroid.y, text,
+                            ha='center', va='center',
+                            fontsize=14, color='black',
+                            zorder=100)
 
         # Set subtitles for each subplot if specified
         if style_config.get('titles_sup') and idx < len(style_config['titles_sup']):
@@ -382,8 +430,31 @@ def _determine_image_type(input_img: np.ndarray) -> Optional[str]:
     return "undefined"
 
 
-def _normalize_color(color):
+def _create_segmented_cmap():
+    color_dict = {
+        "light_green": (102, 255, 0),  # for no data, 0
+        "dark_gray": (150, 149, 158),  # ice, 1
+        "light_gray": (230, 230, 235),  # snow, 2
+        "black": (46, 45, 46),  # rocks, 3
+        "dark_blue": (7, 29, 232),  # water, 4
+        "light_blue": (25, 227, 224),  # clouds, 5
+        "dark_red": (186, 39, 32),  # sky, 6
+        "pink": (224, 7, 224)  # unknown, 7
+    }
 
+    # divide colors by 255 (important for matplotlib
+    colors = []
+    for elem in color_dict.values():
+        col = tuple(ti / 255 for ti in elem)
+        colors.append(col)
+
+    custom_norm = matplotlib.colors.Normalize(vmin=0, vmax=len(color_dict.keys()))
+    custom_cmap = matplotlib.colors.ListedColormap(colors)
+
+    return custom_cmap, custom_norm
+
+
+def _normalize_color(color):
     """Normalize color or colors from 0-255 range to 0-1 range."""
     if isinstance(color, str):
         return mcolors.to_rgba(color)

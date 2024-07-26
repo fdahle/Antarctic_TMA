@@ -29,7 +29,7 @@ def apply_transform(image: np.ndarray,
     # copy transform to avoid changing the original
     transform = copy.deepcopy(transform)
 
-    if type(transform) == np.ndarray:
+    if type(transform) is np.ndarray:
 
         # flatten transform if it is a 3x3 matrix
         if transform.shape[0] == 3:

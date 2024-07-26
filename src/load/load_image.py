@@ -105,7 +105,7 @@ def _read_image(absolute_image_path: str, driver: str) -> tuple[np.ndarray, Unio
 
         # read image
         ds = gdal.Open(absolute_image_path)
-        nbands = ds.RasterCount
+        nbands = ds.RasterCount  # noqa: Spelling Error
 
         # different handling based on number of bands
         if nbands == 1:

@@ -2,8 +2,8 @@ import numpy as np
 import os
 import pandas as pd
 
-import src.dem.find_peaks_in_DEM as fpid
-import src.dem.get_elevation_for_points as gefp
+import src.dem.find_peaks_in_DEM as fpiD
+import src.dem.get_elevation_for_points as gefp  # noqa
 import src.sfm_agi.snippets.georef_ortho as go
 
 
@@ -24,7 +24,7 @@ def export_gcps(dem, ortho, bounding_box, zoom_level,
     transform = go.georef_ortho(ortho, lst_footprints)
 
     # identify peaks in the DEM
-    px_peaks = fpid.find_peaks_in_dem(dem, no_data_value=-9999)
+    px_peaks = fpiD.find_peaks_in_dem(dem, no_data_value=-9999)
 
     # split the peaks into coordinates and heights
     peak_coords = px_peaks[:, :2]

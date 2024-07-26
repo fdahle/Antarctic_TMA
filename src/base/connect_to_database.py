@@ -4,7 +4,7 @@
 import pandas as pd
 import psycopg2
 import warnings
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # Global psql constants
@@ -31,7 +31,9 @@ def establish_connection() -> psycopg2.extensions.connection:
     )
 
 
-def execute_sql(sql_string: str, conn: psycopg2.extensions.connection, add_timestamp: bool = True) \
+def execute_sql(sql_string: str,
+                conn: psycopg2.extensions.connection,
+                add_timestamp: bool = True) \
         -> Optional[pd.DataFrame]:
     """
     Executes an SQL string using a given database connection and returns the data as a pandas
@@ -59,7 +61,7 @@ def execute_sql(sql_string: str, conn: psycopg2.extensions.connection, add_times
     # Check if we need to add a timestamp and the action is not a SELECT query
     if add_timestamp and action_type in ("INSERT", "UPDATE"):
 
-        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         if action_type == "INSERT":
             # Split the INSERT statement to correctly insert the timestamp
             parts = sql_string.strip().split(') VALUES')

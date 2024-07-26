@@ -1,7 +1,7 @@
 """rotate an image based on the position of a sidebar"""
 
 # Library imports
-import cv2 as cv2
+import cv2
 import numpy as np
 import mahotas as mht
 

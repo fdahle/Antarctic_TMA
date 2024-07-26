@@ -1,6 +1,6 @@
 # Library imports
 import os
-os.environ['KMP_WARNINGS'] = '0'
+os.environ['KMP_WARNINGS'] = '0'  # noqa: E402
 import Metashape
 import numpy as np
 import shutil

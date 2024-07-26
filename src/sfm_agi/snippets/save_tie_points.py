@@ -14,7 +14,6 @@ def save_tie_points(chunk, save_path):
     # get data from the point cloud
     projections = point_cloud.projections
     points = point_cloud.points
-    #tracks = point_cloud.tracks
 
     if points is None:
         raise Exception("No tie points available")

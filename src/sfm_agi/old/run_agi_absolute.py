@@ -231,7 +231,6 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
 
         # multiply the number of gcps by the number of cameras to get the total number of possible markers
         ttl = gcps.shape[0] * len(chunk.cameras)
-        #pbar = tqdm(total=ttl)
 
         # iterate over the gcp dataframe
         for _, row in gcps.iterrows():
@@ -260,7 +259,6 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
             for camera in chunk.cameras:
                 if DEBUG_PRINT:
                     print(" camera", camera.label)
-                #pbar.update(1)
                 projection = camera.project(point_local)
                 if projection is None:
                     if DEBUG_PRINT:
@@ -282,7 +280,6 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
                     print("  marker", marker.label, "camera", camera.label,
                           "x_abs", row['x_abs'], "y_abs", row['y_abs'], "z_abs", row['z_abs'],
                           "x", x, "y", y, "z", row['z_rel'])
-
 
                     # set relative projection for the marker
                     m_proj = Metashape.Marker.Projection(Metashape.Vector([x, y]), True)  # noqa
@@ -389,7 +386,7 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
         max_corner_abs = chunk.crs.project(chunk.transform.matrix.mulp(max_corner))
 
         # create 2d vectors
-        min_corner_2d= Metashape.Vector([min_corner_abs.x, min_corner_abs.y])
+        min_corner_2d = Metashape.Vector([min_corner_abs.x, min_corner_abs.y])
         max_corner_2d = Metashape.Vector([max_corner_abs.x, max_corner_abs.y])
 
         # Create the bounding box

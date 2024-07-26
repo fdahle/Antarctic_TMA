@@ -21,7 +21,7 @@ class GeorefCalc:
     """
 
     def __init__(self, min_nr_of_images: int = 3, max_range: int = 4,
-                 transform_method: str = "rasterio", transform_order: str = 3):
+                 transform_method: str = "rasterio", transform_order: int = 3):
         """
         Initialize the GeoRefCalc class with various settings for geo-referencing historical images
         by calculating the footprint of the image derived by already geo-referenced images from the

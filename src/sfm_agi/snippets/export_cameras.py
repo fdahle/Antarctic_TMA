@@ -1,6 +1,6 @@
 """Exports camera positions and heights"""
 
-# Package imports
+# Library imports
 import pandas as pd
 
 # local imports
@@ -36,7 +36,7 @@ def export_cameras(image_ids: list[str], csv_path: str, extension="tif") -> None
     data['image_id'] = data['image_id'] + "." + extension
 
     # set the heigth
-    #data['height'] = 4998
+    # data['height'] = 4998
 
     # split position_exact into x, y
     data['x'] = data['position_exact'].str.split(" ").str[0].str[6:].astype(float)

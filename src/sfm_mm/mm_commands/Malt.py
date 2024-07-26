@@ -113,7 +113,7 @@ class Malt(BaseCommand):
                 continue
 
             # true and false must be lowercase
-            if type(val) == bool:
+            if type(val) is bool:
                 if val:
                     val = "true"
                 else:

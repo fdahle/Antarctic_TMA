@@ -1,7 +1,11 @@
+"""Create thumbnail from image array"""
+
+# Library imports
 import numpy as np
 from PIL import Image
 
-def export_thumbnail(image_array: np.ndarray, save_path: str, size: tuple = (500,500)):
+
+def export_thumbnail(image_array: np.ndarray, save_path: str, size: tuple = (500, 500)):
     """
     Create a thumbnail from a NumPy array and save it as a JPEG file.
 

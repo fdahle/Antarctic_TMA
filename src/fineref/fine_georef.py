@@ -21,7 +21,7 @@ def fine_georef(image, transform):
     angle = np.degrees(np.arctan2(sin_theta, cos_theta))
 
     import src.base.rotate_image as ri
-    image, _ = ri.rotate_image(image, angle)
+    image = ri.rotate_image(image, angle)
 
     print(image.shape)
 

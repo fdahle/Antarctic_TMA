@@ -1,47 +1,45 @@
-"""load a point cloud from a file"""
-
-# Library imports
-import open3d as o3d
+import subprocess
 import numpy as np
-from tqdm import tqdm
+import json
+from plyfile import PlyData
 
 
-def load_pointcloud(pc_path: str, return_as_array=False) -> np.ndarray:
-    """
-    Loads a point cloud from a file and optionally returns it as a numpy array.
+def load_point_cloud(pointcloud_path):
 
-    Args:
-        pc_path (str): The path to the point cloud file.
-        return_as_array (bool, optional): Whether to return the point cloud as a numpy array. Defaults to False.
+    if pointcloud_path.endswith(".ply"):
 
-    Returns:
-        np.ndarray: The loaded point cloud. If return_as_array is True, it returns a numpy array of shape (N, 3).
-                    Otherwise, it returns an open3d.geometry.PointCloud object.
-    """
+        ply_data = PlyData.read(pointcloud_path)
 
-    # extract the format of the point cloud
-    pc_format = pc_path.split('.')[-1]
+        # Access the vertex data
+        vertex_data = ply_data['vertex'].data
 
-    # different formats require different loading methods
-    if pc_format == "obj":
+        # Extract x, y, z coordinates
+        points = np.vstack([vertex_data['x'], vertex_data['y'], vertex_data['z']]).T
 
-        points = []
-        with open(pc_path, 'r') as file:
-            for line in tqdm(file):
-                if line.startswith('v '):  # Vertex description
-                    parts = line.strip().split()
-                    x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
-                    points.append([x, y, z])
+        # Extract confidence values
+        if 'confidence' in vertex_data.dtype.names:
+            confidences = np.array(vertex_data['confidence']).reshape(-1, 1)
+        else:
+            confidences = None
 
-        # Create a point cloud object
-        point_cloud = o3d.geometry.PointCloud()  # noqa
-        point_cloud.points = o3d.utility.Vector3dVector(points)  # noqa
+        if confidences is not None:
+            result_array = np.hstack((points, confidences))
+        else:
+            result_array = points
 
     else:
-        point_cloud = o3d.io.read_point_cloud(pc_path)  # noqa
 
-    # convert the points to numpy array
-    if return_as_array:
-        point_cloud = np.asarray(point_cloud.points)
+        conda_env_python = "/home/fdahle/miniconda3/envs/point_env/bin/python"
+        script_path = "/src/load/o3d_wrapper.py"
 
-    return point_cloud
+        result = subprocess.run(
+            [conda_env_python, script_path, pointcloud_path],
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True
+        )
+
+        # parse the result
+        result_array = np.array(json.loads(result.stdout))
+
+    return result_array

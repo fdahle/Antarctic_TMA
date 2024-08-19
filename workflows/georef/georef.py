@@ -43,13 +43,13 @@ DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 
 # define input bounds or image ids
 INPUT_TYPE = "all"  # can be either "bounds" or "ids or all
-BOUNDS = [-2618381, 610661, -1630414, 1670625]  # min_x, min_y, max_x, max_y
+BOUNDS = []  # min_x, min_y, max_x, max_y
 IMAGE_IDS = []
 
 # which type of geo-referencing should be done
-GEOREF_WITH_SATELLITE = False
-GEOREF_WITH_IMAGE = True
-GEOREF_WITH_CALC = True
+GEOREF_WITH_SATELLITE = True
+GEOREF_WITH_IMAGE = False
+GEOREF_WITH_CALC = False
 
 # settings for sat
 MIN_COMPLEXITY = 0.05
@@ -64,20 +64,20 @@ CALC_TYPES = ["sat"]
 # define if images of a certain type should be overwritten
 OVERWRITE_SAT = False
 OVERWRITE_IMG = False
-OVERWRITE_CALC = False
+OVERWRITE_CALC = True
 
 # define if images with missing data should be done again
-RETRY_MISSING_SAT = False
+RETRY_MISSING_SAT = True
 
 # define if failed images should be done again
-RETRY_FAILED_SAT = False
+RETRY_FAILED_SAT = True
 RETRY_FAILED_IMG = True
-RETRY_FAILED_CALC = False
+RETRY_FAILED_CALC = True
 
 # define if invalid images should be done again
-RETRY_INVALID_SAT = False
+RETRY_INVALID_SAT = True
 RETRY_INVALID_IMG = True
-RETRY_INVALID_CALC = False
+RETRY_INVALID_CALC = True
 
 
 def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
@@ -144,6 +144,19 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
 
         # iterate all images
         for img_counter, image_id in enumerate(tqdm(input_ids)):
+
+            # TEMP: ignore images from yesterday and today
+            try:
+                if processed_images_sat.get(image_id, {}).get('date')[:-6] in ["31.07.2024", "01.08.2024", "02.08.2024",
+                                                                               "03.08.2024", "04.08.2024", "05.08.2024",
+                                                                               "06.08.2024", "07.08.2024", "08.08.2024",
+                                                                               "09.08.2024", "10.08.2024", "11.08.2024",
+                                                                               "12.08.2024", "13.08.2024", "14.08.2024",
+                                                                               "15.08.2024", "16.08.2024"]:
+                    print(f"{image_id} recently covered {processed_images_sat.get(image_id, {}).get('date')[:-6]}")
+                    continue
+            except (Exception,):
+                pass
 
             # check if image is already geo-referenced with satellite
             if (processed_images_sat.get(image_id, {}).get('status') == "georeferenced" and
@@ -214,7 +227,10 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                     continue
 
                 # load the mask
-                mask = _prepare_mask(image_id, image, data_fid_marks, data_extracted)
+                try:
+                    mask = _prepare_mask(image_id, image, data_fid_marks, data_extracted)
+                except (Exception,):
+                    mask = None
 
                 # get the approx footprint of the image
                 approx_footprint = data_extracted.loc[
@@ -343,7 +359,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         if verify_image_positions:
 
             # load footprint and ids of images that are already geo-referenced by satellite
-            path_sat_shapefile = "/data/ATM/data_1/georef/sat.shp"
+            path_sat_shapefile = "/data/ATM/data_1/georef/sat_footprints.shp"
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
 
             # iterate all images
@@ -605,7 +621,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         georeferenced_ids = []
 
         if "sat" in calc_types:
-            path_sat_shapefile = "/data/ATM/data_1/georef/sat.shp"
+            path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
             sat_shapes = sat_shape_data.geometry
             sat_ids = sat_shape_data['image_id'].tolist()
@@ -614,7 +630,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
             georeferenced_ids.extend(sat_ids)
 
         if "img" in calc_types:
-            path_img_shapefile = "/data/ATM/data_1/georef/img.shp"
+            path_img_shapefile = "/data/ATM/data_1/georef/footprints/img_footprints.shp"
             img_shape_data = lsd.load_shape_data(path_img_shapefile)
             img_shapes = img_shape_data.geometry
             img_ids = img_shape_data['image_id'].tolist()
@@ -816,17 +832,17 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
     """
 
     # save the geo-referenced image
-    path_img = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}.tif"
+    path_img = f"{DEFAULT_SAVE_FOLDER}/images/{georef_type}/{image_id}.tif"
     at.apply_transform(image, transform, save_path=path_img)
 
     # save the transform
-    path_transform = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_transform.txt"
+    path_transform = f"{DEFAULT_SAVE_FOLDER}/images/{georef_type}/{image_id}_transform.txt"
 
     # noinspection PyTypeChecker
     np.savetxt(path_transform, transform.reshape(3, 3), fmt='%.5f')
 
     # save the points, conf and residuals
-    path_points = f"{DEFAULT_SAVE_FOLDER}/{georef_type}/{image_id}_points.txt"
+    path_points = f"{DEFAULT_SAVE_FOLDER}/images/{georef_type}/{image_id}_points.txt"
     tps_conf = np.concatenate([tps, conf.reshape(-1, 1), residuals.reshape((-1, 1))], axis=1)
 
     # noinspection PyTypeChecker
@@ -852,7 +868,7 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
     footprint = citf.convert_image_to_footprint(image, transform)
 
     # save footprint to shp file
-    path_shp_file = f"{DEFAULT_SAVE_FOLDER}/{georef_type}.shp"
+    path_shp_file = f"{DEFAULT_SAVE_FOLDER}/footprints/{georef_type}_footprints.shp"
     eg.export_geometry(footprint, path_shp_file,
                        attributes=attributes, key_field="image_id",
                        overwrite_file=False,
@@ -911,6 +927,9 @@ if __name__ == "__main__":
            georef_with_satellite=GEOREF_WITH_SATELLITE,
            georef_with_image=GEOREF_WITH_IMAGE,
            georef_with_calc=GEOREF_WITH_CALC,
+           overwrite_sat=OVERWRITE_SAT,
+           overwrite_img=OVERWRITE_IMG,
+           overwrite_calc=OVERWRITE_CALC,
            retry_missing_sat=RETRY_MISSING_SAT,
            retry_failed_sat=RETRY_FAILED_SAT,
            retry_failed_img=RETRY_FAILED_IMG,

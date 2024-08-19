@@ -14,7 +14,9 @@ def create_mask(image: np.ndarray,
                 default_fid_position: int = 500,
                 min_border_width: int = None,
                 use_database: bool = False,
+                uint8: bool = False,
                 image_id=None,
+                conn=None,
                 ) -> np.ndarray:
     """
     This function generates a mask for an image based on provided fiducial marks (everything outside
@@ -53,7 +55,8 @@ def create_mask(image: np.ndarray,
     # replace the values with database values
     if use_database:
 
-        conn = ctd.establish_connection()
+        if conn is None:
+            conn = ctd.establish_connection()
 
         if image_id is None:
             raise ValueError("Image ID is required when using the database.")
@@ -147,5 +150,8 @@ def create_mask(image: np.ndarray,
         for box in ignore_boxes:
             x1, y1, x2, y2 = box
             mask[int(y1):int(y2), int(x1):int(x2)] = 0
+
+    if uint8:
+        mask = mask * 255
 
     return mask

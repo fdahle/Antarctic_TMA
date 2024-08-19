@@ -6,12 +6,11 @@ from scipy.interpolate import griddata
 import numpy as np
 from scipy.ndimage import zoom
 
-import src.base.find_tie_points as ftp
 import src.display.display_images as di
 import src.georef.snippets.convert_image_to_footprint as citf
 import src.load.load_rema as lr
 
-import src.dem.minimize_difference as md
+import src.dem.old.minimize_difference as md
 
 buffer_val = 10000
 

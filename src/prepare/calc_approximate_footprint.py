@@ -4,17 +4,19 @@
 import math
 import numpy as np
 from shapely import geometry
-from typing import Union
 from vector3d.vector import Vector
 
 # Local imports
 import src.load.load_rema as lr
 
 
-def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimuth: float,
-                               view_direction: str, altitude: Union[int, float],
-                               focal_length: Union[int, float],
-                               adapt_with_rema: bool = False) -> geometry.Polygon:
+def calc_approximate_footprint(center: Vector | tuple[float, float],
+                               azimuth: float,
+                               view_direction: str,
+                               altitude: int | float,
+                               focal_length: int | float,
+                               adapt_with_rema: bool = False) ->\
+        geometry.Polygon:
 
     """
     Calculates the approximate footprint of an image based on the camera parameters like center,
@@ -73,7 +75,7 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
     }
 
     # convert altitude from feet to meter & save
-    if altitude > 15000:
+    if altitude > 8000:
         altitude = int(altitude / 3.281)
     camera_params["zPos"] = altitude
 
@@ -83,19 +85,35 @@ def calc_approximate_footprint(center: Union[Vector, tuple[float, float]], azimu
     # if true a new polygon is calculated based on the average elevation data from rema
     if adapt_with_rema:
 
-        # get average elevation data for this initial approx_footprint based on rema data
-        rema_data, _ = lr.load_rema(polygon, zoom_level=32)
-        avg_ground_height = np.average(rema_data)
+        rema_data = None
+        rema_poly = polygon
 
-        # convert to feet
-        avg_ground_height = avg_ground_height * 3.281
+        counter = 0
+        max_counter = 100
+        while True:
+            counter = counter + 1
+            if counter > max_counter:
+                break
+            # get average elevation data for this initial approx_footprint based on rema data
+            rema_data, _ = lr.load_rema(rema_poly, zoom_level=32,
+                                        return_empty_rema=True)
+            if rema_data is None:
+                # buffer the polygon by 10 meters
+                rema_poly = rema_poly.buffer(25)
+            else:
+                break
 
-        # recalculate the height of camera (in relation to the ground)
-        altitude = altitude - avg_ground_height
-        camera_params["zPos"] = altitude
+        if rema_data is not None:
+            # Calculate the average of the rema data
+            valid_data = rema_data[rema_data != -9999.0]
+            avg_ground_height = np.average(valid_data)
 
-        # recalculate the approx_footprint based on the new camera_params
-        polygon = _get_bounds(camera_params)
+            # recalculate the height of camera (in relation to the ground)
+            altitude = altitude - avg_ground_height
+            camera_params["zPos"] = altitude
+
+            # recalculate the approx_footprint based on the new camera_params
+            polygon = _get_bounds(camera_params)
 
     return polygon
 

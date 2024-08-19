@@ -7,7 +7,8 @@ import numpy as np
 
 def rotate_image(image: np.ndarray,
                  angle: float,
-                 expand: bool = True) -> (np.ndarray, np.ndarray):
+                 expand: bool = True,
+                 return_rot_matrix=False) -> (np.ndarray, np.ndarray):
     """
     Rotates an image by a given angle, optionally expanding the image to fit the rotated result.
 
@@ -56,4 +57,7 @@ def rotate_image(image: np.ndarray,
         # Apply the rotation matrix to the image with original dimensions
         rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
 
-    return rotated_image, rotation_matrix
+    if return_rot_matrix:
+        return rotated_image, rotation_matrix
+    else:
+        return rotated_image

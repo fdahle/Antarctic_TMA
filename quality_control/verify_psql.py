@@ -14,7 +14,11 @@ import streamlit as st
 # Local imports
 import base.connect_to_database as ctd  # noqa
 
-tables_to_check = ["All tables", "images", "images_extracted", "images_fid_points"]
+tables_to_check = ["All tables",
+                   "images", "images_extracted",
+                   "images_fid_points", "images_file_paths",
+                   "images_georef", "images_segmentation",
+                   "images_sfm"]
 
 debug_more_details = False
 debug_max_cutoff = 100

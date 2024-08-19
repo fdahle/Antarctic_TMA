@@ -1,4 +1,5 @@
 """georeference images by calculating the footprint"""
+import copy
 
 # Library imports
 import numpy as np
@@ -11,8 +12,8 @@ from typing import Optional, Tuple
 import src.georef.snippets.calc_transform as ct
 
 # debug plots
-debug_display_image_footprint = False
-print_debug = False
+debug_display_image_footprint = True
+print_debug = True
 
 
 class GeorefCalc:
@@ -64,42 +65,53 @@ class GeorefCalc:
             conf (np.ndarray): The confidence scores associated with the tie points as a NumPy array.
         """
 
+        # Filter out geo-referenced images and footprints that don't match the flight path
+        filtered_georef_ids = []
+        filtered_footprints= []
+        for i, geo_id in enumerate(georeferenced_ids):
+            if geo_id[2:6] == image_id[2:6]:
+                filtered_georef_ids.append(geo_id)
+                filtered_footprints.append(georeferenced_footprints[i])
+
         # check if there are enough geo-referenced images to calculate a position
-        if len(georeferenced_ids) < self.min_nr_of_images:
+        if len(filtered_georef_ids) < self.min_nr_of_images:
             print("Not enough images to calculate a position")
             return None, None, None, None
 
         # Get the centroids of the footprints
-        georeferenced_centers = [footprint.centroid for footprint in georeferenced_footprints]
+        filtered_centers = [footprint.centroid for footprint in filtered_footprints]
 
         # check if the image is already geo-referenced -> no calculation needed
-        if image_id in georeferenced_ids:
+        if image_id in filtered_georef_ids:
 
             # get the index of the image in the list
-            index = georeferenced_ids.index(image_id)
+            index = filtered_georef_ids.index(image_id)
 
             # get the equivalent position & footprint
-            image_position = georeferenced_centers[index]
-            image_footprint = georeferenced_footprints[index]
+            image_position = filtered_centers[index]
+            image_footprint = filtered_footprints[index]
 
         # calculate image position and footprint
         else:
             # derive the position of the image
-            image_position = self._derive_image_position(image_id, georeferenced_ids, georeferenced_centers)
+            image_position = self._derive_image_position(image_id, filtered_georef_ids,
+                                                         filtered_centers)
 
             image_footprint = self._derive_image_geometry(image_id, image_position,
-                                                          georeferenced_ids, georeferenced_footprints)
+                                                          filtered_georef_ids,
+                                                          filtered_footprints)
 
         if debug_display_image_footprint:
             style_config = {
-                'labels': [georeferenced_ids, None, image_id, None],
+                'labels': [filtered_georef_ids, None, image_id, None],
                 'colors': ['blue', 'blue', 'red', 'red'],
             }
 
             import src.display.display_shapes as ds
-            ds.display_shapes([georeferenced_centers, georeferenced_footprints,
+            ds.display_shapes([filtered_centers, filtered_footprints,
                                image_position, image_footprint],
-                              style_config=style_config, normalize=True)
+                              style_config=style_config, normalize=True,
+                              save_path=f"/home/fdahle/Desktop/georef_test/{image_id}.png")
 
         # get corners from footprint excluding the repeated last point
         tps_abs = np.asarray(list(image_footprint.exterior.coords)[:-1])
@@ -137,6 +149,10 @@ class GeorefCalc:
             Point: A Shapely Point object representing the calculated position/center for the
                 new image.
         """
+
+        if print_debug:
+            print("Georeferenced ids:")
+            print(georeferenced_ids)
 
         # convert image ids to just their numbers
         image_nr = int(image_id[-4:])
@@ -210,17 +226,39 @@ class GeorefCalc:
 
         # Convert Shapely Points to numpy arrays for calculation
         if position_index == 0:
+            if print_debug:
+                print("pos at 0")
             ref_coords = np.array([next_point.x, next_point.y])
             ref_id = next_id
             direction = -1
         elif position_index == len(georeferenced_centers_sorted):
+            if print_debug:
+                print("pos at end")
             ref_coords = np.array([prev_point.x, prev_point.y])
             ref_id = prev_id
             direction = 1
         else:
+            if print_debug:
+                print("pos at between")
             ref_coords = np.array([prev_point.x, prev_point.y])
             ref_id = prev_id
             direction = 1
+
+        if print_debug:
+            print("ref id", ref_id)
+
+        # sometimes we need to switch the direction
+        if x[0] > x[-1]:
+            if print_debug:
+                print("x0 bigger x1")
+            direction = -direction
+        else:
+            if print_debug:
+                print("x0 smaller x1")
+            direction = direction
+
+        if print_debug:
+            print("direction", direction)
 
         diff_ids = abs(image_nr - ref_id)
 

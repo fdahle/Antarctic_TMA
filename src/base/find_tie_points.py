@@ -18,7 +18,6 @@ from external.SuperGlue.matching import Matching
 import src.base.custom_print as cp
 import src.base.resize_image as ri
 import src.display.display_images as di
-import src.export.export_tiff as et
 
 # Constants
 OOM_REDUCE_VALUE = 0.9
@@ -115,9 +114,20 @@ class TiePointDetector:
         if mask1 is not None:
             if mask1.shape != input_img1.shape:
                 raise ValueError("Mask1 must have the same dimensions as input_img1")
+
+            # convert to 0 and 1
+            if np.nanmax(mask1) > 1:
+                mask1 = copy.deepcopy(mask1)
+                mask1 = mask1 / 255
+
         if mask2 is not None:
             if mask2.shape != input_img2.shape:
                 raise ValueError("Mask2 must have the same dimensions as input_img2")
+
+            # convert to 0 and 1
+            if np.nanmax(mask2) > 1:
+                mask2 = copy.deepcopy(mask2)
+                mask2 = mask2 / 255
 
         try:
             # we handle the warnings ourselves -> ignore them
@@ -132,11 +142,6 @@ class TiePointDetector:
 
                 # mask initial tie-points
                 tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
-
-                # path_initial_tps = "/data/ATM/papers/georef_paper/revision/initial_tps.npy"
-                # path_initial_conf = "/data/ATM/papers/georef_paper/revision/initial_conf.npy"
-                # np.save(path_initial_tps, tps)
-                # np.save(path_initial_conf, conf)
 
                 # display the initial tie-points
                 if self.display:

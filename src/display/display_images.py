@@ -178,9 +178,11 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
         elif img_type == "color":
             ax.imshow(img, interpolation=None)
         elif img_type == "rtg":  # red to green
-            ax.imshow(img, cmap=cmap_red_green)
+            ax.imshow(img, cmap=cmap_red_green, vmin=np.nanmin(img), vmax=np.nanmax(img))
         elif img_type == "gtr":  # green to red
             ax.imshow(img, cmap=cmap_green_red)
+        elif img_type == "difference":
+            ax.imshow(img, cmap="seismic", vmin=np.nanmin(img), vmax=np.nanmax(img))
         elif img_type == "segmented":
             cmap, norm = _create_segmented_cmap()
             ax.imshow(img, cmap=cmap, norm=norm, interpolation=None)

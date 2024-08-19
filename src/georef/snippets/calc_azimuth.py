@@ -2,20 +2,17 @@
 
 # Library imports
 import numpy as np
-import psycopg2.extensions
 from math import atan2, degrees
-from shapely import wkt
 from typing import Optional
 
 # Local imports
-import src.base.connect_to_database as ctd
 import src.display.display_shapes as ds
 
 # Debug settings
 debug_show_points = False
 
 
-def calc_azimuth(image_id: str, conn: Optional[psycopg2.extensions.connection] = None) -> Optional[float]:
+def calc_azimuth(image_id: str, geoframe) -> Optional[float]:
     """
     This function calculates the azimuth of the image flight line by fitting a linear model to
     the geographic positions (extracted from a database) of all images with the same flight path identifier.
@@ -24,42 +21,26 @@ def calc_azimuth(image_id: str, conn: Optional[psycopg2.extensions.connection] =
     Args:
         image_id (str): The unique identifier for the image, used to determine the flight path and extract
             relevant positions.
-        conn (Optional[psycopg2.extensions.connection]): An existing database connection. If none is provided, the
-            function establishes a new connection.
 
     Returns:
         Optional[float]: The azimuth in degrees as a float, or None if the image_id is not found in the database.
-
-    Raises:
-        psycopg2.DatabaseError: If an error occurs in database connection or execution.
     """
-    # establish connection to psql
-    if conn is None:
-        conn = ctd.establish_connection()
 
     flight_path = image_id[2:6]
 
-    # get the position of all images with the same flightpath
-    sql_string = "SELECT image_id, ST_AsText(position_exact) AS position_exact FROM images_extracted " \
-                 " WHERE SUBSTRING(image_id, 3, 4)='" + flight_path + "'"
-    data = ctd.execute_sql(sql_string, conn)
+    # filter geopandas dataframe by flight path
+    filtered_data = geoframe[geoframe["image_id"].str[2:6] == flight_path]
 
-    # remove the values where the position is empty
-    data = data.dropna(subset=['position_exact'])
-
-    # check if image_id is still in the data
-    if image_id not in data['image_id'].values:
+    # skip if no data is found
+    if filtered_data.empty or filtered_data.shape[0] < 2:
         return None
 
-    # convert wkt to shapely points
-    data['position_exact'] = data['position_exact'].apply(wkt.loads)
-
     if debug_show_points:
-        ds.display_shapes(data['position_exact'].values)
+        ds.display_shapes(filtered_data['geometry'].values)
 
     # Extract x and y coordinates for line fitting
-    x = [point.x for point in data['position_exact']]
-    y = [point.y for point in data['position_exact']]
+    x = [point.x for point in filtered_data['geometry']]
+    y = [point.y for point in filtered_data['geometry']]
 
     # Fit a line to these centers using polyfit for a degree 1 polynomial (linear fit)
     line_fit = np.polyfit(x, y, 1)

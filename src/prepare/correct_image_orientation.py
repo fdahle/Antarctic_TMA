@@ -6,7 +6,9 @@ import numpy as np
 import mahotas as mht
 
 
-def correct_image_orientation(image: np.ndarray, image_path: str) -> bool:
+def correct_image_orientation(image: np.ndarray,
+                              image_path: str) ->\
+        bool:
     """
     This function determines whether an image needs to be rotated 180 degrees to correct
     its orientation. A correctly rotated image has the sidebar on the left.

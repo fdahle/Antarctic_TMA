@@ -83,7 +83,7 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
             src = rasterio.open(sat_folder + "/" + file)
 
             # we only want the satellite images with the same crs code
-            crs_code = int(src.crs['init'].split(":")[1])
+            crs_code = src.crs.to_epsg()
             if crs_code != satellite_crs:
                 src.close()
                 continue

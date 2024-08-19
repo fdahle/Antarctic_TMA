@@ -1,14 +1,13 @@
 import numpy as np
-import os
 import pandas as pd
 
-import src.dem.find_peaks_in_DEM as fpiD
-import src.dem.get_elevation_for_points as gefp  # noqa
+import src.dem.snippets.find_peaks_in_DEM as fpiD
+import src.dem.snippets.get_elevation_for_points as gefp  # noqa
 import src.sfm_agi.snippets.georef_ortho as go
 
 
 def export_gcps(dem, ortho, bounding_box, zoom_level,
-                resolution, footprints, output_path):
+                resolution, footprints, lst_aligned, azimuth, output_path):
 
     # get first band of ortho if it has more than one band
     if len(ortho.shape) == 3:
@@ -17,11 +16,12 @@ def export_gcps(dem, ortho, bounding_box, zoom_level,
     if dem.shape != ortho.shape:
         raise ValueError("DEM and ortho should have the same shape")
 
-    # convert pandas series to list
-    lst_footprints = footprints.to_list()
+    # convert footprint dict to list
+    lst_footprints = footprints.values()
 
     # get transform of ortho
-    transform = go.georef_ortho(ortho, lst_footprints)
+    transform = go.georef_ortho(ortho, lst_footprints, lst_aligned,
+                                               azimuth=azimuth, auto_rotate=True)
 
     # identify peaks in the DEM
     px_peaks = fpiD.find_peaks_in_dem(dem, no_data_value=-9999)

@@ -9,6 +9,8 @@ import shapely
 from rasterio import mask, merge
 from typing import Tuple, Optional
 
+import src.other.misc.download_rema_data as drd
+
 # Constants
 DEFAULT_REMA_FLD = "/data/ATM/data_1/DEM/REMA/mosaic"
 DEFAULT_REMA_SHP = "/data/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
@@ -18,7 +20,8 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
               rema_shape_file: str = DEFAULT_REMA_SHP,
               rema_folder: str = DEFAULT_REMA_FLD,
               zoom_level: int = 10,
-              return_empty_rema: bool = False) -> Optional[np.ndarray]:
+              auto_download=False,
+              return_empty_rema: bool = False,) -> Optional[np.ndarray]:
     """
     Loads REMA height data from a specified folder, merges them based on a bounding box. It is
     required to prove the path to the shape file containing the mosaic tiles. Optionally returns
@@ -76,7 +79,13 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
         rema_tile_path = zoom_rema_folder + "/" + tile + "_" + str(zoom_level) + "m.tif"
 
         # open the image file
-        src = rasterio.open(rema_tile_path)
+        try:
+            src = rasterio.open(rema_tile_path)
+        except:
+            # download the rema tile
+            if auto_download:
+                drd.download_rema_data(tile, zoom_level)
+            src = rasterio.open(rema_tile_path)
 
         # add the file to the list
         mosaic_files.append(src)

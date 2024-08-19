@@ -83,7 +83,7 @@ def georef_adapted(input_ids,
 
     # get existing footprints
     sql_string_georef = "SELECT image_id, georef_type, " \
-                        "ST_AsText(footprint_exact) AS footprint_exact FROM images_georef_3"
+                        "ST_AsText(footprint_exact) AS footprint_exact FROM images_georef"
     data_georef = ctd.execute_sql(sql_string_georef, conn)
 
     if MIN_GEOREF_SRC == "sat":

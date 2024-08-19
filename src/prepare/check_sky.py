@@ -1,7 +1,10 @@
 import numpy as np
 
 
-def check_sky(segmented, sky_id=6, subset_height=200, mask_padding = 700):
+def check_sky(segmented, sky_id: int = 6,
+              subset_height:int = 200,
+              mask_padding: int = 700) ->\
+        bool:
 
     total_height = subset_height + mask_padding
 

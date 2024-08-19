@@ -16,7 +16,9 @@ import src.base.resize_image as ri
 HIGHSCORE = 2500
 
 
-def calc_complexity(image: np.ndarray, mask: Optional[np.ndarray] = None) -> float:
+def calc_complexity(image: np.ndarray,
+                    mask: np.ndarray | None = None) ->\
+        float:
     """
     Calculates the complexity of an image using the SuperGlue matching algorithm.
     Complexity is defined by the number of key-points detected in the image, normalized by a highscore value.
@@ -24,7 +26,7 @@ def calc_complexity(image: np.ndarray, mask: Optional[np.ndarray] = None) -> flo
 
     Args:
         image (np.ndarray): The image to analyze, as a numpy array.
-        mask (Optional[np.ndarray]): An optional mask defining areas to include. Masked areas (0) are ignored,
+        mask (np.ndarray | None): An optional mask defining areas to include. Masked areas (0) are ignored,
                                       while unmasked areas (1) are considered. Must be the same shape as `image`.
     Returns:
         float: The complexity score of the image, a value between 0 and 1.

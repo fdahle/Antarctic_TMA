@@ -152,9 +152,9 @@ class GeorefSatellite:
             return None, None, None, None
 
         # rotate image (and mask)
-        image, rotation_matrix = ri.rotate_image(image, angle)
+        image, rotation_matrix = ri.rotate_image(image, angle, return_rot_matrix=True)
         if mask is not None:
-            mask, _ = ri.rotate_image(mask, angle)
+            mask = ri.rotate_image(mask, angle)
 
         # adjust the image and mask so that it has the same pixel size as the satellite image
         image, adjust_factors = self._adjust_image_resolution(sat, image, sat_bounds, image_bounds, "image")

@@ -24,6 +24,9 @@ def rotate_points(points: Union[List[Tuple[float, float]], np.ndarray],
         A numpy array of the rotated points.
     """
 
+    if not isinstance(rotation_matrix, np.ndarray):
+        raise ValueError("Rotation matrix must be a numpy array.")
+
     # Convert points to numpy array if not already
     points = np.array(points, dtype=np.float32)
 

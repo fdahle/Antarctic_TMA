@@ -48,6 +48,11 @@ def enhance_image(image: np.ndarray,
     # Create a deep copy of the image to avoid modifying the original
     img = copy.deepcopy(image)
 
+    # convert mask to binary
+    if mask is not None:
+        mask = copy.deepcopy(mask)
+        mask[mask > 0] = 1
+
     # Apply a median filter to reduce noise
     filtered = ndimage.median_filter(img, size=disksize)
 

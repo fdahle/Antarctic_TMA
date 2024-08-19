@@ -2,18 +2,19 @@ import Metashape
 import src.base.load_credentials as lc
 
 # get the license key
-licence_key = lc.load_credentials("agisoft")['licence']
+#licence_key = lc.load_credentials("agisoft")['licence']
 
 # Activate the license
-Metashape.License().activate(licence_key)
+#Metashape.License().activate(licence_key)
 
 # create Metashape document and open the psx
-path_psx = "/data/ATM/data_1/sfm/agi_projects/test_gcps/test_gcps.psx"
+path_psx = "/home/fdahle/Desktop/agi_test/tst_relative.psx"
 doc = Metashape.Document()
 doc.open(path_psx)
+doc.save()
 
 # load the chunk
-chunk = doc.chunks[0]
+#chunk = doc.chunks[0]
 
 """
 center = chunk.region.center

@@ -25,7 +25,8 @@ def get_elevation_for_points(points, dem=None,
 
         # get the bounds and load the dem
         bounds = (min_x, min_y, max_x, max_y)
-        dem, dem_transform = lr.load_rema(bounds, zoom_level=zoom_level)
+        dem, dem_transform = lr.load_rema(bounds, zoom_level=zoom_level,
+                                          auto_download=True)
 
         if dem is None:
             raise ValueError("No DEM found")

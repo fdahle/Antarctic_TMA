@@ -98,7 +98,10 @@ def execute_sql(sql_string: str,
     else:
 
         # execute the edit
-        cursor.execute(sql_string)
-        conn.commit()
-
+        try:
+            cursor.execute(sql_string)
+            conn.commit()
+        except (Exception,) as e:
+            print(sql_string)
+            raise e
         return None

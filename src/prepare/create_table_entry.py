@@ -8,9 +8,10 @@ from typing import Any, Optional
 import src.base.connect_to_database as ctd
 
 
-def create_table_entry(image_id: str, table: str,
-                       value_dict: Optional[dict[str, Any]] = None,
-                       conn: Optional[sqlite3.Connection] = None) -> None:
+def create_table_entry(image_id: str,
+                       table: str,
+                       value_dict: dict[str, Any] | None = None,
+                       conn: sqlite3.Connection | None = None) -> None:
     """
     Creates an entry in a specified table for a given image ID, with optional additional values.
 

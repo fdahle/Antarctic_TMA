@@ -7,9 +7,11 @@ import src.load.load_image as li
 import src.display.display_images as di
 
 
-def save_key_points(image_ids, project_fld, kp_folder):
-    # get name of last folder
-    project_name = os.path.basename(os.path.normpath(project_fld))
+def save_key_points(image_ids, project_fld, kp_folder, project_name=None):
+
+    if project_name is None:
+        # get name of last folder
+        project_name = os.path.basename(os.path.normpath(project_fld))
 
     # define path to the zip file
     path_zip = os.path.join(project_fld, f"{project_name}.files/0/0/point_cloud/point_cloud.zip")

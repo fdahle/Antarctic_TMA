@@ -16,7 +16,7 @@ PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 PATH_AGISOFT_FLD = "/home/fdahle/SFTP/staff-umbrella/ATM/agisoft"
 
 
-def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None) -> None:
+def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None, conn=None) -> None:
     """
     Prepares a folder for SfM using Agisoft Metashape by copying images and creating masks. Furthermore, it creates
     a camera file with the camera positions and a focal length file.
@@ -28,12 +28,13 @@ def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None)
         None
     """
 
+    # connect to database
+    if conn is None:
+        conn = ctd.establish_connection()
+
     # check if the base folder exists
     if not os.path.exists(PATH_AGISOFT_FLD):
         raise FileNotFoundError(f"Folder {PATH_AGISOFT_FLD} does not exist (Is the server mounted?)")
-
-    # connect to database
-    conn = ctd.establish_connection()
 
     # set project name to tma if not given
     if project_name is None:

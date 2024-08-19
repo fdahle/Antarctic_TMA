@@ -10,9 +10,11 @@ import src.load.load_image as li
 overwrite = False
 
 
-def estimate_altimeters():
+def estimate_altimeters(conn=None):
+
     # establish connection to psql
-    conn = ctd.establish_connection()
+    if conn is None:
+        conn = ctd.establish_connection()
 
     # get all images and altimeters from the database
     sql_string = "SELECT image_id, " \

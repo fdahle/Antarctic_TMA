@@ -32,7 +32,7 @@ def register_dem(dem, footprints,
     # resize the input dem to the size of the rema dem
     dem_resized = resize_dem_with_nan(dem, dem_rema.shape, order=3)
 
-    import src.dem.find_peaks_in_DEM as fpd
+    import src.dem.snippets.find_peaks_in_DEM as fpd
     peaks_resized = fpd.find_peaks_in_dem(dem_resized, no_data_value=-32767)
     peaks_rema = fpd.find_peaks_in_dem(dem_rema)
 
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 
     conn = ctd.establish_connection()
     _image_ids_str = "','".join(_image_ids)
-    sql_string = (f"SELECT st_astext(footprint_exact) FROM images_georef_3 "
+    sql_string = (f"SELECT st_astext(footprint_exact) FROM images_georef "
                   f" WHERE image_id IN ('{_image_ids_str}')")
     data = ctd.execute_sql(sql_string, conn)
     footprints = data['st_astext'].tolist()

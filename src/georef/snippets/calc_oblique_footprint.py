@@ -1,110 +1,29 @@
 # extend the geo-referencing to the oblique images
 
-import os
-import geopandas as gpd
+
+# Python imports
 import math
+
+# Library imports
 import numpy as np
 import shapely
 from shapely import geometry
 from vector3d.vector import Vector
 
-import src.base.connect_to_database as ctd
+# Local imports
+import src.load.load_rema as lr
 
 # constants
 FEET_TO_METER = 0.3048
 ADAPT_POLY_WITH_REMA = False
 
 
-def extend_georef_oblique(point_data, georef_type, output_fld, conn=None):
-    # create connection to the database if not provided
-    if conn is None:
-        conn = ctd.establish_connection()
-
-    # Initialize a list to store the new polygons
-    polygons = []
-
-    # iterate all rows in the geopandas dataframe
-    for _, row in point_data.iterrows():
-
-        # get the values from the row
-        image_id = row["image_id"]
-        position = row["position_exact"]
-        altitude = row["height"]
-        azimuth = row["azimuth"]
-
-        if position is None:
-            print("No position found for image_id: ", image_id)
-            continue
-        if altitude is None or np.isnan(altitude):
-            print("No altitude found for image_id: ", image_id)
-            continue
-        if azimuth is None or np.isnan(azimuth):
-            print("No azimuth found for image_id: ", image_id)
-            continue
-
-        # get the right ids
-        image_id_left = image_id.replace('32V', '31L')
-        image_id_right = image_id.replace('32V', '33R')
-
-        # get x and y
-        point = shapely.from_wkt(position)
-        x = point.x
-        y = point.y
-
-        # Convert altitude from feet to meters
-        altitude_meters = altitude * FEET_TO_METER
-
-        # get focal length
-        try:
-            sql_string_left = f"SELECT focal_length FROM images_extracted WHERE image_id = '{image_id_left}'"
-            focal_length_left = ctd.execute_sql(sql_string_left, conn).iloc[0]["focal_length"]
-        except (Exception,):
-            focal_length_left = None
-        try:
-            sql_string_right = f"SELECT focal_length FROM images_extracted WHERE image_id = '{image_id_right}'"
-            focal_length_right = ctd.execute_sql(sql_string_right, conn).iloc[0]["focal_length"]
-        except (Exception,):
-            focal_length_right = None
-
-        # Calculate the footprints for left and right cameras
-        if focal_length_left is None or np.isnan(focal_length_left):
-            print("No focal length found for image_id: ", image_id_left)
-        else:
-            left_footprint = _calc_footprint(x, y, azimuth, altitude_meters,
-                                             'L', focal_length_left)
-            # Add the polygons to the list
-            polygons.append({
-                "image_id": image_id_left,
-                "geometry": left_footprint
-            })
-
-        if focal_length_right is None or np.isnan(focal_length_right):
-            print("No focal length found for image_id: ", image_id_right)
-        else:
-            right_footprint = _calc_footprint(x, y, azimuth, altitude_meters,
-                                              'R', focal_length_right)
-            polygons.append({
-                "image_id": image_id_right,
-                "geometry": right_footprint
-            })
-
-    # Create a GeoDataFrame from the polygons
-    gdf = gpd.GeoDataFrame(polygons, columns=["image_id", "geometry"], crs="EPSG:3031")
-
-    # Save the GeoDataFrame to a file
-    output_file = os.path.join(output_fld, f"{georef_type}_oblique.shp")
-    gdf.to_file(output_file)
-
-    print(f"Geo-referenced oblique footprints saved to {output_file}")
-
-
-def _calc_footprint(x, y, azimuth, altitude,
-                    view_direction, focal_length):
+def calc_oblique_footprint(center, direction, focal_length,
+                          altitude, azimuth):
     """
     "https://gis.stackexchange.com/questions/75405/aerial-photograph-footprint-size-calculation"
 
     Args:
-        img_id:
         x:
         y:
         azimuth:
@@ -116,14 +35,19 @@ def _calc_footprint(x, y, azimuth, altitude,
 
     """
 
-    if view_direction == "L":
+    # get x and y
+    x = center.x
+    y = center.y
+
+    # Convert altitude from feet to meters
+    altitude_meters = altitude * FEET_TO_METER
+
+    if direction == "L":
         gamma = 30
-    elif view_direction == "R":
+    elif direction == "R":
         gamma = 330
     else:
         raise ValueError("view_direction must be either 'L' or 'R'")
-
-    print("T")
 
     # here the camera params are saved
     camera_params = {
@@ -454,7 +378,7 @@ def _calc_footprint(x, y, azimuth, altitude,
 
     if ADAPT_POLY_WITH_REMA:
         # get average elevation data for this initial footprint
-        rema_data = grd.get_rema_data(polygon.bounds)
+        rema_data = lr.load_rema(polygon.bounds)
         avg_ground_height = np.average(rema_data)
 
         # recalculate the height of camera (in relation to the ground)

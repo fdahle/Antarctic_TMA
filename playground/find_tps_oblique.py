@@ -38,31 +38,49 @@ tpd = ftp.TiePointDetector('lightglue', min_conf_value=0.8)
 # Load the image
 img = li.load_image(id_img)
 mask = cm.create_mask(img, use_default_fiducials=True,
+                      default_fid_position=500,
                       use_database=True, image_id=id_img)
 
 # check for image_id if sky is correct
-if sky_data['sky_is_correct'].iloc[0] is False:
+if sky_data[sky_data['image_id'] == id_img]['sky_is_correct'].iloc[0] is False:
 
     # flip the image 180 degree
     img = img[::-1, ::-1]
     mask = mask[::-1, ::-1]
 
+# shuffle intersect_ids
+import random
+random.shuffle(intersect_ids)
+
+print(intersect_ids)
+
 for other_id in intersect_ids:
     other_img = li.load_image(other_id)
     other_mask = cm.create_mask(other_img, use_default_fiducials=True,
-                                use_database=True, image_id=other_id)
+                                use_database=False, image_id=other_id)
+
+    if "V" in id_img and "V" in other_id:
+        print(f"Both images ({id_img} and {other_id}) are vertical")
+        continue
+
+    if sky_data[sky_data['image_id'] == other_id]['sky_is_correct'].iloc[0] is False:
+        other_img = other_img[::-1, ::-1]
+        other_mask = other_mask[::-1, ::-1]
 
     tps, conf = tpd.find_tie_points(img, other_img, mask1=mask, mask2=other_mask)
 
+    print(f"Found {tps.shape[0]} tie-points for {id_img} and {other_id}")
+
     if tps.shape[0] < 5:
-        print(f"Found only {tps.shape[0]} tie-points for {id_img} and {other_id}")
         continue
 
     style_config = {
         'title':f'{id_img} {other_id}'
     }
-    di.display_images([img, other_img], tie_points=tps, tie_points_conf=conf,
+    di.display_images([img, other_img],
+                      overlays=[mask, other_mask],
+                      tie_points=tps, tie_points_conf=conf,
                       style_config=style_config)
 
-    di.display_images([img, other_img, mask, other_mask])
+    #di.display_images([img, other_img, mask, other_mask])
 

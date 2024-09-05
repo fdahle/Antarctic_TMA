@@ -25,6 +25,7 @@ import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
 import src.sfm_agi.snippets.create_adapted_mask as cam
 import src.sfm_agi.snippets.create_confidence_dem as ccd
+import src.sfm_agi.snippets.create_custom_tie_points as cctp
 import src.sfm_agi.snippets.export_gcps as eg
 import src.sfm_agi.snippets.save_key_points as skp
 import src.sfm_agi.snippets.save_sfm_to_db as sstd
@@ -41,21 +42,23 @@ DEBUG_MODE = True  # if true errors are raised
 fixed_focal_length = True
 resolution_relative = 0.001  # in px
 resolution_absolute = 2  # in m
+custom_matching = False
 zoom_level_dem = 10
 
 # Other variables
 save_text_output = True
 save_commands = True
+auto_true_for_new=False
 
 # Steps
 STEPS = {
     "create_masks": True,
     "union_masks": True,
-    "enhance_photos": True,
+    "enhance_photos": False,
     "match_photos": True,
-    "align_cameras": True,
-    "build_depth_maps_relative": True,
-    "build_pointcloud_relative": True,
+    "align_cameras": False,
+    "build_depth_maps_relative": False,
+    "build_pointcloud_relative": False,
     "build_mesh_relative": True,
     "build_dem_relative": True,
     "build_orthomosaic_relative": True,
@@ -116,7 +119,7 @@ def run_agi(project_name, images,
         raise ValueError("Both RESUME and OVERWRITE cannot be set to True.")
 
     # set all steps and display steps to True if RESUME is True
-    if resume is False:
+    if resume is False and auto_true_for_new:
         print("Auto setting of all steps to True due to RESUME")
         for key in STEPS:
             STEPS[key] = True
@@ -129,7 +132,8 @@ def run_agi(project_name, images,
 
     # define path to the project folder and the project files
     project_fld = os.path.join(PATH_PROJECT_FOLDERS, project_name)
-    project_file_path = project_fld + "/" + project_name + ".psx"
+    project_psx_path = project_fld + "/" + project_name + ".psx"
+    project_files_path = project_fld + "/" + project_name + ".files"
 
     # remove the complete project folder if OVERWRITE is set to True
     if overwrite and os.path.exists(project_fld):
@@ -180,17 +184,17 @@ def run_agi(project_name, images,
         doc = Metashape.Document(read_only=False)  # noqa
 
         # check if the project already exists
-        if os.path.exists(project_file_path):
+        if os.path.exists(project_psx_path):
 
             if resume is False:
                 raise FileExistsError("The project already exists. Set RESUME to True to resume the project.")
 
             # load the project
-            doc.open(project_file_path, ignore_lock=True)
+            doc.open(project_psx_path, ignore_lock=True)
 
         else:
             # save the project with file path so that later steps can be resumed
-            doc.save(project_file_path)
+            doc.save(project_psx_path)
 
         # init output folder
         output_fld = os.path.join(project_fld, "output")
@@ -215,36 +219,39 @@ def run_agi(project_name, images,
         # save which images are rotated
         rotated_images = []
 
-        print("Copy images:")
-        start_time = time.time()
+        # check if all images are in already in the image folder
+        if len(os.listdir(img_folder)) != len(images):
 
-        # iterate the images
-        for i, image_path in tqdm(enumerate(images), total=len(images)):
+            print("Copy images:")
+            start_time = time.time()
 
-            # get file name from path
-            file_name = os.path.basename(image_path)
+            # iterate the images
+            for i, image_path in tqdm(enumerate(images), total=len(images)):
 
-            # define output path
-            output_path = os.path.join(img_folder, file_name)
+                # get file name from path
+                file_name = os.path.basename(image_path)
 
-            # update the image path
-            images[i] = output_path
+                # define output path
+                output_path = os.path.join(img_folder, file_name)
 
-            # only copy the image if it does not exist
-            if os.path.exists(output_path) is False:
+                # update the image path
+                images[i] = output_path
 
-                # copy the image to the output folder
-                shutil.copy(image_path, output_path)
+                # only copy the image if it does not exist
+                if os.path.exists(output_path) is False:
 
-                # check image rotation and rotate if necessary
-                correct_rotation, conn = cs.check_sky(output_path, conn=conn)
+                    # copy the image to the output folder
+                    shutil.copy(image_path, output_path)
 
-                if correct_rotation is False:
-                    rotated_images.append(file_name[:-4])
+                    # check image rotation and rotate if necessary
+                    correct_rotation, conn = cs.check_sky(output_path, conn=conn)
 
-        finish_time = time.time()
-        exec_time = finish_time - start_time
-        print(f"Copy images - finished ({exec_time:.4f} s)")
+                    if correct_rotation is False:
+                        rotated_images.append(file_name[:-4])
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Copy images - finished ({exec_time:.4f} s)")
 
         # add a chunk for the doc and add images
         if len(doc.chunks) == 0:
@@ -634,29 +641,48 @@ def run_agi(project_name, images,
             print("Match photos")
             start_time = time.time()
 
-            # create pairs from the cameras
-            pairs = []
-            num_cameras = len(chunk.cameras)
-            for i in range(num_cameras - 1):
-                pairs.append((i, i + 1))
+            if custom_matching:
 
-            arguments = {
-                'generic_preselection': True,
-                'reference_preselection': True,
-                'keep_keypoints': True,
-                'pairs': pairs,
-                'filter_mask': True,
-                'mask_tiepoints': True,
-                'filter_stationary_points': True,
-                'reset_matches': True
-            }
+                mask_folder = os.path.join(data_fld, "masks_adapted")
+                if not os.path.exists(mask_folder):
+                    mask_folder=None
 
-            # match photos
-            chunk.matchPhotos(**arguments)
+                if STEPS["enhance_photos"]:
+                    tp_img_folder = enhanced_folder
+                else:
+                    tp_img_folder = img_folder
 
-            # save the arguments of the command
-            if save_commands:
-                _save_command_args("matchPhotos", arguments, argument_fld)
+                cctp.create_custom_tie_points(chunk, project_files_path,
+                                               tp_img_folder, mask_folder=mask_folder)
+
+                # load the project again to save the custom tie points
+                doc.open(project_psx_path, ignore_lock=True)
+
+            else:
+
+                # create pairs from the cameras
+                pairs = []
+                num_cameras = len(chunk.cameras)
+                for i in range(num_cameras - 1):
+                    pairs.append((i, i + 1))
+
+                arguments = {
+                    'generic_preselection': True,
+                    'reference_preselection': True,
+                    'keep_keypoints': True,
+                    'pairs': pairs,
+                    'filter_mask': True,
+                    'mask_tiepoints': True,
+                    'filter_stationary_points': True,
+                    'reset_matches': True
+                }
+
+                # match photos
+                chunk.matchPhotos(**arguments)
+
+                # save the arguments of the command
+                if save_commands:
+                    _save_command_args("matchPhotos", arguments, argument_fld)
 
             # save the project
             doc.save()
@@ -664,10 +690,6 @@ def run_agi(project_name, images,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Match photos - finished ({exec_time:.4f} s)")
-
-        # add own tie points if given
-        if camera_tie_points is not None:
-            raise NotImplementedError("Own tie points are not yet implemented.")
 
         # set back to the original images
         if STEPS["enhance_photos"]:
@@ -681,8 +703,7 @@ def run_agi(project_name, images,
                 pbar.set_postfix_str(f"Restore image for {camera.label}")
 
                 # get original image path
-                image_pth = os.path.join(image_path, f"{camera.label}.tif")
-
+                image_pth = os.path.join(img_folder, f"{camera.label}.tif")
                 # update the image in the chunk
                 photo = camera.photo.copy()
                 photo.path = image_pth
@@ -694,6 +715,10 @@ def run_agi(project_name, images,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Restore original images - finished ({exec_time:.4f} s)")
+
+        for camera in chunk.cameras:
+            print(camera.label)
+            print(camera.photo.path)
 
         # save key points
         if DISPLAY_STEPS["save_key_points"]:
@@ -722,6 +747,20 @@ def run_agi(project_name, images,
             print("Align cameras")
             start_time = time.time()
 
+            """
+            # check if the cameras are grouped (can be removed with custom matching)
+            if len(chunk.camera_groups) == 0:
+                print("Create new camera group")
+                # create a group with all cameras
+                cam_group = chunk.addCameraGroup()
+                for camera in chunk.cameras:
+                    camera.group = cam_group
+                doc.save()
+                doc.open(project_psx_path, ignore_lock=True)
+            """
+
+            print(chunk.camera_groups)
+
             arguments = {
                 'reset_alignment': False,
                 'adaptive_fitting': True
@@ -740,6 +779,8 @@ def run_agi(project_name, images,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Align cameras - finished ({exec_time:.4f} s)")
+
+        exit()
 
         # save tie points
         if DISPLAY_STEPS["save_tie_points"]:

@@ -31,7 +31,7 @@ class TiePointDetector:
     def __init__(self, matching_method: str, matching_additional: bool = True, matching_extra: bool = True,
                  keep_resized_points: bool = False, min_resized_points: int = 10, num_transform_points: int = 25,
                  min_conf_value: float = 0.0, ransac_value: float = 5.0, average_threshold: float = 10.0,
-                 display: bool = False, catch=True, verbose: bool = True):
+                 display: bool = False, catch=False, verbose: bool = False):
         """
         Initializes the TiePointDetector with specified configuration for tie-point detection and matching.
 
@@ -112,22 +112,28 @@ class TiePointDetector:
         # TODO: add rotation
 
         if mask1 is not None:
-            if mask1.shape != input_img1.shape:
-                raise ValueError("Mask1 must have the same dimensions as input_img1")
 
             # convert to 0 and 1
             if np.nanmax(mask1) > 1:
                 mask1 = copy.deepcopy(mask1)
-                mask1 = mask1 / 255
+                mask1[mask1 > 0] = 1
+                mask1[mask1 < 1] = 0
+                mask1 = mask1.astype(int)
+
+            if mask1.shape != input_img1.shape:
+                raise ValueError("Mask1 must have the same dimensions as input_img1")
 
         if mask2 is not None:
-            if mask2.shape != input_img2.shape:
-                raise ValueError("Mask2 must have the same dimensions as input_img2")
 
             # convert to 0 and 1
             if np.nanmax(mask2) > 1:
                 mask2 = copy.deepcopy(mask2)
-                mask2 = mask2 / 255
+                mask2[mask2 > 0] = 1
+                mask2[mask2 < 1] = 0
+                mask2 = mask2.astype(int)
+
+            if mask2.shape != input_img2.shape:
+                raise ValueError("Mask2 must have the same dimensions as input_img2")
 
         try:
             # we handle the warnings ourselves -> ignore them
@@ -150,7 +156,7 @@ class TiePointDetector:
                                       style_config=style_config)
 
                 if tps.shape[0] < self.min_resized_points:
-                    # print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})")
+                    self.logger.print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})")
                     return np.empty((0, 4)), np.empty((0, 1))
 
                 # optional additional matching
@@ -162,10 +168,7 @@ class TiePointDetector:
                     tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional,
                                                                             mask1, mask2)
 
-                    # path_additional_tps = "/data/ATM/papers/georef_paper/revision/additional_tps.npy"
-                    # path_additional_conf = "/data/ATM/papers/georef_paper/revision/additional_conf.npy"
-                    # np.save(path_additional_tps, tps)
-                    # np.save(path_additional_conf, conf)
+
 
                     # display the additional tie-points
                     if self.display:
@@ -312,6 +315,10 @@ class TiePointDetector:
             tuple[np.ndarray, np.ndarray]: A tuple containing filtered 'tps' and 'conf' arrays.
         """
 
+        # security check if less than 4 points
+        if tps.shape[0] < 4:
+            return tps, conf
+
         _, filtered = cv2.findHomography(tps[:, 0:2], tps[:, 2:4], cv2.RANSAC, self.ransac_value)
         filtered = filtered.flatten()
 
@@ -427,8 +434,18 @@ class TiePointDetector:
 
         num_original_tps = tps.shape[0]
 
-        filter_values_1 = [1 if mask1 is None else mask1[int(row[1]), int(row[0])] for row in tps]
-        filter_values_2 = [1 if mask2 is None else mask2[int(row[3]), int(row[2])] for row in tps]
+        filter_values_1 = [
+            1 if mask1 is None else mask1[int(row[1]), int(row[0])]
+            if 0 <= int(row[1]) < mask1.shape[0] and 0 <= int(row[0]) < mask1.shape[1]
+            else 0
+            for row in tps
+        ]
+        filter_values_2 = [
+            1 if mask2 is None else mask2[int(row[3]), int(row[2])]
+            if 0 <= int(row[3]) < mask2.shape[0] and 0 <= int(row[2]) < mask2.shape[1]
+            else 0
+            for row in tps
+        ]
 
         # Convert to numpy arrays for vectorized operations
         filter_values_1 = np.asarray(filter_values_1)
@@ -436,10 +453,6 @@ class TiePointDetector:
 
         # Determine indices to keep (logical OR to find any zeros, then invert)
         keep_indices = np.logical_not(np.logical_or(filter_values_1 == 0, filter_values_2 == 0))
-
-        # export mask indices
-        # path_indices = "/data/ATM/papers/georef_paper/revision/resized_mask_indices.npy"
-        # np.save(path_indices, keep_indices)
 
         # Filter the tie points and confidences
         filtered_tps = tps[keep_indices]

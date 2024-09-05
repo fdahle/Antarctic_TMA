@@ -29,12 +29,12 @@ image_ids = [
 ]
 """
 # some settings
-project_name = "enhance_images"
+project_name = "tp_test_agi"
 use_positions = False
 horizontal_camera_accuracy = 100  # in m
 vertical_camera_accuracy = 100  # in m
 gcp_accuracy = "TODO"
-limit_images = 2
+limit_images = 3
 only_vertical = True
 overwrite = True
 resume = False
@@ -168,6 +168,9 @@ if use_positions is False:
     position_dict = None
     rotation_dict = None
     accuracy_dict = None
+
+print("TEEMP")
+focal_length_dict = None
 
 ra.run_agi(project_name, images,
            focal_lengths=focal_length_dict, camera_footprints=footprint_dict,

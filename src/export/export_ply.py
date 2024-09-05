@@ -15,7 +15,7 @@ def export_ply(df, filename):
         # Write the PLY header
         f.write(b"ply\n")
         f.write(b"format binary_little_endian 1.0\n")
-        f.write(f"element vertex {len(df)}\n".encode('utf-8'))
+        f.write(f"element vertex {df.shape[0]}\n".encode('utf-8'))
 
         # Define each column as a property in the PLY file
         for col in df.columns:

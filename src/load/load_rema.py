@@ -21,7 +21,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
               rema_folder: str = DEFAULT_REMA_FLD,
               zoom_level: int = 10,
               auto_download=False,
-              return_empty_rema: bool = False,) -> Optional[np.ndarray]:
+              return_empty_rema: bool = False,) -> (np.ndarray | None, np.ndarray | None):
     """
     Loads REMA height data from a specified folder, merges them based on a bounding box. It is
     required to prove the path to the shape file containing the mosaic tiles. Optionally returns
@@ -34,6 +34,8 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
         Defaults to DEFAULT_REMA_SHP.
         rema_folder (str): The base folder where REMA images are stored. Defaults to DEFAULT_REMA_FLD.
         zoom_level (int): The zoom level of the REMA images to load. Defaults to 10.
+        auto_download (bool): If True, automatically downloads REMA data if not found locally.
+            Defaults to False.
         return_empty_rema (bool): If True, returns an empty dataset instead of
             raising an exception when no images are found. Defaults to False.
     Returns:
@@ -81,7 +83,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
         # open the image file
         try:
             src = rasterio.open(rema_tile_path)
-        except:
+        except (Exception,):
             # download the rema tile
             if auto_download:
                 drd.download_rema_data(tile, zoom_level)

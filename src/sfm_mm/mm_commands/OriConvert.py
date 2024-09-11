@@ -20,6 +20,7 @@ class OriConvert(BaseCommand):
     """
 
     required_args = ["FormatSpecification", "OrientationFile", "TargetedOrientation"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["FormatSpecification", "OrientationFile", "TargetedOrientation",
                     "ChSys", "Calib", "AddCalib", "ConvOri", "PrePost", "KN2I", "DN", "ImC",
                     "NbImC", "RedSizeSC", "Reexp", "Regul", "RegNewBr", "Reliab", "CalcV",

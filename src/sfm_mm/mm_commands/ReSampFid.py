@@ -68,6 +68,7 @@ class ReSampFid(BaseCommand):
                     shutil.copyfile(self.project_folder + "/masks_orig/" + filename,
                                     self.project_folder + "/" + "mask_" + filename)
                     # copy the xml file to have one for each mask
+                    # noinspection SpellCheckingInspection
                     shutil.copyfile(self.project_folder + f"/Ori-InterneScan/MeasuresIm-{filename}.xml",
                                     self.project_folder + f"/Ori-InterneScan/MeasuresIm-mask_{filename}.xml")
 

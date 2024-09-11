@@ -160,10 +160,10 @@ def _normalize_geometries(shapes: List[gpd.GeoSeries], min_x: float, min_y: floa
     normalized_shapes = []
 
     # Apply translation to each geometry in the GeoSeries
-    for gseries in shapes:
-        translated_geoms = gseries.geometry.apply(lambda geom: _translate_geom(geom, x_off=-min_x, y_off=-min_y))
-        normalized_gseries = gpd.GeoSeries(translated_geoms)
-        normalized_shapes.append(normalized_gseries)
+    for geo_series in shapes:
+        translated_geoms = geo_series.geometry.apply(lambda geom: _translate_geom(geom, x_off=-min_x, y_off=-min_y))
+        normalized_geo_series = gpd.GeoSeries(translated_geoms)
+        normalized_shapes.append(normalized_geo_series)
 
     return normalized_shapes
 

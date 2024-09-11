@@ -16,7 +16,9 @@ PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 PATH_AGISOFT_FLD = "/home/fdahle/SFTP/staff-umbrella/ATM/agisoft"
 
 
-def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None, conn=None) -> None:
+def create_agisoft_fld(image_ids: list[str],
+                       project_name: str | None,
+                       conn=None) -> None:
     """
     Prepares a folder for SfM using Agisoft Metashape by copying images and creating masks. Furthermore, it creates
     a camera file with the camera positions and a focal length file.
@@ -24,6 +26,7 @@ def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None,
         image_ids (List[str]): List of image IDs to be processed.
         project_name (Optional[str]): Name of the project. If None, the project name is derived from the image IDs.
             Defaults to None.
+        conn: An optional connection object to a database. Defaults to None.
     Returns:
         None
     """
@@ -92,8 +95,16 @@ def create_agisoft_fld(image_ids: list[str], project_name: Optional[str] = None,
         if len(text_string) > 0 and "[" not in text_string:
             text_string = "[" + text_string + "]"
 
-        # create text-boxes list
-        text_boxes = [tuple(group) for group in eval(text_string.replace(";", ","))]
+        # Replace square brackets with empty strings and semicolons with commas
+        text_string = text_string.replace("[", "").replace("]", "").replace(";", ",")
+
+        # Split the string into individual elements by commas
+        elements = text_string.split(",")
+
+        # Group the elements in chunks of 4 and convert them into tuples of four integers
+        text_boxes = [(int(elements[i]), int(elements[i + 1]), int(elements[i + 2]), int(elements[i + 3]))
+                      for i in range(0, len(elements), 4)  # Step by 4 to create tuples of 4 ints
+        ]
 
         # load the mask
         mask = cm.create_mask(image, fid_dict, text_boxes, use_default_fiducials=True)

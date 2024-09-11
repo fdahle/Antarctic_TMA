@@ -102,7 +102,7 @@ class Tawny(BaseCommand):
         stats = {
             "total_images_processed": 0,
             "images": [],
-            "kboxes": []
+            "k_boxes": []
         }
 
         # Regex patterns
@@ -120,7 +120,7 @@ class Tawny(BaseCommand):
             if kbox_info:
                 kbox_id = int(kbox_info.group(1))
                 kbox_on = int(kbox_info.group(2))
-                stats["kboxes"].append({
+                stats["k_boxes"].append({
                     "kbox_id": kbox_id,
                     "on": kbox_on
                 })

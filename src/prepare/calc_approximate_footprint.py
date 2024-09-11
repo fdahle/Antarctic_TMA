@@ -270,7 +270,7 @@ class CameraCalculator:
         pass
 
     @staticmethod
-    def get_bounding_polygon(fov_h, fov_v, alti, roll, pitch, heading):
+    def get_bounding_polygon(fov_h, fov_v, altitude, roll, pitch, heading):
         """
         Get corners of the polygon captured by the camera on the ground.
         The calculations are performed in the axes origin (0, 0, altitude)
@@ -278,7 +278,7 @@ class CameraCalculator:
         Parameters:
             fov_h (float): Horizontal field of view in radians
             fov_v (float): Vertical field of view in radians
-            alti (float): Altitude of the camera in meters
+            altitude (float): Altitude of the camera in meters
             heading (float): Heading of the camera (z-axis) in radians
             roll (float): Roll of the camera (x-axis) in radians
             pitch (float): Pitch of the camera (y-axis) in radians
@@ -295,7 +295,7 @@ class CameraCalculator:
         rotated_vectors = CameraCalculator.rotate_rays(
             ray11, ray22, ray33, ray44, roll, pitch, heading)
 
-        origin_vec = Vector(0, 0, alti)
+        origin_vec = Vector(0, 0, altitude)
         intersections = CameraCalculator.get_ray_ground_intersections(rotated_vectors, origin_vec)
 
         return intersections

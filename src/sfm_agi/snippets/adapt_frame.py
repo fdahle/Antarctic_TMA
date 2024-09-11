@@ -4,8 +4,8 @@ import zipfile
 
 import src.sfm_agi.snippets.zip_folder as zp
 
-def adapt_frame(project_files, element_tag, attribute_name, attribute_value):
 
+def adapt_frame(project_files, element_tag, attribute_name, attribute_value):
     # adapt path to the frame folder
     path_frame_fld = os.path.join(project_files, "0", "0")
     path_frame_file = os.path.join(path_frame_fld, "frame.zip")

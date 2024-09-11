@@ -32,7 +32,7 @@ def estimate_height(image_id: str,
     Returns:
         float: A float values containing the estimated height.
             This return type is provided when `return_data` is False.
-        Tuple[float], pd.DataFrame]: A tuple containing the estimated height and the
+        Tuple[float, pd.DataFrame]: A tuple containing the estimated height and the
             original subset data `pd.DataFrame` if `return_data` is True.
         None: Returns None if conditions like minimum number of images or maximum standard deviation are not met.
     """

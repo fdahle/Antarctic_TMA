@@ -12,7 +12,7 @@ import src.display.display_shapes as ds
 debug_show_points = False
 
 
-def calc_azimuth(image_id: str, geoframe) -> Optional[float]:
+def calc_azimuth(image_id: str, geo_frame) -> Optional[float]:
     """
     This function calculates the azimuth of the image flight line by fitting a linear model to
     the geographic positions (extracted from a database) of all images with the same flight path identifier.
@@ -21,7 +21,8 @@ def calc_azimuth(image_id: str, geoframe) -> Optional[float]:
     Args:
         image_id (str): The unique identifier for the image, used to determine the flight path and extract
             relevant positions.
-
+        geo_frame (geopandas.GeoDataFrame): A geopandas dataframe containing the geographic positions of all images.
+            Must be indexed by image_id and contain a geometry column with Point objects.
     Returns:
         Optional[float]: The azimuth in degrees as a float, or None if the image_id is not found in the database.
     """
@@ -29,7 +30,7 @@ def calc_azimuth(image_id: str, geoframe) -> Optional[float]:
     flight_path = image_id[2:6]
 
     # filter geopandas dataframe by flight path
-    filtered_data = geoframe[geoframe["image_id"].str[2:6] == flight_path]
+    filtered_data = geo_frame[geo_frame["image_id"].str[2:6] == flight_path]
 
     # skip if no data is found
     if filtered_data.empty or filtered_data.shape[0] < 2:

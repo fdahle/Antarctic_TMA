@@ -8,7 +8,7 @@ import numpy as np
 def rotate_image(image: np.ndarray,
                  angle: float,
                  expand: bool = True,
-                 return_rot_matrix=False) -> (np.ndarray, np.ndarray):
+                 return_rot_matrix=False) -> (np.ndarray, np.ndarray | None):
     """
     Rotates an image by a given angle, optionally expanding the image to fit the rotated result.
 
@@ -18,7 +18,8 @@ def rotate_image(image: np.ndarray,
             while negative values indicate a clockwise rotation.
         expand (bool): If True, the output image size is expanded to fit the entire rotated image.
             If False, the output image size is the same as the input, and parts of the rotated image may be cropped.
-
+        return_rot_matrix (bool): If True, the function will return the 2x3 affine rotation matrix used for the
+            rotation
     Returns:
         rotated_image (np.ndarray): The rotated image as a NumPy array. The size may change from the original
             based on the angle and whether expansion is requested.
@@ -26,9 +27,14 @@ def rotate_image(image: np.ndarray,
             used to understand the rotation and translation applied to the original image.
     """
 
+    print(image.shape)
+
     # calculate image center
     height, width = image.shape[:2]
     center = (width // 2, height // 2)
+
+    if len(image.shape) == 3 and image.shape[0] > 10:
+        raise ValueError("Image bands must be in the last dimension")
 
     # If angle is 0 or a multiple of 360, no need to rotate
     if angle % 360 == 0:
@@ -39,6 +45,9 @@ def rotate_image(image: np.ndarray,
 
     # Get the rotation matrix
     rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    # init variable
+    rotated_image = None
 
     if expand:
         # Calculate the new dimensions to accommodate the rotated image
@@ -52,10 +61,30 @@ def rotate_image(image: np.ndarray,
         rotation_matrix[1, 2] += (new_height / 2) - center[1]
 
         # Apply the rotation matrix to the image with new dimensions
-        rotated_image = cv2.warpAffine(image, rotation_matrix, (new_width, new_height))
+        if len(image.shape) == 2:
+            rotated_image = cv2.warpAffine(image, rotation_matrix, (new_width, new_height))
+        else:
+            for i in range(image.shape[0]):
+                if i == 0:
+                    rotated_image = cv2.warpAffine(image[i], rotation_matrix, (new_width, new_height))
+                    rotated_image = rotated_image[np.newaxis, ...]
+                else:
+                    rotated_image = np.vstack((rotated_image, cv2.warpAffine(image[i], rotation_matrix,
+                                                                             (new_width, new_height))[np.newaxis, ...]))
     else:
         # Apply the rotation matrix to the image with original dimensions
-        rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
+        if len(image.shape) == 2:
+            rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
+        else:
+            for i in range(image.shape[0]):
+                if i == 0:
+                    rotated_image = cv2.warpAffine(image[i], rotation_matrix, (width, height))
+                    rotated_image = rotated_image[np.newaxis, ...]
+                else:
+                    rotated_image = np.vstack((rotated_image, cv2.warpAffine(image[i], rotation_matrix,
+                                                                             (width, height))[np.newaxis, ...]))
+
+    print(rotated_image.shape)
 
     if return_rot_matrix:
         return rotated_image, rotation_matrix

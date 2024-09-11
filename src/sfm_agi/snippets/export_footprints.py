@@ -21,7 +21,7 @@ def export_footprints(chunk, save_fld):
 
     chunk_crs = chunk.crs.geoccs
     if chunk_crs is None:
-        chunk_crs = Metashape.CoordinateSystem('LOCAL')
+        chunk_crs = Metashape.CoordinateSystem('LOCAL')  # noqa
 
     # Get the transformation matrix
     transform = chunk.transform.matrix
@@ -45,9 +45,9 @@ def export_footprints(chunk, save_fld):
 
             for (x, y) in [[0, 0], [c_width - 1, 0], [c_width - 1, c_height - 1],
                            [0, c_height - 1]]:
-                ray_origin = camera.unproject(Metashape.Vector([x, y, 0]))
-                ray_target = camera.unproject(Metashape.Vector([x, y, 1]))
-                if isinstance(surface) == Metashape.Elevation:
+                ray_origin = camera.unproject(Metashape.Vector([x, y, 0]))  # noqa
+                ray_target = camera.unproject(Metashape.Vector([x, y, 1]))  # noqa
+                if isinstance(surface) == Metashape.Elevation:  # noqa
                     dem_origin = transform.mulp(ray_origin)
                     dem_target = transform.mulp(ray_target)
 

@@ -18,17 +18,19 @@ from tqdm import tqdm
 import src.base.check_sky as cs
 import src.base.enhance_image as ei
 import src.base.load_credentials as lc
+import src.base.rotate_image as ri
 import src.dem.estimate_dem_quality as edq
-import src.load.load_image as li
-import src.load.load_pointcloud as lp
 import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
+import src.load.load_image as li
+import src.load.load_pointcloud as lp
 import src.sfm_agi.snippets.create_adapted_mask as cam
 import src.sfm_agi.snippets.create_confidence_dem as ccd
-import src.sfm_agi.snippets.create_custom_tie_points as cctp
-import src.sfm_agi.snippets.export_gcps as eg
+import src.sfm_agi.snippets.create_custom_tie_points as cctp  # noqa
+import src.sfm_agi.snippets.export_gcps as fg
+import src.sfm_agi.snippets.georef_ortho as go
 import src.sfm_agi.snippets.save_key_points as skp
-import src.sfm_agi.snippets.save_sfm_to_db as sstd
+import src.sfm_agi.snippets.save_sfm_to_db as sstd  # noqa
 import src.sfm_agi.snippets.save_tie_points as stp
 
 # ignore some warnings
@@ -42,26 +44,27 @@ DEBUG_MODE = True  # if true errors are raised
 fixed_focal_length = True
 resolution_relative = 0.001  # in px
 resolution_absolute = 2  # in m
-custom_matching = False
-zoom_level_dem = 10
+custom_matching = False  # if True, custom matching will be used (lightglue)
+zoom_level_dem = 10  # in m
 
 # Other variables
-save_text_output = True
-save_commands = True
-auto_true_for_new=False
+save_text_output = True  # if True, the output will be saved in a text file
+save_commands = True  # if True, the arguments of the commands will be saved in a json file
+auto_true_for_new = True  # new projects will have all steps set to True
+use_rock_mask = True
 
 # Steps
 STEPS = {
-    "create_masks": True,
-    "union_masks": True,
+    "create_masks": False,
+    "union_masks": False,
     "enhance_photos": False,
-    "match_photos": True,
+    "match_photos": False,
     "align_cameras": False,
     "build_depth_maps_relative": False,
     "build_pointcloud_relative": False,
-    "build_mesh_relative": True,
-    "build_dem_relative": True,
-    "build_orthomosaic_relative": True,
+    "build_mesh_relative": False,
+    "build_dem_relative": False,
+    "build_orthomosaic_relative": False,
     "create_gcps": True,
     "load_gcps": True,
     "build_depth_maps_absolute": True,
@@ -85,31 +88,40 @@ DISPLAY_STEPS = {
 }
 
 
-def run_agi(project_name, images,
-            camera_positions=None, camera_accuracies=None,
-            camera_rotations=None, camera_footprints=None,
-            camera_tie_points=None, focal_lengths=None,
-            azimuth=None, absolute_bounds=None,
-            epsg_code=3031,
-            overwrite=False, resume=False):
+def run_agi(project_name: str, images: list,
+            camera_positions: dict | None = None, camera_accuracies: dict | None = None,
+            camera_rotations: dict | None = None, camera_footprints: dict | None = None,
+            camera_tie_points: dict | None = None, focal_lengths=None,
+            azimuth: float = None, absolute_bounds=None,
+            epsg_code: int = 3031,
+            overwrite: bool = False, resume: bool = False):
     """
 
     Args:
-        project_name:
-        images:
-        camera_positions:
-        camera_accuracies:
-        camera_rotations
-        camera_footprints:
-        camera_tie_points:
-        focal_lengths:
-        azimuth:
-        absolute_bounds:
-        overwrite:
-        resume:
-
+        project_name (str): The name of the project.
+        images (list): A list of image paths.
+        camera_positions (dict): A dictionary with camera positions. The keys are the image ids and the values are
+            lists with the x, y, z coordinates. Optional.
+        camera_accuracies (dict): A dictionary with camera accuracies. The keys are the image ids and the values are
+            lists with the x, y, z accuracies. Optional.
+        camera_rotations (dict): A dictionary with camera rotations. The keys are the image ids and the values are
+            lists with the yaw, pitch, roll rotations. Optional.
+        camera_footprints (dict): A dictionary with camera footprints. The keys are the image ids and the values are
+            lists with the footprints. Optional.
+        camera_tie_points (dict): A dictionary with camera tie points. The keys are the image ids and the values are
+            lists with the tie points. Optional.
+        focal_lengths (dict): A dictionary with focal lengths. The keys are the image ids and the values are the focal
+            lengths. Optional.
+        azimuth (list): The azimuth of the images. Optional.
+        absolute_bounds (list): The absolute bounds of the project. Order is [min_x, min_y, max_x, max_y]. Optional.
+        epsg_code: The EPSG code of the coordinate system. Default is 3031.
+        overwrite: If True, the project will be overwritten. Default is False.
+        resume: If True, the project will be resumed. Default is False.
     Returns:
-
+        None
+    Raises:
+        ValueError: If no images are provided.
+        ValueError: If both resume and overwrite are set to True.
     """
 
     # create empty conn variable
@@ -244,7 +256,16 @@ def run_agi(project_name, images,
                     shutil.copy(image_path, output_path)
 
                     # check image rotation and rotate if necessary
-                    correct_rotation, conn = cs.check_sky(output_path, conn=conn)
+                    correct_rotation = cs.check_sky(output_path, conn=conn)
+
+                    # load the image
+                    img = li.load_image(output_path)
+
+                    # rotate the image
+                    img = ri.rotate_image(img, 180)
+
+                    # save the rotated image
+                    eti.export_tiff(img, output_path, overwrite=True)
 
                     if correct_rotation is False:
                         rotated_images.append(file_name[:-4])
@@ -472,7 +493,6 @@ def run_agi(project_name, images,
                 # save masks and copy them to the original chunk as well
                 for i, camera_temp in enumerate(chunk_temp.cameras):
                     if camera_temp.mask is not None:
-
                         mask_path = os.path.join(mask_folder, f"{camera_temp.label}_mask.tif")
                         camera_temp.mask.image().save(mask_path)
 
@@ -547,6 +567,9 @@ def run_agi(project_name, images,
             exec_time = finish_time - start_time
             print(f"Union masks - finished ({exec_time:.4f} s)")
 
+        # init variable for enhanced folder
+        enhanced_folder = None
+
         if STEPS["enhance_photos"]:
 
             print("Enhance photos")
@@ -559,7 +582,6 @@ def run_agi(project_name, images,
 
             # iterate over the cameras
             for camera in (pbar := tqdm(chunk.cameras)):
-
                 pbar.set_postfix_str(f"Enhance photo for {camera.label}")
 
                 # get old image path and also set new one
@@ -645,7 +667,7 @@ def run_agi(project_name, images,
 
                 mask_folder = os.path.join(data_fld, "masks_adapted")
                 if not os.path.exists(mask_folder):
-                    mask_folder=None
+                    mask_folder = None
 
                 if STEPS["enhance_photos"]:
                     tp_img_folder = enhanced_folder
@@ -653,7 +675,7 @@ def run_agi(project_name, images,
                     tp_img_folder = img_folder
 
                 cctp.create_custom_tie_points(chunk, project_files_path,
-                                               tp_img_folder, mask_folder=mask_folder)
+                                              tp_img_folder, mask_folder=mask_folder)
 
                 # load the project again to save the custom tie points
                 doc.open(project_psx_path, ignore_lock=True)
@@ -699,7 +721,6 @@ def run_agi(project_name, images,
 
             # iterate over the cameras
             for camera in (pbar := tqdm(chunk.cameras)):
-
                 pbar.set_postfix_str(f"Restore image for {camera.label}")
 
                 # get original image path
@@ -780,8 +801,6 @@ def run_agi(project_name, images,
             exec_time = finish_time - start_time
             print(f"Align cameras - finished ({exec_time:.4f} s)")
 
-        exit()
-
         # save tie points
         if DISPLAY_STEPS["save_tie_points"]:
 
@@ -849,7 +868,6 @@ def run_agi(project_name, images,
 
         # restrain the bounding box to the absolute bounds if given
         if camera_positions is not None and absolute_bounds is not None:
-
             min_corner.x = min(min_corner.x, absolute_bounds[0])
             min_corner.y = min(min_corner.y, absolute_bounds[1])
             max_corner.x = max(max_corner.x, absolute_bounds[2])
@@ -1109,15 +1127,24 @@ def run_agi(project_name, images,
             ortho = li.load_image(output_ortho_path)
             footprints = camera_footprints
 
+            if dem.shape != ortho.shape[1:]:
+                print("DEM", dem.shape)
+                print("Ortho", ortho.shape)
+                raise ValueError("DEM and ortho should have the same shape")
+
             # check which cameras are aligned
-            lst_aligned = []
+            aligned = []
             for camera in chunk.cameras:
                 if camera.transform:
-                    lst_aligned.append(True)
+                    aligned.append(True)
                 else:
-                    lst_aligned.append(False)
+                    aligned.append(False)
 
-            # define path to save gcp files
+            # get the transform of dem/ortho (identical for both)
+            transform = go.georef_ortho(ortho, footprints.values(), aligned,
+                                        azimuth=azimuth, auto_rotate=True)
+
+            # define output path in which gcp files are saved
             gcp_path = os.path.join(data_fld, "gcps.csv")
 
             if bounding_box_relative is None:
@@ -1130,8 +1157,16 @@ def run_agi(project_name, images,
                 resolution = resolution_absolute
 
             # call snippet to export gcps
-            eg.export_gcps(dem, ortho, bounding_box_relative, zoom_level_dem, resolution,
-                           footprints, lst_aligned, azimuth, gcp_path)
+            gcp_df = fg.find_gcps(dem, transform,
+                                  bounding_box_relative, zoom_level_dem,
+                                  resolution, use_rock_mask=use_rock_mask)
+
+            # Create labels (n x 1 array)
+            num_points = gcp_df.shape[0]
+            labels = pd.Series([f"gcp_{i + 1}" for i in range(num_points)])
+
+            gcp_df.insert(0, 'GCP', labels)
+            gcp_df.to_csv(gcp_path, sep=';', index=False, float_format='%.8f')
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -1294,7 +1329,6 @@ def run_agi(project_name, images,
 
         # restrain the bounding box to the absolute bounds if given
         if absolute_bounds is not None:
-
             min_corner_abs.x = min(min_corner_abs.x, absolute_bounds[0])
             min_corner_abs.y = min(min_corner_abs.y, absolute_bounds[1])
             max_corner_abs.x = max(max_corner_abs.x, absolute_bounds[2])
@@ -1357,7 +1391,6 @@ def run_agi(project_name, images,
             print(f"Build absolute mesh - finished ({exec_time:.4f} s)")
 
         if DISPLAY_STEPS["save_aoi"]:
-
             print("Save AOI")
             start_time = time.time()
 
@@ -1620,6 +1653,7 @@ def run_agi(project_name, images,
 
 # logging class
 class Tee:
+    """Class to redirect stdout to a log file"""
     def __init__(self, filename, mode='a'):
         self.terminal = sys.stdout
         self.log = open(filename, mode)
@@ -1627,16 +1661,19 @@ class Tee:
         sys.stdout = self
 
     def write(self, message):
+        """Write message to both screen and log"""
         self.terminal.write(message)
         self.log.write(message)
         self.log.flush()  # ensure real-time logging
 
     def flush(self):
+        """Flush the internal buffer"""
         # needed for internal buffer flushes of python
         self.terminal.flush()
         self.log.flush()
 
     def close(self):
+        """Close the log file"""
         # close the log file when done
         self.log.close()
         sys.stdout = self.terminal
@@ -1687,7 +1724,6 @@ def _save_command_args(method, args, output_fld):
 
 
 if __name__ == "__main__":
-
     sys_project_name = sys.argv[1]
     sys_images = json.loads(sys.argv[2])
     sys_camera_positions = json.loads(sys.argv[3])

@@ -141,6 +141,7 @@ class CenterBascule(BaseCommand):
                 if warning_count_info:
                     stats["warnings"]["count"] = int(warning_count_info.group(1))
 
+            # noinspection SpellCheckingInspection
             if "occurence of warn type" in line:
                 warning_type_info = re.search(r'(\d+) occurence of warn type \[(.+?)]', line)
                 if warning_type_info:

@@ -32,7 +32,7 @@ def estimate_cam_id(image_id: str,
     Returns:
         float: A string containing the estimated cam id.
             This return type is provided when `return_data` is False.
-        Tuple[float], pd.DataFrame]: A tuple containing the estimated cam id and the
+        Tuple[float, pd.DataFrame]: A tuple containing the estimated cam id and the
             original subset data `pd.DataFrame` if `return_data` is True.
         None: Returns None if conditions like minimum number of images or maximum standard
             deviation are not met.
@@ -43,7 +43,7 @@ def estimate_cam_id(image_id: str,
         conn = ctd.establish_connection()
 
     if cam_id_data is None:
-        # get the properties of this image (flight path, etc)
+        # get the properties of this image (flight path, etc.)
         sql_string = f"SELECT tma_number, view_direction FROM images WHERE image_id='{image_id}'"
         data_img_props = ctd.execute_sql(sql_string, conn)
 

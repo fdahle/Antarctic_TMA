@@ -1,6 +1,5 @@
 # extend the geo-referencing to the oblique images
 
-
 # Python imports
 import math
 
@@ -18,19 +17,17 @@ FEET_TO_METER = 0.3048
 ADAPT_POLY_WITH_REMA = False
 
 
-def calc_oblique_footprint(center, direction, focal_length,
-                          altitude, azimuth):
+def calc_oblique_footprint(center: shapely.Point, direction: str, focal_length: float,
+                           altitude: float, azimuth: float):
     """
     "https://gis.stackexchange.com/questions/75405/aerial-photograph-footprint-size-calculation"
 
     Args:
-        x:
-        y:
-        azimuth:
-        altitude:
-        view_direction:
-        focal_length:
-
+        center (Point): center of the image
+        direction (str): direction of the image (L or R)
+        focal_length (float): focal length of the camera
+        altitude (float): altitude of the camera
+        azimuth (float): azimuth of the camera
     Returns:
 
     """

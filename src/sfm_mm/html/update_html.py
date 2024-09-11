@@ -314,10 +314,12 @@ def _parse_gcp_xml(xml_file, gcp_type):
     data = []
 
     if gcp_type == "image":
+        # noinspection SpellCheckingInspection
         # Iterate through each 'MesureAppuiFlottant1Im' in the XML
         for measure in root.findall('MesureAppuiFlottant1Im'):
             image_id = measure.find('NameIm').text
             # Iterate through each 'OneMesureAF1I' within the current 'MesureAppuiFlottant1Im'
+            # noinspection SpellCheckingInspection
             for pt in measure.findall('OneMesureAF1I'):
                 gcp = pt.find('NamePt').text
                 xy = pt.find('PtIm').text.split()
@@ -331,6 +333,7 @@ def _parse_gcp_xml(xml_file, gcp_type):
         df = pd.DataFrame(data, columns=['image_id', 'gcp', 'x', 'y'])
 
     elif gcp_type == "world":
+        # noinspection SpellCheckingInspection
         # Iterate through each 'OneAppuisDAF' in the XML
         for point in root.findall('OneAppuisDAF'):
             gcp = point.find('NamePt').text

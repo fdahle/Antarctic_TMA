@@ -100,11 +100,6 @@ def georef_dem(dem_unref, transform_unref):
             # calculate the mean
             mean_val = np.nanmean(difference)
 
-            # save_path = os.path.join(temp_fld, f"diff_{tile[0]}_{tile[1]}.tif")
-            # style_config = {"title": f"Shift: {tile[0]}, {tile[1]}, Mean Diff: {mean_val}"}
-            # di.display_images([dem_cleaned, dem_tile, difference], image_types=['dem', 'dem', 'rtg'],
-            #                  style_config=style_config, save_path=save_path)
-
             if mean_val < best_val:
                 best_val = mean_val
                 best_tile = tile

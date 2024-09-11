@@ -13,7 +13,8 @@ import src.base.load_credentials as lc
 CMR_URL = 'https://cmr.earthdata.nasa.gov'
 URS_URL = 'https://urs.earthdata.nasa.gov'
 CMR_PAGE_SIZE = 2000
-CMR_FILE_URL = f'{CMR_URL}/search/granules.json?provider=NSIDC_ECS&' \  # noqa: Spelling Error
+# noinspection SpellCheckingInspection
+CMR_FILE_URL = f'{CMR_URL}/search/granules.json?provider=NSIDC_ECS&' \
                f'sort_key[]=start_date&sort_key[]=producer_granule_id&' \
                f'scroll=true&page_size={CMR_PAGE_SIZE}'
 

@@ -19,6 +19,7 @@ class Schnaps(BaseCommand):
     """
 
     required_args = ["ImagePattern"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["ImagePattern", "HomolIn", "NbWin", "ExeWrite", "HomolOut", "ExpTxt",
                     "VeryStrict", "ShowStats", "DoNotFilter", "PoubelleName",
                     "minPercentCoverage", "MoveBadImgs", "OutTrash", "MiniMulti",

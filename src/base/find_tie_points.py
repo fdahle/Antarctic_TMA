@@ -168,8 +168,6 @@ class TiePointDetector:
                     tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional,
                                                                             mask1, mask2)
 
-
-
                     # display the additional tie-points
                     if self.display:
                         style_config = {"title": f"{len(conf_additional)} additional Tie-points"}

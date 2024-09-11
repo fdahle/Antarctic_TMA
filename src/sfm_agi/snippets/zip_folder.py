@@ -1,8 +1,8 @@
 import os
 import zipfile
 
-def zip_folder(folder_path, output_zip_path, delete_files=False):
 
+def zip_folder(folder_path, output_zip_path, delete_files=False):
     print("Zipping folder...")
     print(folder_path)
     print(output_zip_path)
@@ -24,8 +24,6 @@ def zip_folder(folder_path, output_zip_path, delete_files=False):
 
                 # Ensure the file being zipped is not the output zip file
                 if os.path.abspath(file_path) != os.path.abspath(output_zip_path):
-                    print(f"Adding {file_path} to zip file...")
-                    print(os.path.relpath(file_path, folder_path))
                     if os.path.relpath(file_path, folder_path) == "doc.xml":
                         # print content of doc.xml
                         with open(file_path, 'r') as f:

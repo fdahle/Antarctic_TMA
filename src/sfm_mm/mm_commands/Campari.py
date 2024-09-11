@@ -17,6 +17,7 @@ class Campari(BaseCommand):
     Perform a bundle adjustment and a refinement of the camera calibration using the GCPs
     """
     required_args = ["ImagePattern", "InputOrientation", "OutputOrientation"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["ImagePattern", "InputOrientation", "OutputOrientation", "SH", "GCP", "EmGPS", "GpsLa",
                     "SigmaTieP", "FactElimTieP", "CPI1", "CPI2", "FocFree", "PPFree", "AffineFree", "AllFree",
                     "DetGCP", "Visc", "ExpTxt", "ImMinMax", "DegAdd", "DegFree", "DRMax", "PoseFigee"]

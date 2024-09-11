@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import shutil
 from shapely.geometry import Point
-from tqdm import tqdm
 
 # variable imports
 import src.base.load_credentials as lc
@@ -207,7 +206,7 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
                 label = data[0]
                 transform_data = list(map(float, data[1:]))
                 transform_data = np.array(transform_data).reshape(4, 4)
-                transform_matrix = Metashape.Matrix(transform_data)
+                transform_matrix = Metashape.Matrix(transform_data)  # noqa
 
                 # Find corresponding camera in target chunk
                 for camera in chunk.cameras:
@@ -293,8 +292,6 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
 
         doc.save()
 
-    exit()
-
     # align cameras
     if STEPS["align_cameras"]:
         print("Align cameras")
@@ -375,10 +372,10 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
         size = chunk.region.size
 
         # Calculate the minimum and maximum corners of the bounding box
-        min_corner = Metashape.Vector([center.x - size.x / 2,
+        min_corner = Metashape.Vector([center.x - size.x / 2,  # noqa
                                        center.y - size.y / 2,
                                        center.z - size.z / 2])
-        max_corner = Metashape.Vector([center.x + size.x / 2,
+        max_corner = Metashape.Vector([center.x + size.x / 2,  # noqa
                                        center.y + size.y / 2,
                                        center.z + size.z / 2])
 
@@ -386,8 +383,8 @@ def run_agi_absolute(project_name, images, focal_lengths=None,
         max_corner_abs = chunk.crs.project(chunk.transform.matrix.mulp(max_corner))
 
         # create 2d vectors
-        min_corner_2d = Metashape.Vector([min_corner_abs.x, min_corner_abs.y])
-        max_corner_2d = Metashape.Vector([max_corner_abs.x, max_corner_abs.y])
+        min_corner_2d = Metashape.Vector([min_corner_abs.x, min_corner_abs.y])  # noqa
+        max_corner_2d = Metashape.Vector([max_corner_abs.x, max_corner_abs.y])  # noqa
 
         # Create the bounding box
         bounding_box = Metashape.BBox(min_corner_2d, max_corner_2d)  # noqa

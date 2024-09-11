@@ -31,9 +31,9 @@ base_style_config = {
 }
 
 
-def display_images(images: Union[np.ndarray, List[np.ndarray]],
-                   image_types: Optional[List[str]] = None,
-                   overlays: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
+def display_images(images: np.ndarray | list[np.ndarray],
+                   image_types: str | list[str] | None = None,
+                   overlays: np.ndarray | List[np.ndarray] | None = None,
                    points: Optional[List[List[Tuple[int, int]]]] = None,
                    lines: Optional[List[List[Tuple[int, int, int, int]]]] = None,
                    bounding_boxes: Optional[List[List[Union[Tuple[int, int, int, int], List[int]]]]] = None,
@@ -44,8 +44,8 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
                    tie_points_conf: Optional[List[float]] = None,
                    reduce_tie_points: bool = False,
                    num_reduced_tie_points: int = 100,
-                   style_config: Optional[Dict[str, Any]] = None,
-                   save_path: Optional[str] = None,
+                   style_config: Dict[str, Any] | None = None,
+                   save_path: str | None = None,
                    save_type: str = "png") -> None:
     """
     Displays or saves a series of images with optional annotations including points, lines, and tie-points.
@@ -53,6 +53,7 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
     Args:
         images (List[np.ndarray]): A list of images to display.
         image_types (Optional[List[str]], optional): A list of strings indicating the type of each image.
+        overlays (Optional[List[np.ndarray]], optional): A list of overlay images to display on top of the main images.
         points (Optional[List[List[Tuple[int, int]]]], optional): Points to mark on the images. Defaults to None.
         lines (Optional[List[List[Tuple[int, int, int, int]]]], optional): Lines to draw on the images.
             Defaults to None.
@@ -60,6 +61,8 @@ def display_images(images: Union[np.ndarray, List[np.ndarray]],
             draw on the images. Each bounding box is represented as a tuple (x_min, y_min, x_max, y_max).
             Defaults to None.
         polygons (Optional[List[List[ShapelyPolygon]]], optional): Polygons to draw on the images. Defaults to None.
+        polygons_text (Optional[List[List[str]]], optional): Text to display inside the polygons. Defaults to None.
+        polygons_color (Optional[List[Tuple[int, int, int]]], optional): Colors for the polygons. Defaults to None.
         tie_points (Optional[np.ndarray], optional): Array of tie-points connecting two images. Defaults to None.
         tie_points_conf (Optional[List[float]], optional): Confidence values for tie-points, affecting their appearance.
             Defaults to None.

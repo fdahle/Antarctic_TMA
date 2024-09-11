@@ -166,7 +166,7 @@ def create_custom_tie_points(chunk,
 def _generate_ply_files(tp_dict, files_fld):
     """
     Generates PLY files from the tie points dictionary.
-    :param tie_points_dict: Dictionary where the key is (image1, image2) and the value is a numpy array with shape (x,4).
+    :param tie_points_dict: Dictionary where the key is (image1, image2) and value is a numpy array with shape (x,4).
     """
 
     num_matches = 0

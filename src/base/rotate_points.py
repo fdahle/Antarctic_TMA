@@ -3,10 +3,9 @@
 # Library imports
 import numpy as np
 import cv2
-from typing import Union, List, Tuple
 
 
-def rotate_points(points: Union[List[Tuple[float, float]], np.ndarray],
+def rotate_points(points: list[(float, float)] | np.ndarray,
                   rotation_matrix: np.ndarray,
                   invert: bool = False) -> np.ndarray:
     """Rotate points using a given rotation matrix, optionally inverting the rotation.

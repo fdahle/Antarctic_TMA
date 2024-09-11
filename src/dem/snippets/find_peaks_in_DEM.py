@@ -6,8 +6,9 @@ import scipy.ndimage as ndimage
 from scipy.signal import peak_prominences
 from tqdm import tqdm
 
+
 def find_peaks_in_dem(dem: np.ndarray,
-                      use_prominence: bool = False,
+                      use_prominence: bool = True,
                       cell_size=10,
                       no_data_value=-99999) -> np.ndarray:
     """
@@ -41,12 +42,11 @@ def find_peaks_in_dem(dem: np.ndarray,
 
     # Get the coordinates of the peaks
     peak_coords = np.argwhere(peaks)
-    peak_indices = np.ravel_multi_index((peak_coords[:, 0], peak_coords[:, 1]), dem.shape)
 
-    use_prominence = True
     if use_prominence:
 
-        print("Calculate prominences of the peaks")
+        # Convert the 2D coordinates into flat indices
+        peak_indices = np.ravel_multi_index((peak_coords[:, 0], peak_coords[:, 1]), dem.shape)
 
         # Calculate prominences of the peaks
         peak_prominences_vals, left_bases, right_bases = peak_prominences(dem.flatten(), peak_indices)
@@ -94,9 +94,15 @@ def find_peaks_in_dem(dem: np.ndarray,
 
         print(f"{most_prominent_peaks.shape[0]} peaks found")
 
-        print(most_prominent_peaks)
+        return most_prominent_peaks
+    else:
 
-    return most_prominent_peaks
+        # Switch the coordinates from row/col to x/y
+        peak_coords = np.flip(peak_coords, axis=1)
+
+        print(f"{peak_coords.shape[0]} peaks found")
+
+        return peak_coords
 
 
 if __name__ == "__main__":
@@ -110,13 +116,13 @@ if __name__ == "__main__":
     import rasterio
 
     with rasterio.open(path_dem) as src:
-        dem = src.read(1)
+        tst_dem = src.read(1)
 
     # find the peaks of a dem
-    peaks = fpiD.find_peaks_in_DEM(dem, no_data_value=no_data_val)
+    tst_peaks = fpiD.find_peaks_in_DEM(tst_dem, no_data_value=no_data_val)
 
     import src.display.display_images as di
 
-    dem[dem == no_data_val] = np.nan
+    tst_dem[tst_dem == no_data_val] = np.nan
 
-    di.display_images([dem], points=[peaks])
+    di.display_images([tst_dem], points=[tst_peaks])

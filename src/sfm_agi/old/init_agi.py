@@ -1,5 +1,6 @@
 # Library imports
 import os
+
 os.environ['KMP_WARNINGS'] = '0'  # noqa: E402
 import Metashape
 import numpy as np
@@ -54,7 +55,6 @@ def init_agi(project_name, images,
              camera_positions=None, camera_accuracies=None,
              camera_rotations=None,
              focal_lengths=None, epsg_code=3031):
-
     print("STEPS:")
     print(STEPS)
 
@@ -91,7 +91,7 @@ def init_agi(project_name, images,
     Metashape.License().activate(licence_key)
 
     # create a metashape project object
-    doc = Metashape.Document(read_only=False)
+    doc = Metashape.Document(read_only=False)  # noqa
 
     # set default values for mutable arguments
     if camera_positions is None:
@@ -147,8 +147,8 @@ def init_agi(project_name, images,
                 camera.group = group
                 camera.sensor.film_camera = True
                 camera.sensor.fixed_calibration = True
-                #camera.sensor.height = 0
-                #camera.sensor.width = 0
+                # camera.sensor.height = 0
+                # camera.sensor.width = 0
 
     else:
         chunk = doc.chunks[0]
@@ -198,7 +198,7 @@ def init_agi(project_name, images,
         print("Set Camera location")
 
         # set the coordinate system of the chunk
-        chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")
+        chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
 
         # set camera position if given
         for camera in chunk.cameras:
@@ -206,18 +206,18 @@ def init_agi(project_name, images,
                 camera_row = camera_positions[camera_positions['image_id'] == camera.label].iloc[0]
                 x, y, z = camera_row['x'], camera_row['y'], camera_row['z']
                 print("Set camera location for", camera.label, "to", x, y, z)
-                camera.reference.location = Metashape.Vector([x, y, z])
+                camera.reference.location = Metashape.Vector([x, y, z])  # noqa
 
                 # set the accuracy of the position if given
                 if camera.label in camera_accuracies:
                     accuracy = camera_accuracies[camera.label]
-                    camera.reference.accuracy = Metashape.Vector([accuracy[0], accuracy[1], accuracy[2]])
+                    camera.reference.accuracy = Metashape.Vector([accuracy[0], accuracy[1], accuracy[2]])  # noqa
 
                 # set the rotation of the camera if given
                 if camera.label in camera_rotations.keys():
                     entry = camera_rotations[camera.label]
                     yaw, pitch, roll = entry[0], entry[1], entry[2]
-                    camera.reference.rotation = Metashape.Vector([yaw, pitch, roll])
+                    camera.reference.rotation = Metashape.Vector([yaw, pitch, roll])  # noqa
             else:
                 print(f"WARNING: Camera position not given for {camera.label}")
         print("Set Camera location - finished")
@@ -312,11 +312,10 @@ def init_agi(project_name, images,
         image_ids = [camera.label for camera in chunk.cameras]
 
         # call snippet to save key points
-        sk.save_key_points(image_ids, project_fld)
+        sk.save_key_points(image_ids, project_fld, "key_points")
 
     # align cameras
     if STEPS["align_cameras"]:
-
         print("Align cameras")
 
         # align cameras
@@ -362,7 +361,6 @@ def init_agi(project_name, images,
 
     # build depth maps
     if STEPS["build_depth_maps"]:
-
         print("Build depth maps")
 
         chunk.buildDepthMaps()
@@ -372,7 +370,6 @@ def init_agi(project_name, images,
 
     # build dense cloud
     if STEPS["build_dense_cloud"]:
-
         print("Build dense cloud")
 
         chunk.buildPointCloud()
@@ -458,7 +455,7 @@ def init_agi(project_name, images,
 
         chunk.buildOrthomosaic(surface_data=Metashape.ModelData,
                                blending_mode=Metashape.MosaicBlending)
-                               #projection=projection)
+        # projection=projection)
         doc.save()
 
         output_fld = os.path.join(project_fld, "output")
@@ -473,7 +470,7 @@ def init_agi(project_name, images,
             'image_format': Metashape.ImageFormatTIFF,
             'raster_transform': Metashape.RasterTransformNone,
             'nodata_value': -9999,
-            #'resolution': 10
+            # 'resolution': 10
         }
         chunk.exportRaster(**export_params)
 
@@ -508,7 +505,6 @@ def init_agi(project_name, images,
 
 
 if __name__ == "__main__":
-
     sys_project_name = sys.argv[1]
     sys_images = json.loads(sys.argv[2])
     sys_camera_positions = json.loads(sys.argv[3])

@@ -18,6 +18,7 @@ class Malt(BaseCommand):
     """
 
     required_args = ["Mode", "ImagePattern", "Orientation"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["Mode", "ImagePattern", "Orientation", "Master", "SzW", "CorMS", "UseGpu", "Regul",
                     "DirMEC", "DirOF", "UseTA", "ZoomF", "ZoomI", "ZPas", "Exe", "Repere", "NbVI", "HrOr",
                     "LrOr", "DirTA", "Purge", "DoMEC", "DoOrtho", "UnAnam", "2Ortho", "ZInc", "DefCor",

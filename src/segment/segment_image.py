@@ -29,7 +29,6 @@ def segment_image(image, normalize=False,
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
     else:
-        model = None
         print("This is not a valid file-type")
         exit()
 

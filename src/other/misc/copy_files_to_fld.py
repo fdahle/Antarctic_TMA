@@ -1,4 +1,3 @@
-import copy
 import os.path
 import shutil
 import src.export.export_tiff as et
@@ -21,34 +20,34 @@ fill_gaps = False
 
 # always need to be changed
 folder_path = "/home/fdahle/Desktop/agi_test_nature_2"
-image_ids = ["CA214732V0031", "CA214732V0032", "CA214732V0033", "CA214732V0034",
-             "CA214732V0035", "CA214732V0036", "CA214732V0037", "CA214732V0038",
-             "CA214732V0039", "CA214732V0040", "CA214732V0041", "CA214732V0042",
-             "CA214732V0043", "CA214732V0044", "CA214732V0045", "CA214732V0046",
-             "CA214732V0047", "CA214732V0048", "CA214732V0049", "CA214732V0050",
-             "CA214732V0051", "CA214732V0052", "CA214732V0053", "CA214732V0054",
-             "CA214732V0055", "CA214732V0056", "CA214732V0057", "CA214732V0058",
-             "CA214732V0059", "CA214732V0060", "CA214732V0061", "CA214732V0062",
-             "CA214732V0063",
-             "CA214832V0064", "CA214832V0065", "CA214832V0066", "CA214832V0067",
-             "CA214832V0068", "CA214832V0069", "CA214832V0070", "CA214832V0071",
-             "CA214832V0072", "CA214832V0073", "CA214832V0074", "CA214832V0075",
-             "CA214832V0076", "CA214832V0077", "CA214832V0078", "CA214932V0161",
-             "CA214932V0162", "CA214932V0163", "CA214932V0164", "CA214932V0165",
-             "CA214932V0166", "CA214932V0167",
-             "CA215032V0244", "CA215032V0245", "CA215032V0246", "CA215032V0247",
-             "CA215032V0248", "CA215032V0249", "CA215032V0250", "CA215032V0251",
-             "CA215032V0252", "CA215032V0253", "CA215032V0254", "CA215032V0255",
-             "CA215132V0289", "CA215132V0290", "CA215132V0291", "CA215132V0292",
-             "CA215132V0293", "CA215132V0294", "CA215132V0295", "CA215132V0296",
-             "CA215132V0297", "CA215132V0298", "CA215132V0299", "CA215132V0300",
-             "CA215132V0301", "CA215132V0302",
-             "CA215332V0422", "CA215332V0423", "CA215332V0424", "CA215332V0425",
-             "CA215732V0041", "CA215732V0042", "CA215732V0043", "CA215732V0044"
-]
+input_image_ids = ["CA214732V0031", "CA214732V0032", "CA214732V0033", "CA214732V0034",
+                   "CA214732V0035", "CA214732V0036", "CA214732V0037", "CA214732V0038",
+                   "CA214732V0039", "CA214732V0040", "CA214732V0041", "CA214732V0042",
+                   "CA214732V0043", "CA214732V0044", "CA214732V0045", "CA214732V0046",
+                   "CA214732V0047", "CA214732V0048", "CA214732V0049", "CA214732V0050",
+                   "CA214732V0051", "CA214732V0052", "CA214732V0053", "CA214732V0054",
+                   "CA214732V0055", "CA214732V0056", "CA214732V0057", "CA214732V0058",
+                   "CA214732V0059", "CA214732V0060", "CA214732V0061", "CA214732V0062",
+                   "CA214732V0063",
+                   "CA214832V0064", "CA214832V0065", "CA214832V0066", "CA214832V0067",
+                   "CA214832V0068", "CA214832V0069", "CA214832V0070", "CA214832V0071",
+                   "CA214832V0072", "CA214832V0073", "CA214832V0074", "CA214832V0075",
+                   "CA214832V0076", "CA214832V0077", "CA214832V0078", "CA214932V0161",
+                   "CA214932V0162", "CA214932V0163", "CA214932V0164", "CA214932V0165",
+                   "CA214932V0166", "CA214932V0167",
+                   "CA215032V0244", "CA215032V0245", "CA215032V0246", "CA215032V0247",
+                   "CA215032V0248", "CA215032V0249", "CA215032V0250", "CA215032V0251",
+                   "CA215032V0252", "CA215032V0253", "CA215032V0254", "CA215032V0255",
+                   "CA215132V0289", "CA215132V0290", "CA215132V0291", "CA215132V0292",
+                   "CA215132V0293", "CA215132V0294", "CA215132V0295", "CA215132V0296",
+                   "CA215132V0297", "CA215132V0298", "CA215132V0299", "CA215132V0300",
+                   "CA215132V0301", "CA215132V0302",
+                   "CA215332V0422", "CA215332V0423", "CA215332V0424", "CA215332V0425",
+                   "CA215732V0041", "CA215732V0042", "CA215732V0043", "CA215732V0044"
+                   ]
 
 """
-image_ids = [
+input_image_ids = [
     "CA184832V0165",
     "CA174832V0295",
     "CA216132V0073",
@@ -175,7 +174,6 @@ PATH_MASK_FLD = "/data/ATM/data_1/aerial/TMA/masks"
 
 
 def copy_files_to_fld(image_ids, check_for_sky=False):
-
     # sort image_ids
     image_ids.sort()
 
@@ -226,7 +224,7 @@ def copy_files_to_fld(image_ids, check_for_sky=False):
     conn = ctd.establish_connection()
 
     # get rotation info for the images
-    sql_string = "SELECT image_id, sky_is_correct FROM images WHERE image_id IN %s" % str(tuple(image_ids))
+    sql_string = "SELECT image_id, sky_is_correct FROM images WHERE image_id IN %s" % str(tuple(image_ids))  # noqa
     sky_data = ctd.execute_sql(sql_string, conn)
 
     # create folder if it does not exist
@@ -267,11 +265,16 @@ def copy_files_to_fld(image_ids, check_for_sky=False):
     # iterate images
     for image_id in tqdm(image_ids):
         try:
+            # define image path
+            image_path = os.path.join(PATH_IMAGE_FLD, image_id + ".tif")
+
             if copy_images:
                 # copy image
-                image_path = os.path.join(PATH_IMAGE_FLD, image_id + ".tif")
                 image_save_path = os.path.join(image_folder, image_id + ".tif")
                 shutil.copy(image_path, image_save_path)
+            else:
+                image_save_path = None
+
             if copy_masks:
 
                 # create path to mask
@@ -293,11 +296,13 @@ def copy_files_to_fld(image_ids, check_for_sky=False):
                         raise FileNotFoundError(f"Mask for image {image_id} not found.")
                 else:
                     shutil.copy(mask_path, mask_save_path)
+            else:
+                mask_save_path = None
 
             if check_for_sky:
                 sky_correct = sky_data[sky_data['image_id'] == image_id]['sky_is_correct'].iloc[0]
 
-                if sky_correct == False:
+                if not sky_correct:
                     if copy_images:
                         img = li.load_image(image_save_path)
                         img_r = ri.rotate_image(img, 180)
@@ -312,5 +317,6 @@ def copy_files_to_fld(image_ids, check_for_sky=False):
             print(f"Error for image {image_id}: {e}")
             continue
 
+
 if __name__ == "__main__":
-    copy_files_to_fld(image_ids)
+    copy_files_to_fld(input_image_ids)

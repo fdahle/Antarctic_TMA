@@ -23,10 +23,12 @@ def check_sky(segmented, sky_id: int = 6,
         sky_top = 0
 
     # calculate percentages for bottom part of image
-    uniques_bottom, counts_bottom = np.unique(segmented[segmented.shape[0] - total_height:segmented.shape[0] - mask_padding,:],
+    uniques_bottom, counts_bottom = np.unique(segmented[segmented.shape[0] - total_height:
+                                                        segmented.shape[0] - mask_padding,:],
                                               return_counts=True)
     percentages_bottom = dict(zip(uniques_bottom, counts_bottom * 100 /
-                                  segmented[segmented.shape[0] - total_height:segmented.shape[0] - mask_padding,:].size))
+                                  segmented[segmented.shape[0] - total_height:
+                                            segmented.shape[0] - mask_padding,:].size))
 
     # get the number of sky pixels in the subset (try, because it can be that sky is not in there)
     try:

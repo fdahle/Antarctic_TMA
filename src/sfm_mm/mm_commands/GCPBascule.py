@@ -17,6 +17,7 @@ class GCPBascule(BaseCommand):
     """
     required_args = ["ImagePattern", "InputOrientation", "OutputOrientation",
                      "FileGroundControlPoints", "FileImageMeasurements"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["ImagePattern", "InputOrientation", "OutputOrientation",
                     "FileGroundControlPoints", "FileImageMeasurements", "L1", "CPI",
                     "ShowU", "ShowD", "PatNLD", "NLDDegX", "NLDDegY", "NLDDegZ", "NLFR",

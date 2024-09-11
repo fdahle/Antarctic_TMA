@@ -109,7 +109,7 @@ def run_agi_relative(project_name, images,
         shutil.rmtree(project_fld)
 
     # create a metashape project object
-    doc = Metashape.Document(read_only=False)
+    doc = Metashape.Document(read_only=False)  # noqa
 
     # create project folder if not existing
     if os.path.isdir(project_fld) is False:
@@ -353,11 +353,11 @@ def run_agi_relative(project_name, images,
         size = chunk.region.size
 
         # Calculate the minimum and maximum corners of the bounding box
-        min_corner = Metashape.Vector([center.x - size.x / 2, center.y - size.y / 2])
-        max_corner = Metashape.Vector([center.x + size.x / 2, center.y + size.y / 2])
+        min_corner = Metashape.Vector([center.x - size.x / 2, center.y - size.y / 2])  # noqa
+        max_corner = Metashape.Vector([center.x + size.x / 2, center.y + size.y / 2])  # noqa
 
         # Create the bounding box
-        bounding_box = Metashape.BBox(min_corner, max_corner)
+        bounding_box = Metashape.BBox(min_corner, max_corner)  # noqa
     else:
         bounding_box = None
 
@@ -476,8 +476,8 @@ def run_agi_relative(project_name, images,
         gcp_path = os.path.join(data_fld, "gcps.csv")
 
         # call snippet to export gcps
-        eg.export_gcps(dem, ortho, bounding_box, resolution_relative,
-                       footprints, gcp_path)
+        eg.find_gcps(dem, ortho, bounding_box, resolution_relative,
+                     footprints, gcp_path)
 
     if STEPS["load_gcps"]:
 

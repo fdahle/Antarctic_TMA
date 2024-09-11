@@ -30,6 +30,7 @@ DEFAULT_CAM_FLD = "/data/ATM/data_1/sfm/xml/camera"
 
 class SFMProject(object):
     # list of supported commands
+    # noinspection SpellCheckingInspection
     valid_commands = {
         "AperiCloud": {
             "desc": "Visualize relative orientation",

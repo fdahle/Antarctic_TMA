@@ -8,13 +8,14 @@ import warnings
 from affine import Affine
 from osgeo import gdal
 from rasterio.transform import Affine as RasterioAffine
-from typing import Union, Optional
+from typing import LiteralString, Union
 
 # Global constant for default image path
 DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 
 
-def load_image(image_id: str, image_path: Optional[str] = None, image_type: str = "tif",
+def load_image(image_id: LiteralString | str | bytes,
+               image_path: str | None = None, image_type: str = "tif",
                driver: str = 'rasterio', return_transform: bool = False,
                catch: bool = False) -> Union[np.ndarray, tuple[np.ndarray,
                                                                Union[RasterioAffine, Affine]], None]:
@@ -45,6 +46,10 @@ def load_image(image_id: str, image_path: Optional[str] = None, image_type: str 
 
     # ignore warnings of files not being geo-referenced
     warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
+
+    # convert image_id to string
+    image_id = image_id.decode() if isinstance(image_id, bytes) else image_id
+    image_id = str(image_id)
 
     absolute_image_path = _create_absolute_path(image_id, image_path, image_type)
 

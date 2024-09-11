@@ -298,7 +298,8 @@ class ImageDataSet(Dataset):
 
                 return img_c
 
-            def get_transform_init_args_names(self):
+            @staticmethod
+            def get_transform_init_args_names():
                 tpl = ('val',)
                 return tpl
 
@@ -455,7 +456,8 @@ class ImageDataSet(Dataset):
 
                 return all_crops
 
-            def get_transform_init_args_names(self):
+            @staticmethod
+            def get_transform_init_args_names():
                 return ()
 
         class Griddo(album.DualTransform):
@@ -525,7 +527,8 @@ class ImageDataSet(Dataset):
                 return crops
 
             # abstract method that does nothing, but must be implemented
-            def get_transform_init_args_names(self):
+            @staticmethod
+            def get_transform_init_args_names():
                 return ()
 
         class Normo(album.ImageOnlyTransform):
@@ -537,14 +540,16 @@ class ImageDataSet(Dataset):
             def __init__(self, always_apply=False, p=1.0):
                 super(Normo, self).__init__(always_apply, p)
 
-            def apply(self, input_img, **params) -> np.ndarray:
+            @staticmethod
+            def apply(input_img, **params) -> np.ndarray:
                 img_c = copy.deepcopy(input_img)
 
                 img_c = img_c / 128 - 1
 
                 return img_c
 
-            def get_transform_init_args_names(self):
+            @staticmethod
+            def get_transform_init_args_names():
                 return ()
 
         aug_methods = self.params_augmentation["methods"]

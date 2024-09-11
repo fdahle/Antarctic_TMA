@@ -17,13 +17,16 @@ def create_image_xml(image_id: str, fid_marks: pd.DataFrame, output_path: str) -
     """
 
     # basic structure of the xml file
+    # noinspection SpellCheckingInspection
     root = etree.Element('SetOfMesureAppuisFlottants')
+    # noinspection SpellCheckingInspection
     maf = etree.SubElement(root, 'MesureAppuiFlottant1Im')
 
     img_name = etree.SubElement(maf, 'NameIm')
     img_name.text = image_id + ".tif"
 
     for i in range(8):
+        # noinspection SpellCheckingInspection
         omaf = etree.SubElement(maf, 'OneMesureAF1I')
         pt_name = etree.SubElement(omaf, 'NamePt')
         pt_name.text = "P" + str(i + 1)

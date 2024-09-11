@@ -1,4 +1,6 @@
 # Library imports
+import copy
+
 import cv2  # noqa
 import numpy as np
 from shapely.geometry import Polygon
@@ -19,6 +21,12 @@ def georef_ortho(ortho, footprints, lst_aligned,
                  rotation_step=45,
                  max_size=25000,  # in m
                  save_path=None):
+
+
+    # we need a ortho image with 2 dimensions
+    if len(ortho.shape) == 3:
+        ortho = copy.deepcopy(ortho)
+        ortho = ortho[0, : , :]
 
     # init tie point detector
     tpd = ftp.TiePointDetector('lightglue')
@@ -114,11 +122,8 @@ def georef_ortho(ortho, footprints, lst_aligned,
                                 sat_tile.shape[2] / ortho_tile_rotated.shape[1])
                 ortho_tile_resized = rei.resize_image(ortho_tile_rotated, (sat_tile.shape[1], sat_tile.shape[2]))
 
-                print(sat_tile.shape, ortho_tile_resized.shape)
-                print(ortho_tile_resized)
-
                 import src.display.display_images as di
-                di.display_images([sat_tile, ortho_tile, ortho_tile_rotated, ortho_tile_resized])
+                #di.display_images([sat_tile, ortho_tile, ortho_tile_rotated, ortho_tile_resized])
 
                 # find tps between ortho and sat
                 points_tile, _ = tpd.find_tie_points(sat_tile, ortho_tile_resized)

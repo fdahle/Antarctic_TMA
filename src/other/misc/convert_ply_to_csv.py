@@ -32,7 +32,7 @@ def convert_ply_to_csv(fld):
 
 if __name__ == "__main__":
     # Define the path to the folder containing the PLY files
-    fld = "/home/fdahle/Desktop/agi_test2/point_cloud_small"
+    ply_fld = "/home/fdahle/Desktop/agi_test2/point_cloud_small"
 
     # Convert the PLY files to CSV files
-    convert_ply_to_csv(fld)
+    convert_ply_to_csv(ply_fld)

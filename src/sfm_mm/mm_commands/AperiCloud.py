@@ -19,6 +19,7 @@ class AperiCloud(BaseCommand):
     """
 
     required_args = ["ImagePattern", "Orientation"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["ImagePattern", "Orientation", "ExpTxt", "Out", "Bin",
                     "RGB", "SeuilEc", "LimBsH", "WithPoints", "CalPerIm",
                     "Focs", "WithCam", "ColCadre", "ColRay", "SH"]
@@ -138,6 +139,7 @@ class AperiCloud(BaseCommand):
                 if warning_count_info:
                     stats["warnings"]["count"] = int(warning_count_info.group(1))
 
+            # noinspection SpellCheckingInspection
             if "occurence of warn type" in line:
                 warning_type_info = re.search(r'(\d+) occurence of warn type \[(.+?)]', line)
                 if warning_type_info:

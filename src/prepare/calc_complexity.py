@@ -4,7 +4,6 @@
 import copy
 import numpy as np
 import torch
-from typing import Optional
 
 # External imports
 from external.SuperGlue.matching import Matching

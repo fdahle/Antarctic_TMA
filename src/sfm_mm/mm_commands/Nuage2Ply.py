@@ -18,6 +18,7 @@ class Nuage2Ply(BaseCommand):
     """
 
     required_args = ["XmlFile"]
+    # noinspection SpellCheckingInspection
     allowed_args = ["XmlFile", "Sz", "P0", "Out", "Scale", "Attr", "Comments", "Bin", "Mask",
                     "SeuilMask", "Dyn", "DoPly", "DoXYZ", "Normale", "NormByC", "ExagZ",
                     "RatioAttrCarte", "Mesh", "64B", "Offs", "NeighMask", "ForceRGB"]

@@ -31,7 +31,7 @@ class UNET_SMALL(nn.Module):
         upconv1 = self.upconv1(torch.cat([upconv2, conv1], 1))
 
         # relu to prob
-        #upconv1 = self.relu(upconv1)
+        # upconv1 = self.relu(upconv1)
 
         return upconv1
 

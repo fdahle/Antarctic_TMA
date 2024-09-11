@@ -3,6 +3,7 @@ import numpy as np
 import json
 from plyfile import PlyData
 
+
 def load_point_cloud(pointcloud_path):
     """
     Load point cloud data from a file. Supports both PLY files and other formats via a wrapper script.

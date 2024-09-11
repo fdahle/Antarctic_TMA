@@ -1,3 +1,5 @@
+"""download the reference elevation data of antarctica"""
+
 import os
 import sys
 import tarfile
@@ -47,7 +49,7 @@ def download_rema_data(tile, zoom_level,
         elif zoom_level == 32:
             download_url = URL_REMA_32
 
-    # define subtiles for zoom level 2
+    # define sub_tiles for zoom level 2
 
     if zoom_level == 2:
         sub_tiles = ["_1_1", "_1_2", "_2_1", "_2_2"]
@@ -72,7 +74,14 @@ def download_rema_data(tile, zoom_level,
 
         try:
             # create this bar_progress method which is invoked automatically from wget
-            def bar_progress(current, total, width=80):
+            def bar_progress(current, total):
+                """
+                create this bar_progress method which is invoked automatically from wget
+                Args:
+                    current: The current progress
+                    total: The total progress
+                """
+
                 progress_message = "Downloading: %d%% [%d / %d] bytes" % (current / total * 100, current, total)
                 # Don't use print() as it will print in new line every time.
                 if hasattr(sys.stdout, 'fileno'):

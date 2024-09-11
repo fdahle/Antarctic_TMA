@@ -22,9 +22,12 @@ class Tapas(BaseCommand):
                        "LibFoc", "RapTxt", "LinkPPaPPs", "FrozenPoses", "SH", "RefineAll"]
     additional_args_fraser = ["ImMinMax", "EcMax"]
     additional_args_fraser_basic = ["ImMinMax", "EcMax"]
+    # noinspection SpellCheckingInspection
     additional_args_fish_eye_equi = ["ImMinMax", "EcMax"]
+    # noinspection SpellCheckingInspection
     additional_args_hemi_equi = ["ImMinMax"]
 
+    # noinspection SpellCheckingInspection
     lst_of_distortion_models = ["RadialBasic", "RadialStd", "RadialExtended", "FraserBasic",
                                 "Fraser", "FishEyeEqui", "FE_EquiSolBasic", "FishEyeBasic",
                                 "FishEyeStereo", "Four", "AddFour", "AddPolyDeg", "Ebner",  # noqa

@@ -74,22 +74,6 @@ def estimate_dem_quality(historic_dem, modern_dem=None,
     return quality_dict
 
 
-
-    """
-    from scipy.ndimage import gaussian_filter
-
-    slope_modern = np.gradient(gaussian_filter(modern_dem, sigma=1))
-    slope_historic = np.gradient(gaussian_filter(historic_dem, sigma=1))
-
-    # slope_modern and slope_historic are tuples containing (gradient_y, gradient_x)
-    gradient_modern_y, gradient_modern_x = slope_modern
-    gradient_historic_y, gradient_historic_x = slope_historic
-
-    import src.display.display_images as di
-    di.display_images([modern_dem, historic_dem, difference], image_types=["dem", "dem", "difference"])
-    di.display_images([gradient_modern_y, gradient_modern_x, gradient_historic_y, gradient_historic_x])
-    """
-
 def _calc_stats(type, modern_dem, historic_dem, quality_dict):
     # get a difference map
     difference = modern_dem - historic_dem

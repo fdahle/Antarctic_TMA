@@ -42,8 +42,10 @@ def create_mask(image: np.ndarray,
         min_border_width: An optional integer defining the minimum border width to apply to the mask.
         use_database: A boolean flag indicating whether to fetch fiducial marks and ignore boxes
             from a database.
+        uint8: A boolean flag indicating whether to return the mask as an uint8 array (0-255) or as a boolean array.
         image_id: An optional identifier for the image to fetch fiducial marks and ignore boxes
             from the database if `use_database` is True.
+        conn: An optional connection object to a database if `use_database` is True.
     Returns:
         A numpy array representing the masked image, where regions outside the specified fiducial
         marks and ignore boxes are set to zero.

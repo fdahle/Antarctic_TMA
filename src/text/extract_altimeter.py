@@ -544,7 +544,7 @@ def _filter_parallel_lines(parallel_lines: list[list[list[int]]]) -> list[list[i
 
 def _binarize_circle(img: np.ndarray, min_th: int = 0, max_th: int = 255) -> np.ndarray:
     """
-    Binarizes the image within the detected circle.
+    Binarize the image within the detected circle.
 
     Args:
         img (np.ndarray): The input image.

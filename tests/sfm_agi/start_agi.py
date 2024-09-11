@@ -29,15 +29,15 @@ image_ids = [
 ]
 """
 # some settings
-project_name = "tp_test_agi"
-use_positions = False
+project_name = "tp_gcp_test"
+use_positions = False  # if true, camera position and rotations will be given to agisoft
 horizontal_camera_accuracy = 100  # in m
 vertical_camera_accuracy = 100  # in m
 gcp_accuracy = "TODO"
-limit_images = 3
+limit_images = 4
 only_vertical = True
-overwrite = True
-resume = False
+overwrite = False
+resume = True
 
 min_x = -2358616.2502435083
 min_y = 1225594.5941433292
@@ -99,14 +99,14 @@ data['position_exact'] = data['position_exact'].apply(wkt.loads)
 
 
 # define function to extract z
-def _get_z(row):
+def _get_z(z_row):
     feet_to_meters = 0.3048  # Conversion factor from feet to meters
-    if pd.notnull(row['height']):
-        return row['height'] * feet_to_meters
-    elif pd.notnull(row['altimeter_value']):
-        return row['altimeter_value'] * feet_to_meters
-    elif pd.notnull(row['altitude']) and row['altitude'] != -99999:
-        return row['altitude'] * feet_to_meters
+    if pd.notnull(z_row['height']):
+        return z_row['height'] * feet_to_meters
+    elif pd.notnull(z_row['altimeter_value']):
+        return z_row['altimeter_value'] * feet_to_meters
+    elif pd.notnull(z_row['altitude']) and z_row['altitude'] != -99999:
+        return z_row['altitude'] * feet_to_meters
 
     # default value
     return 22000 * feet_to_meters
@@ -119,7 +119,7 @@ data['focal_length'] = data['focal_length'].fillna(154.43)
 data['pos_x'] = data['position_exact'].apply(lambda x: x.x)
 data['pos_y'] = data['position_exact'].apply(lambda x: x.y)
 data['pos_z'] = data.apply(_get_z, axis=1)
-data['pos_tuple'] = data.apply(lambda row: (row['pos_x'], row['pos_y'], row['pos_z']), axis=1)
+data['pos_tuple'] = data.apply(lambda _row: (_row['pos_x'], _row['pos_y'], _row['pos_z']), axis=1)
 
 
 # create the different dicts from the dataframe
@@ -142,6 +142,9 @@ for image_id in data['image_id']:
     # yaw is the exact azimuth
     yaw = row['azimuth_exact'].values[0]
 
+    # account for the different coordinate system
+    yaw = 360 - yaw + 90
+
     # pitch is always 0
     pitch = 0
 
@@ -163,6 +166,7 @@ if len(flight_paths) > 1:
 else:
     # get constant values
     azimuth = np.mean(data['azimuth_exact'])
+    azimuth = 360 - azimuth + 90
 
 if use_positions is False:
     position_dict = None

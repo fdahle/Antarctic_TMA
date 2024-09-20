@@ -1,4 +1,5 @@
-import pandas as pd
+""" export pandas dataframe to PLY file """
+
 import numpy as np
 import struct
 

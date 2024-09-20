@@ -171,8 +171,8 @@ class SFMProject(object):
             camera_folder = DEFAULT_CAM_FLD
 
         # define lcd paths
-        old_lcd_path = camera_folder + "/" + camera_name + "-LocalChantierDescripteur.xml"
-        new_lcd_path = self.project_path + "/MicMac-LocalChantierDescripteur.xml"
+        old_lcd_path = camera_folder + "/" + camera_name + "-LocalChantierDescripteur.xml"  # noqa
+        new_lcd_path = self.project_path + "/MicMac-LocalChantierDescripteur.xml"  # noqa
 
         # define mc paths
         old_mc_path = camera_folder + "/" + camera_name + "-MeasuresCamera.xml"
@@ -180,7 +180,7 @@ class SFMProject(object):
 
         # check if the camera xml files are existing
         if os.path.isfile(old_lcd_path) is False:
-            raise FileNotFoundError(f"LocalChantierDescripteur for {camera_name} is missing")
+            raise FileNotFoundError(f"LocalChantierDescripteur for {camera_name} is missing")  # noqa
 
         if os.path.isfile(old_mc_path) is False:
             raise FileNotFoundError(f"MeasuresCamera for {camera_name} is missing")

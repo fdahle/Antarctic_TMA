@@ -1,3 +1,5 @@
+""" georeference an orthophoto """
+
 # Library imports
 import copy
 
@@ -14,16 +16,36 @@ import src.georef.snippets.apply_transform as at
 import src.georef.snippets.calc_transform as ct
 import src.load.load_satellite as ls
 
+debug_show_tie_points = True
 
-def georef_ortho(ortho, footprints, lst_aligned,
-                 azimuth=None,
-                 auto_rotate=False,
-                 rotation_step=45,
-                 max_size=25000,  # in m
-                 save_path=None):
+def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
+                 azimuth: int | None = None,
+                 auto_rotate: bool = False,
+                 rotation_step: int = 45,
+                 max_size: int = 25000,  # in m
+                 save_path: str | None = None):
+    """
+    Georeference an ortho image created by Agisoft Metashape. Footprints and azimuth are used to
+    get a rough bounding box of the ortho image. As the ortho image can be very large, it is
+    divided into smaller tiles for geo-referencing.
+    If no azimuth is given, the ortho image is rotated in steps of `rotation_step` degrees to find
+    the best orientation.
 
+    Args:
+        ortho:
+        footprints:
+        lst_aligned:
+        azimuth:
+        auto_rotate:
+        rotation_step:
+        max_size:
+        save_path:
 
-    # we need a ortho image with 2 dimensions
+    Returns:
+
+    """
+
+    # we need an ortho image with 2 dimensions
     if len(ortho.shape) == 3:
         ortho = copy.deepcopy(ortho)
         ortho = ortho[0, : , :]
@@ -128,6 +150,15 @@ def georef_ortho(ortho, footprints, lst_aligned,
                 # find tps between ortho and sat
                 points_tile, _ = tpd.find_tie_points(sat_tile, ortho_tile_resized)
 
+                # display the tie points
+                if debug_show_tie_points:
+                    style_config = {
+                        "title": f"{points_tile.shape[0]} tie points found at rotation {rotation}",
+                    }
+                    di.display_images([sat_tile, ortho_tile_resized],
+                                      tie_points=points_tile,
+                                      style_config=style_config)
+
                 # skip if no points were found
                 if points_tile.shape[0] == 0:
                     print(f"  - No tie points found")
@@ -199,9 +230,36 @@ def georef_ortho(ortho, footprints, lst_aligned,
                                              transform_method="rasterio",
                                              gdal_order=3)
 
+    # apply the transform to the ortho
     if save_path is not None:
         at.apply_transform(ortho, transform, save_path)
 
+    # reshape the transform to a 3x3 matrix
     transform = np.reshape(transform, (3, 3))
 
-    return transform
+    # calculate the absolute bounds
+    corners = np.array([
+        [0, 0],  # Top-left corner
+        [ortho.shape[1], 0],  # Top-right corner
+        [ortho.shape[1], ortho.shape[0]],  # Bottom-right corner
+        [0, ortho.shape[0]],  # Bottom-left corner
+    ])
+
+    # Convert to homogeneous coordinates
+    corners_homogeneous = np.hstack([corners, np.ones((corners.shape[0], 1))])
+
+    # Apply the transformation matrix to the corner points
+    transformed_corners = (transform @ corners_homogeneous.T).T
+
+    # Convert back to 2D coordinates by dividing by the last coordinate
+    transformed_corners = transformed_corners[:, :2] / transformed_corners[:, 2, np.newaxis]
+
+    # Calculate the transformed geographic bounds
+    min_x = np.min(transformed_corners[:, 0])
+    min_y = np.min(transformed_corners[:, 1])
+    max_x = np.max(transformed_corners[:, 0])
+    max_y = np.max(transformed_corners[:, 1])
+
+    transformed_bounds = (min_x, min_y, max_x, max_y)
+
+    return transform, transformed_bounds

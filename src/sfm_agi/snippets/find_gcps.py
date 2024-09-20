@@ -3,12 +3,17 @@ import pandas as pd
 
 import src.dem.snippets.find_peaks_in_DEM as fpiD
 import src.dem.snippets.get_elevation_for_points as gefp  # noqa
-import src.load.load_rock_mask as lrm
+import src.display.display_images as di
+
+
+# debug variables
+debug_show_points = False
+
 
 def find_gcps(dem: np.ndarray, transform: np.ndarray,
               bounding_box, zoom_level: int,
-              resolution: float, use_rock_mask: bool = False,
-              mask_resolution: int = 10, mask_buffer=5) -> pd.DataFrame:
+              resolution: float, mask: np.ndarray | None = None,
+              ) -> pd.DataFrame:
     """
     FInd GCPS in the DEM and export them to a csv file.
     Args:
@@ -17,8 +22,8 @@ def find_gcps(dem: np.ndarray, transform: np.ndarray,
         bounding_box (BoundingBox): Bounding box of the dem.
         zoom_level (int): Zoom level of the DEM we want to compare to.
         resolution (float): Resolution of the DEM.
-        binary_mask (np.ndarray): Optional binary_mask to apply to the gcps and only
-            export gcps that are in 1 in the mask.
+        use_rock_mask (bool): Optional use of rock mask to apply to the gcps
+            and only export gcps that are in 1 (=rocks) in the mask.
         mask_resolution (int): Resolution of the mask in meters.
         mask_buffer (int): Buffer for the mask in pixels
     Returns:
@@ -62,63 +67,40 @@ def find_gcps(dem: np.ndarray, transform: np.ndarray,
                                       'x_rel', 'y_rel', 'z_rel',
                                       'x_abs', 'y_abs', 'z_abs'])
 
-    if use_rock_mask:
+    if mask is not None:
 
-        min_abs_x, min_abs_y = absolute_coords.min(axis=0)
-        max_abs_x, max_abs_y = absolute_coords.max(axis=0)
+        # Convert the x_px and y_px columns to integers to index the mask
+        x_px = df['x_px'].astype(int)
+        y_px = df['y_px'].astype(int)
 
-        # get the bounds and load the dem
-        absolute_bounds = (min_abs_x, min_abs_y, max_abs_x, max_abs_y)
+        # Ensure coordinates are within bounds
+        x_px = np.clip(x_px, 0, mask.shape[1] - 1)
+        y_px = np.clip(y_px, 0, mask.shape[0] - 1)
 
-        print("ABO", absolute_bounds)
+        # Filter points where the mask is 1
+        mask_values = mask[y_px, x_px]  # This gives the mask values at the (x_px, y_px) coordinates
+        df_ignored = df[mask_values == 0]
+        df = df[mask_values == 1]
 
-        # get the rock mask
-        rock_mask = lrm.load_rock_mask(absolute_bounds, mask_resolution)
+        # reset the index
+        df_ignored.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
 
-        # give a warning if no rocks are existing in the mask
-        if np.sum(rock_mask) == 0:
-            print("WARNING: No rocks found in the rock mask (export_gcps.py)")
+        print("Number of GCPs ignored due to mask:", df_ignored.shape[0])
+        print(df.shape[0], "GCPs are kept")
 
-        y_mask_coords = (df['y_abs'].values - min_abs_y) / mask_resolution
-        x_mask_coords = (df['x_abs'].values - min_abs_x) / mask_resolution
+    # show the gcps
+    if debug_show_points:
 
-        # cast to int
-        y_mask_coords = y_mask_coords.astype(int)
-        x_mask_coords = x_mask_coords.astype(int)
+        # replace mask with a default mask for display
+        if mask is None:
+            mask = np.ones_like(dem)
+            df_ignored = pd.DataFrame(columns=df.columns)
 
-        # Check if the coordinates are within the bounds of the DEM
-        valid_coords = (y_mask_coords >= 0) & (y_mask_coords < rock_mask.shape[0]) & \
-                       (x_mask_coords >= 0) & (x_mask_coords < rock_mask.shape[1])
-
-        # Filter only the valid points
-        x_mask_coords = x_mask_coords[valid_coords]
-        y_mask_coords = y_mask_coords[valid_coords]
-        df = df[valid_coords]
-
-        # create list of tuples for the points
-        points = [(x, y) for x, y in zip(x_mask_coords, y_mask_coords)]
-
-        print(y_mask_coords)
-        print(x_mask_coords)
-
-        print(np.amin(y_mask_coords), np.amax(y_mask_coords))
-        print(np.amin(x_mask_coords), np.amax(x_mask_coords))
-        print(rock_mask.shape)
-
-        # apply the rock mask to the gcps
-        mask = rock_mask[y_mask_coords, x_mask_coords] == 1
-
-        import src.display.display_images as di
-        di.display_images([rock_mask],
-                          points=[points])
-
-        print(mask)
-
-        # Return the filtered dataframe
-        print(df.shape)
-        df = df[mask]
-        print(df.shape)
-
-        exit()
+        points = np.vstack([df['x_px'].values, df['y_px'].values]).T
+        points_ignored = np.vstack([df_ignored['x_px'].values, df_ignored['y_px'].values]).T
+        di.display_images([dem, dem, mask, mask],
+                          image_types=['dem', 'dem', 'binary','binary'],
+                          points=[points, points_ignored, points, points_ignored])
 
     return df

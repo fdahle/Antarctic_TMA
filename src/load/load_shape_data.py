@@ -1,7 +1,10 @@
+""" load data from shape files """
+
 import fiona
 import geopandas as gpd
 from shapely.geometry import shape
 from shapely.validation import explain_validity
+
 
 def load_shape_data(path_to_file: str,
                     verbose: bool = False) -> gpd.GeoDataFrame:

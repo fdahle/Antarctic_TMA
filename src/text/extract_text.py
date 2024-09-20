@@ -335,16 +335,19 @@ def extract_text(
                 min_y_abs = copy.deepcopy(min_y_rel)
                 max_y_abs = copy.deepcopy(max_y_rel)
 
+                # get shape of the subset
+                subset_shape = (subset.shape[0], subset.shape[1])
+
                 # rotate points back
                 if key == "e":
-                    min_x_abs, min_y_abs = _rot90points(min_x_rel, min_y_rel, -1, subset.shape)
-                    max_x_abs, max_y_abs = _rot90points(max_x_rel, max_y_rel, -1, subset.shape)
+                    min_x_abs, min_y_abs = _rot90points(min_x_rel, min_y_rel, -1, subset_shape)
+                    max_x_abs, max_y_abs = _rot90points(max_x_rel, max_y_rel, -1, subset_shape)
                 elif key == "s":
-                    min_x_abs, min_y_abs = _rot90points(min_x_rel, min_y_rel, -2, subset.shape)
-                    max_x_abs, max_y_abs = _rot90points(max_x_rel, max_y_rel, -2, subset.shape)
+                    min_x_abs, min_y_abs = _rot90points(min_x_rel, min_y_rel, -2, subset_shape)
+                    max_x_abs, max_y_abs = _rot90points(max_x_rel, max_y_rel, -2, subset_shape)
                 elif key == "w":
-                    min_x_abs, min_y_abs = _rot90points(min_x_rel, min_y_rel, -3, subset.shape)
-                    max_x_abs, max_y_abs = _rot90points(max_x_rel, max_y_rel, -3, subset.shape)
+                    min_x_abs, min_y_abs = _rot90points(min_x_rel, min_y_rel, -3, subset_shape)
+                    max_x_abs, max_y_abs = _rot90points(max_x_rel, max_y_rel, -3, subset_shape)
 
                 # through the rotating sometimes min and max can be switched -> correct
                 if max_x_abs < min_x_abs:

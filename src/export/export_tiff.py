@@ -4,9 +4,10 @@ import rasterio
 from rasterio.transform import Affine
 import os
 import numpy as np
+from typing import LiteralString
 
 
-def export_tiff(img: np.ndarray, output_path: str,
+def export_tiff(img: np.ndarray, output_path: LiteralString | str | bytes,
                 overwrite: bool = False,
                 transform: Affine = None,
                 use_lzw: bool = False,

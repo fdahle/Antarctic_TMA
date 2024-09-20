@@ -1,3 +1,5 @@
+""" apply semantic segmentation to an image  """
+
 # Library imports
 import copy
 import numpy as np
@@ -8,10 +10,27 @@ import src.segment.classes.u_net as u_net
 # CONSTANTS
 MODEL_PATH = "/data/ATM/data_1/machine_learning/semantic_segmentation/test_cross_noise_360.pth"
 
-def segment_image(image, normalize=False,
-                  num_layers=1, num_output_layers=6,
-                  min_threshold=None,
-                  return_model_name=False):
+
+def segment_image(image: np.ndarray, normalize: bool = False,
+                  num_layers: int = 1, num_output_layers: int = 6,
+                  min_threshold: float | None = None,
+                  return_model_name: bool = False) -> \
+        (np.ndarray, np.ndarray, str | None):
+    """
+    Apply semantic segmentation to an image using a pre-trained U-Net model.
+    Args:
+        image: The historic image to segment.
+        normalize: Should the values of the images be normalized (0-1) before segmentation?
+        num_layers: The number of input layers of the image (e.g., 1 for grayscale, 3 for RGB).
+        num_output_layers: THe number of output layers (=number of classes).
+        min_threshold: The minimum threshold for the highest probability to be considered a valid class.
+            Otherwise, the class is set to 6 (no data).
+        return_model_name: If true, the model name is returned as well.
+    Returns:
+        pred: The segmented image.
+        probabilities: The probabilities of each class per pixel.
+        model_name: The name of the model used for segmentation. Optional.
+    """
 
     # set device
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -21,6 +40,7 @@ def segment_image(image, normalize=False,
     if MODEL_PATH.split(".")[-1] == "pt":
         model = torch.load(MODEL_PATH)
         model.eval()
+
     elif MODEL_PATH.split(".")[-1] == "pth":
 
         model = u_net.UNET(num_layers, num_output_layers)

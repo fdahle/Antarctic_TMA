@@ -4,7 +4,7 @@ import rasterio
 from scipy.spatial import cKDTree
 
 
-def create_confidence_dem(dem, point_cloud, transform,
+def create_confidence_arr(dem, point_cloud, transform,
                           interpolate=False, distance=10,
                           dem_nodata=-9999, min_confidence=0):
 
@@ -18,7 +18,7 @@ def create_confidence_dem(dem, point_cloud, transform,
     # Apply the inverse of the affine transform to map x, y to pixel coordinates
     inv_transform = np.linalg.inv(transform)
 
-    # Extract x, y, z, and confidence values
+    # Extract x, y, and confidence values
     x_coords = point_cloud[:, 0]
     y_coords = point_cloud[:, 1]
     confidences = point_cloud[:, 3]
@@ -65,8 +65,6 @@ def create_confidence_dem(dem, point_cloud, transform,
         # Interpolate the confidence values
         valid_mask = distances < distance
         confidence[grid_y.ravel()[valid_mask], grid_x.ravel()[valid_mask]] = known_values[indices[valid_mask]]
-
-    print(confidence)
 
     # Handle cells with no points
     confidence[np.isnan(confidence)] = min_confidence

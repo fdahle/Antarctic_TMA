@@ -180,6 +180,8 @@ def display_images(images: np.ndarray | list[np.ndarray],
             ax.imshow(img, cmap="terrain", vmin=dem_min, vmax=dem_max)
         elif img_type == "color":
             ax.imshow(img, interpolation=None)
+        elif img_type == "binary":
+            ax.imshow(img, cmap="gray", vmin=0, vmax=1)
         elif img_type == "rtg":  # red to green
             ax.imshow(img, cmap=cmap_red_green, vmin=np.nanmin(img), vmax=np.nanmax(img))
         elif img_type == "gtr":  # green to red

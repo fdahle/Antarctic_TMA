@@ -1,3 +1,5 @@
+""" load the rock-mask from quantarctica """
+
 # Python imports
 import os
 
@@ -8,11 +10,22 @@ from shapely.geometry import box
 import src.load.load_shape_data as lsd
 
 # CONSTANTS
-PATH_QUANTARTICA = "/data/ATM/data_1/quantarctica/Quantarctica3"
+PATH_QUANTARTICA = "/data/ATM/data_1/quantarctica/Quantarctica3"  # noqa
 PATH_ROCK_MASK = os.path.join(PATH_QUANTARTICA, "Basemap/ADD_Rock_outcrop_?QUALITY?_res_polygon.shp")
 
+def load_rock_mask(bounds: list, resolution: int | float, quality: str = "high"):
+    """
+    Use the absolute bounds to load the rock mask from Quantarctica. The shape file
+    will be limited to the bounds and rasterized with the given resolution.
+    Args:
+        bounds (list): The absolute bounds of the area to load the rock mask for.
+            Is a list of the form [minx, min_y, max_x, maxy].
+        resolution (int | float): The resolution of the rock mask in meters.
+        quality (str, optional): Which rock mask shape file to use. Defaults to "high".
 
-def load_rock_mask(bounds, resolution, quality: str = "high"):
+    Returns:
+
+    """
 
     # Check the quality
     if quality not in ["low", "medium", "high"]:
@@ -41,22 +54,15 @@ def load_rock_mask(bounds, resolution, quality: str = "high"):
     # Calculate the bounds of the subset (to fit within the bbox)
     minx, min_y, max_x, maxy = bbox_geom.bounds
 
-    print("minx, min_y, max_x, maxy", minx, min_y, max_x, maxy)
-
     # Calculate the number of rows and columns in the output raster
-    nrows = int((maxy - min_y) / resolution)
-    ncols = int((max_x - minx) / resolution)
-
-    print("nrows, ncols", nrows, ncols)
-    print("resolution", resolution)
+    n_rows = int((maxy - min_y) / resolution)
+    n_cols = int((max_x - minx) / resolution)
 
     # Define the affine transform for the raster based on the bounding box
     transform = from_origin(minx, maxy, resolution, resolution)
 
-    print("transform", transform)
-
     # Initialize the shape for the raster
-    out_shape = (nrows, ncols)
+    out_shape = (n_rows, n_cols)
 
     # Rasterize the subset of polygons
     rasterized = rasterize(

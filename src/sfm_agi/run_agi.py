@@ -11,6 +11,7 @@ import Metashape
 import numpy as np
 import pandas as pd
 from pyproj import CRS
+from scipy.ndimage import binary_dilation
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
@@ -24,10 +25,11 @@ import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
 import src.load.load_image as li
 import src.load.load_pointcloud as lp
+import src.load.load_rock_mask as lrm
 import src.sfm_agi.snippets.create_adapted_mask as cam
-import src.sfm_agi.snippets.create_confidence_dem as ccd
+import src.sfm_agi.snippets.create_confidence_array as cca
 import src.sfm_agi.snippets.create_custom_tie_points as cctp  # noqa
-import src.sfm_agi.snippets.export_gcps as fg
+import src.sfm_agi.snippets.find_gcps as fg
 import src.sfm_agi.snippets.georef_ortho as go
 import src.sfm_agi.snippets.save_key_points as skp
 import src.sfm_agi.snippets.save_sfm_to_db as sstd  # noqa
@@ -51,7 +53,10 @@ zoom_level_dem = 10  # in m
 save_text_output = True  # if True, the output will be saved in a text file
 save_commands = True  # if True, the arguments of the commands will be saved in a json file
 auto_true_for_new = True  # new projects will have all steps set to True
-use_rock_mask = True
+use_gcp_mask = True
+mask_type = "confidence"  # "confidence" or "rock"
+min_confidence = 0.5
+mask_buffer = 10 # in pixels
 
 # Steps
 STEPS = {
@@ -65,6 +70,8 @@ STEPS = {
     "build_mesh_relative": False,
     "build_dem_relative": False,
     "build_orthomosaic_relative": False,
+    "build_confidence_relative": False,
+    "georef_output_images": True,
     "create_gcps": True,
     "load_gcps": True,
     "build_depth_maps_absolute": True,
@@ -73,7 +80,7 @@ STEPS = {
     "build_dem_absolute": True,
     "build_orthomosaic_absolute": True,
     "export_alignment": True,
-    "build_confidence_dem": True,
+    "build_confidence_absolute": True,
     "evaluate_dem": True,
 }
 
@@ -1111,9 +1118,34 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             print(f"Build relative orthomosaic - finished ({exec_time:.4f} s)")
 
-        if STEPS["create_gcps"]:
+        # build confidence array
+        if STEPS["build_confidence_relative"]:
+            print("Build relative confidence array")
+            start_time = time.time()
 
-            print("Create GCPs")
+            # define paths
+            output_dem_path = os.path.join(output_fld, project_name + "_dem_relative.tif")
+            output_pc_path = os.path.join(output_fld, project_name + "_pointcloud_relative.ply")
+
+            # load the dem & point cloud
+            dem, transform = li.load_image(output_dem_path, return_transform=True)
+            point_cloud = lp.load_point_cloud(output_pc_path)
+
+            conf_arr = cca.create_confidence_arr(dem, point_cloud, transform,
+                                                 interpolate=True, distance=10)
+
+            output_conf_path = os.path.join(output_fld, project_name + "_confidence_relative.tif")
+
+            eti.export_tiff(conf_arr, output_conf_path,
+                            transform=transform, overwrite=True)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Build relative confidence array - finished ({exec_time:.4f} s)")
+
+        if STEPS["georef_output_images"]:
+
+            print("Georeference output images")
             start_time = time.time()
 
             # use default values for DEM and ortho if not given
@@ -1122,12 +1154,24 @@ def run_agi(project_name: str, images: list,
             if output_ortho_path is None:
                 output_ortho_path = os.path.join(output_fld, project_name + "_ortho_relative.tif")
 
+            if os.path.exists(output_dem_path) is False:
+                raise FileNotFoundError(f"DEM file does not exist at '{output_dem_path}'")
+            if os.path.exists(output_ortho_path) is False:
+                raise FileNotFoundError(f"Ortho file does not exist at '{output_ortho_path}'")
+
             # load the required data
             dem = li.load_image(output_dem_path)
             ortho = li.load_image(output_ortho_path)
             footprints = camera_footprints
 
-            if dem.shape != ortho.shape[1:]:
+            # set nodata to nan
+            dem[dem == -9999] = np.nan
+
+            # if ortho has alpha -> remove it
+            if len(ortho.shape) == 3:
+                ortho = ortho[0,:,:]
+
+            if dem.shape != ortho.shape:
                 print("DEM", dem.shape)
                 print("Ortho", ortho.shape)
                 raise ValueError("DEM and ortho should have the same shape")
@@ -1141,8 +1185,23 @@ def run_agi(project_name: str, images: list,
                     aligned.append(False)
 
             # get the transform of dem/ortho (identical for both)
-            transform = go.georef_ortho(ortho, footprints.values(), aligned,
-                                        azimuth=azimuth, auto_rotate=True)
+            transform, mask_bounds = go.georef_ortho(ortho, footprints.values(), aligned,
+                                                     azimuth=azimuth, auto_rotate=True)
+
+            # set path for transform file
+            transform_path = os.path.join(data_fld, "transform.txt")
+
+            # save the transform
+            np.savetxt(transform_path, transform, delimiter=',')
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Georeference output images - finished ({exec_time:.4f} s)")
+
+        if STEPS["create_gcps"]:
+
+            print("Create GCPs")
+            start_time = time.time()
 
             # define output path in which gcp files are saved
             gcp_path = os.path.join(data_fld, "gcps.csv")
@@ -1156,10 +1215,72 @@ def run_agi(project_name: str, images: list,
             else:
                 resolution = resolution_absolute
 
+            if use_gcp_mask:
+                if mask_type == "rock":
+                    raise NotImplementedError("Rock mask not implemented yet.")
+                    """
+                    if use_rock_mask:
+
+                        min_abs_x, min_abs_y = absolute_coords.min(axis=0)
+                        max_abs_x, max_abs_y = absolute_coords.max(axis=0)
+
+                        # get the bounds and load the dem
+                        absolute_bounds = (min_abs_x, min_abs_y, max_abs_x, max_abs_y)
+
+                        # get the rock mask
+                        rock_mask = lrm.load_rock_mask(absolute_bounds, mask_resolution)
+
+                        # give a warning if no rocks are existing in the mask
+                        if np.sum(rock_mask) == 0:
+                            print("WARNING: No rocks found in the rock mask (find_gcps.py)")
+
+                        # Apply mask buffer by dilating the mask (expanding the regions of 1s)
+                        kernel = np.ones((mask_buffer, mask_buffer), dtype=bool)
+                        rock_mask = binary_dilation(rock_mask, structure=kernel)
+
+                        y_mask_coords = (df['y_abs'].values - min_abs_y) / mask_resolution
+                        x_mask_coords = (df['x_abs'].values - min_abs_x) / mask_resolution
+
+                        # cast to int
+                        y_mask_coords = y_mask_coords.astype(int)
+                        x_mask_coords = x_mask_coords.astype(int)
+
+                        # Check if the coordinates are within the bounds of the DEM
+                        valid_coords = (y_mask_coords >= 0) & (y_mask_coords < rock_mask.shape[0]) & \
+                                       (x_mask_coords >= 0) & (x_mask_coords < rock_mask.shape[1])
+
+                        # Filter only the valid points
+                        x_mask_coords = x_mask_coords[valid_coords]
+                        y_mask_coords = y_mask_coords[valid_coords]
+                        df = df[valid_coords]
+
+                        # create the mask
+                        mask = rock_mask[y_mask_coords, x_mask_coords] == 1
+                    """
+
+                elif mask_type == "confidence":
+
+                    conf_path = os.path.join(output_fld, project_name + "_confidence_relative.tif")
+
+                    if conf_arr is None:
+                        raise ValueError("Confidence array is not defined. Please create a confidence array first.")
+
+                    gcp_mask = np.zeros_like(dem)
+                    gcp_mask[conf_arr > min_confidence] = 1
+
+                else:
+                    raise ValueError(f"Mask type '{mask_type}' not supported.")
+            else:
+                gcp_mask = None
+
+            # apply buffer to mask
+            kernel = np.ones((mask_buffer, mask_buffer), dtype=bool)
+            gcp_mask = binary_dilation(gcp_mask, structure=kernel)
+
             # call snippet to export gcps
             gcp_df = fg.find_gcps(dem, transform,
                                   bounding_box_relative, zoom_level_dem,
-                                  resolution, use_rock_mask=use_rock_mask)
+                                  resolution, mask=gcp_mask)
 
             # Create labels (n x 1 array)
             num_points = gcp_df.shape[0]
@@ -1177,8 +1298,13 @@ def run_agi(project_name: str, images: list,
             print("Load GCPs")
             start_time = time.time()
 
-            # load gcps from file
+            # set path to gpcs
             gcp_path = os.path.join(data_fld, "gcps.csv")
+
+            if os.path.isfile(gcp_path) is False:
+                raise FileNotFoundError(f"GCP file does not exist at '{gcp_path}'")
+
+            # load the gcps
             gcps = pd.read_csv(gcp_path, sep=';')
 
             # set crs of markers
@@ -1191,6 +1317,12 @@ def run_agi(project_name: str, images: list,
 
             # remove all existing markers
             chunk.markers.clear()
+
+            # init marker variable
+            marker = None
+
+            # count number of markers
+            num_markers = 0
 
             # iterate over the gcp dataframe
             for _, row in gcps.iterrows():
@@ -1205,6 +1337,7 @@ def run_agi(project_name: str, images: list,
                 # transform the point to local coordinates
                 point_local = chunk.transform.matrix.inv().mulp(point_3d)
 
+                # reset marker
                 marker = None
 
                 # iterate over the cameras
@@ -1233,6 +1366,9 @@ def run_agi(project_name: str, images: list,
 
                         # marker must be created only once
                         if marker is None:
+
+                            num_markers += 1
+
                             marker = chunk.addMarker()
                             marker.label = row['GCP']
 
@@ -1243,6 +1379,16 @@ def run_agi(project_name: str, images: list,
                         # set relative projection for the marker
                         m_proj = Metashape.Marker.Projection(Metashape.Vector([x, y]), True)  # noqa
                         marker.projections[camera] = m_proj  # noqa
+                    else:
+                        pbar.set_postfix_str(f"Projection for {camera.label} is outside the image")
+
+            pbar.close()
+
+            # if the marker is still None something went wrong
+            if marker is None:
+                raise ValueError("No valid projections found for the marker")
+            else:
+                print(f"Added {num_markers} markers")
 
             # "https://www.agisoft.com/forum/index.php?topic=7446.0"
             # "https://www.agisoft.com/forum/index.php?topic=10855.0"
@@ -1577,9 +1723,9 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             print(f"Build absolute orthomosaic - finished ({exec_time:.4f} s)")
 
-        # build confidence
-        if STEPS["build_confidence_dem"]:
-            print("Build confidence dem")
+        # build confidence array
+        if STEPS["build_confidence_absolute"]:
+            print("Build absolute confidence array")
             start_time = time.time()
 
             # define paths
@@ -1590,16 +1736,16 @@ def run_agi(project_name: str, images: list,
             dem, transform = li.load_image(output_dem_path, return_transform=True)
             point_cloud = lp.load_point_cloud(output_pc_path)
 
-            conf_dem = ccd.create_confidence_dem(dem, point_cloud, transform,
+            conf_arr = cca.create_confidence_arr(dem, point_cloud, transform,
                                                  interpolate=True, distance=10)
 
-            output_conf_path = os.path.join(output_fld, project_name + "_confidence_dem.tif")
+            output_conf_path = os.path.join(output_fld, project_name + "_confidence_absolute.tif")
 
-            eti.export_tiff(conf_dem, output_conf_path, transform=transform)
+            eti.export_tiff(conf_arr, output_conf_path, transform=transform)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            print(f"Build confidence dem - finished ({exec_time:.4f} s)")
+            print(f"Build absolute confidence array - finished ({exec_time:.4f} s)")
 
         # init empty quality dict
         quality_dict = None
@@ -1621,12 +1767,12 @@ def run_agi(project_name: str, images: list,
 
             # load the confidence dem
             confidence_dem_path = os.path.join(output_fld, project_name + "_confidence_dem.tif")
-            conf_dem = li.load_image(confidence_dem_path)
+            conf_arr = li.load_image(confidence_dem_path)
 
             # load the modern dem
             modern_dem = None  # will be loaded in the function itself
 
-            quality_dict = edq.estimate_dem_quality(historic_dem, modern_dem, conf_dem,
+            quality_dict = edq.estimate_dem_quality(historic_dem, modern_dem, conf_arr,
                                                     historic_bounds=historic_bounds,
                                                     modern_source="REMA10")
 

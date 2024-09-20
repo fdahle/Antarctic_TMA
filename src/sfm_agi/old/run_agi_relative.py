@@ -13,7 +13,7 @@ import src.base.load_credentials as lc
 import src.load.load_image as li
 import src.export.export_thumbnail as et
 import src.sfm_agi.snippets.create_adapted_mask as cam
-import src.sfm_agi.snippets.export_gcps as eg
+import src.sfm_agi.snippets.find_gcps as eg
 import src.sfm_agi.snippets.save_key_points as skp
 import src.sfm_agi.snippets.save_tie_points as stp
 

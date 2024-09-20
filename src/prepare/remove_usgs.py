@@ -1,3 +1,5 @@
+""" remove the usgs logo from an image """
+
 # Library imports
 import copy
 import numpy as np

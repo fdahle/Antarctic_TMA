@@ -27,8 +27,6 @@ def rotate_image(image: np.ndarray,
             used to understand the rotation and translation applied to the original image.
     """
 
-    print(image.shape)
-
     # calculate image center
     height, width = image.shape[:2]
     center = (width // 2, height // 2)
@@ -83,8 +81,6 @@ def rotate_image(image: np.ndarray,
                 else:
                     rotated_image = np.vstack((rotated_image, cv2.warpAffine(image[i], rotation_matrix,
                                                                              (width, height))[np.newaxis, ...]))
-
-    print(rotated_image.shape)
 
     if return_rot_matrix:
         return rotated_image, rotation_matrix

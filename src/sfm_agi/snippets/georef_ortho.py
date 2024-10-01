@@ -12,18 +12,23 @@ import src.base.find_tie_points as ftp
 import src.base.resize_image as rei
 import src.base.rotate_image as ri
 import src.base.rotate_points as rp
+import src.display.display_images as di
 import src.georef.snippets.apply_transform as at
 import src.georef.snippets.calc_transform as ct
 import src.load.load_satellite as ls
 
-debug_show_tie_points = True
+debug_show_tie_points = False
 
-def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
+
+def georef_ortho(ortho: np.ndarray,
+                 footprints: list, lst_aligned: list,
                  azimuth: int | None = None,
                  auto_rotate: bool = False,
                  rotation_step: int = 45,
                  max_size: int = 25000,  # in m
-                 save_path: str | None = None):
+                 trim_image: bool = True,
+                 save_path_ortho: str | None = None,
+                 save_path_transform: str | None = None):
     """
     Georeference an ortho image created by Agisoft Metashape. Footprints and azimuth are used to
     get a rough bounding box of the ortho image. As the ortho image can be very large, it is
@@ -48,29 +53,66 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
     # we need an ortho image with 2 dimensions
     if len(ortho.shape) == 3:
         ortho = copy.deepcopy(ortho)
-        ortho = ortho[0, : , :]
+        ortho = ortho[0, :, :]
 
     # init tie point detector
     tpd = ftp.TiePointDetector('lightglue')
 
+    # Calculate the percentage removed from each side
+    original_height_ortho, original_width_ortho = ortho.shape[:2]
+
+    # trim the ortho
+    if trim_image:
+        trim_mask = ortho != 255  # Find non-white pixels
+        trim_coords = np.argwhere(trim_mask)
+        trim_y_min, trim_x_min = trim_coords.min(axis=0)
+        trim_y_max, trim_x_max = trim_coords.max(axis=0) + 1  # Include the max pixel
+        trimmed_ortho = ortho[trim_y_min:trim_y_max, trim_x_min:trim_x_max]
+
+        left_trim_percentage = (trim_x_min / original_width_ortho) * 100
+        right_trim_percentage = ((original_width_ortho - trim_x_max) / original_width_ortho) * 100
+        top_trim_percentage = (trim_y_min / original_height_ortho) * 100
+        bottom_trim_percentage = ((original_height_ortho - trim_y_max) / original_height_ortho) * 100
+
+    else:
+        trimmed_ortho = ortho
+        trim_x_min = 0
+        trim_y_min = 0
+        left_trim_percentage = 0
+        right_trim_percentage = 0
+        top_trim_percentage = 0
+        bottom_trim_percentage = 0
+
     # Filter aligned footprints
     aligned_footprints = [footprint for footprint, aligned in zip(footprints, lst_aligned) if aligned]
 
+    print(f"Found {len(aligned_footprints)} aligned footprints out of {len(footprints)}")
+
     # Get the min and max for all footprints
-    min_x = min([footprint.bounds[0] for footprint in aligned_footprints])
-    min_y = min([footprint.bounds[1] for footprint in aligned_footprints])
-    max_x = max([footprint.bounds[2] for footprint in aligned_footprints])
-    max_y = max([footprint.bounds[3] for footprint in aligned_footprints])
+    min_abs_x = min([footprint.bounds[0] for footprint in aligned_footprints])
+    min_abs_y = min([footprint.bounds[1] for footprint in aligned_footprints])
+    max_abs_x = max([footprint.bounds[2] for footprint in aligned_footprints])
+    max_abs_y = max([footprint.bounds[3] for footprint in aligned_footprints])
+
+    # Calculate the size of the bounding rectangle before trimming
+    width_tmp = max_abs_x - min_abs_x
+    height_tmp = max_abs_y - min_abs_y
+
+    # Adjust the min and max coordinates based on the trim percentages
+    min_abs_x = min_abs_x + (width_tmp * (left_trim_percentage / 100))
+    max_abs_x = max_abs_x - (width_tmp * (right_trim_percentage / 100))
+    min_abs_y = min_abs_y + (height_tmp * (top_trim_percentage / 100))
+    max_abs_y = max_abs_y - (height_tmp * (bottom_trim_percentage / 100))
 
     # Calculate the size of the bounding rectangle
-    width_m = max_x - min_x
-    height_m = max_y - min_y
+    width_abs_px = max_abs_x - min_abs_x
+    height_abs_px = max_abs_y - min_abs_y
 
-    if width_m > max_size or height_m > max_size:
+    if width_abs_px > max_size or height_abs_px > max_size:
 
         # check how often the width and height fit into the max size
-        width_factor = width_m // max_size
-        height_factor = height_m // max_size
+        width_factor = width_abs_px // max_size
+        height_factor = height_abs_px // max_size
 
         # factor should be at least 1
         width_factor = max(1, int(width_factor))
@@ -82,24 +124,39 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
         width_factor = 1
 
     # divide by the factor to get width and height of the small tiles
-    width_small = width_m / width_factor
-    height_small = height_m / height_factor
+    width_small = width_abs_px / width_factor
+    height_small = height_abs_px / height_factor
 
-    # create rotation values to rotate dict
-    if azimuth is None:
+    # 4 different cases for rotation values:
+    # no azimuth but also no rotation (images are already aligned)
+    if azimuth is None and auto_rotate is False:
+        rotation_values = [0]
+    # rotate the ortho in steps of rotation_step
+    elif azimuth is None and auto_rotate is True:
+        rotation_values = list(range(0, 360, rotation_step))
+    # azimuth is given, but we still want to rotate (for inaccurate azimuth)
+    elif azimuth is not None and auto_rotate is True:
 
-        # check if we want to auto rotate
-        if auto_rotate is False:
-            rotation_values = [0]
-        else:
-            # create a list of rotation values
-            rotation_values = list(range(0, 360, rotation_step))
-    else:
+        rotation_values = [
+            azimuth - rotation_step,
+            azimuth - rotation_step / 2,
+            azimuth,
+            azimuth + rotation_step / 2,
+            azimuth + rotation_step
+        ]
+
+        # assure all entries are between 0 and 360
+        rotation_values = [x % 360 for x in rotation_values]
+
+    # azimuth is given and we trust it
+    elif azimuth is not None and auto_rotate is False:
         rotation_values = [azimuth]
+    else:
+        raise ValueError("Invalid combination of azimuth and auto_rotate")
 
     # get width and height of ortho
-    ortho_width_small = int(ortho.shape[1] / width_factor)
-    ortho_height_small = int(ortho.shape[0] / height_factor)
+    ortho_width_small = int(trimmed_ortho.shape[1] / width_factor)
+    ortho_height_small = int(trimmed_ortho.shape[0] / height_factor)
 
     # here we save the points
     points = []
@@ -111,12 +168,12 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
             print(f" - Georef tile ({h}, {w})")
 
             # tile the ortho as well
-            ortho_tile = ortho[h * ortho_height_small:(h + 1) * ortho_height_small,
-                               w * ortho_width_small:(w + 1) * ortho_width_small]
+            ortho_tile = trimmed_ortho[h * ortho_height_small:(h + 1) * ortho_height_small,
+                                       w * ortho_width_small:(w + 1) * ortho_width_small]
 
             # get the new min and max values
-            tile_min_x = min_x + width_small * w
-            tile_min_y = min_y + height_small * h
+            tile_min_x = min_abs_x + width_small * w
+            tile_min_y = min_abs_y + height_small * h
             tile_max_x = tile_min_x + width_small
             tile_max_y = tile_min_y + height_small
 
@@ -144,9 +201,6 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
                                 sat_tile.shape[2] / ortho_tile_rotated.shape[1])
                 ortho_tile_resized = rei.resize_image(ortho_tile_rotated, (sat_tile.shape[1], sat_tile.shape[2]))
 
-                import src.display.display_images as di
-                #di.display_images([sat_tile, ortho_tile, ortho_tile_rotated, ortho_tile_resized])
-
                 # find tps between ortho and sat
                 points_tile, _ = tpd.find_tie_points(sat_tile, ortho_tile_resized)
 
@@ -165,11 +219,12 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
                     continue
 
                 # remove outliers
-                _, filtered_tile = cv2.findHomography(points_tile[:, 0:2],
-                                                      points_tile[:, 2:4],
-                                                      cv2.RANSAC, 5.0)
-                filtered_tile = filtered_tile.flatten()
-                points_tile = points_tile[filtered_tile == 0]
+                if points_tile.shape[0] > 4:
+                    _, filtered_tile = cv2.findHomography(points_tile[:, 0:2],
+                                                          points_tile[:, 2:4],
+                                                          cv2.RANSAC, 5.0)
+                    filtered_tile = filtered_tile.flatten()
+                    points_tile = points_tile[filtered_tile == 0]
 
                 # skip if no points were found
                 if points_tile.shape[0] == 0:
@@ -189,7 +244,7 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
                 continue
 
             # get the best ortho
-            point_tile = best_points
+            points_tile = best_points
             rot_matrix = best_rot_matrix
             zoom_factors = best_zoom_factors
 
@@ -198,11 +253,10 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
             points_tile[:, 3] = points_tile[:, 3] * (1 / zoom_factors[0])
 
             # rotate points back
-            point_tile[:, 2:] = rp.rotate_points(point_tile[:, 2:], rot_matrix, invert=True)
+            points_tile[:, 2:] = rp.rotate_points(points_tile[:, 2:], rot_matrix, invert=True)
 
             # convert points to absolute values
-            absolute_points_tile = np.array([sat_transform_tile * tuple(point)
-                                             for point in points_tile[:, 0:2]])
+            absolute_points_tile = np.array([sat_transform_tile * tuple(point) for point in points_tile[:, 0:2]])
             points_tile[:, 0:2] = absolute_points_tile
 
             # account for the tile offset
@@ -222,6 +276,10 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
     else:
         points = np.empty((0, 4))
 
+    # account for the trimming
+    points[:, 2] = points[:, 2] + trim_x_min
+    points[:, 3] = points[:, 3] + trim_y_min
+
     if points.shape[0] == 0:
         raise ValueError("No tie points found in all tiles")
 
@@ -231,8 +289,8 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
                                              gdal_order=3)
 
     # apply the transform to the ortho
-    if save_path is not None:
-        at.apply_transform(ortho, transform, save_path)
+    if save_path_ortho is not None:
+        at.apply_transform(trimmed_ortho, transform, save_path_ortho)
 
     # reshape the transform to a 3x3 matrix
     transform = np.reshape(transform, (3, 3))
@@ -255,11 +313,18 @@ def georef_ortho(ortho: np.ndarray, footprints: list , lst_aligned: list,
     transformed_corners = transformed_corners[:, :2] / transformed_corners[:, 2, np.newaxis]
 
     # Calculate the transformed geographic bounds
-    min_x = np.min(transformed_corners[:, 0])
-    min_y = np.min(transformed_corners[:, 1])
-    max_x = np.max(transformed_corners[:, 0])
-    max_y = np.max(transformed_corners[:, 1])
+    min_trans_x = np.min(transformed_corners[:, 0])
+    min_trans_y = np.min(transformed_corners[:, 1])
+    max_trans_x = np.max(transformed_corners[:, 0])
+    max_trans_y = np.max(transformed_corners[:, 1])
 
-    transformed_bounds = (min_x, min_y, max_x, max_y)
+    transformed_bounds = (min_trans_x, min_trans_y, max_trans_x, max_trans_y)
+
+    # check if the polygon of the transformed bounds overlaps with the polygon
+    print("TODOOOOOOOOO-> enter check")
+
+    # save the transform
+    if save_path_transform is not None:
+        np.savetxt(save_path_transform, transform, delimiter=',')
 
     return transform, transformed_bounds

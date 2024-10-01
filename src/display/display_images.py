@@ -312,6 +312,7 @@ def display_images(images: np.ndarray | list[np.ndarray],
 
         # Set titles for the x and y axes if specified and subplot is in the correct position
         if style_config.get('titles_x') and is_bottom:
+            # TODO: FIX THIS
             ax.set_xlabel(style_config['titles_x'])
         if style_config.get('titles_y') and is_leftmost:
             ax.set_ylabel(style_config['titles_y'])

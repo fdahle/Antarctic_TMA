@@ -12,10 +12,12 @@ debug_show_points = False
 
 def find_gcps(dem: np.ndarray, transform: np.ndarray,
               bounding_box, zoom_level: int,
-              resolution: float, mask: np.ndarray | None = None,
+              resolution: float,
+              mask: np.ndarray | None = None,
+              ortho: np.ndarray | None = None,
               ) -> pd.DataFrame:
     """
-    FInd GCPS in the DEM and export them to a csv file.
+    Find GCPS in the DEM and export them to a csv file.
     Args:
         dem (np.ndarray): DEM created by the SfM pipeline.
         transform (np.ndarray): Transformation matrix.
@@ -99,8 +101,19 @@ def find_gcps(dem: np.ndarray, transform: np.ndarray,
 
         points = np.vstack([df['x_px'].values, df['y_px'].values]).T
         points_ignored = np.vstack([df_ignored['x_px'].values, df_ignored['y_px'].values]).T
-        di.display_images([dem, dem, mask, mask],
-                          image_types=['dem', 'dem', 'binary','binary'],
-                          points=[points, points_ignored, points, points_ignored])
+        style_config = {
+            "titles_x": ["Points", "ignored Points"]
+        }
+        if ortho is None:
+            di.display_images([dem, dem, mask, mask],
+                              image_types=['dem', 'dem', 'binary', 'binary'],
+                              points=[points, points_ignored, points, points_ignored],
+                              style_config=style_config)
+        else:
+            style_config["plot_shape"] = (3, 2)
+            di.display_images([dem, dem, mask, mask, ortho, ortho],
+                              image_types=['dem', 'dem', 'binary', 'binary', 'gray', 'gray'],
+                              points=[points, points_ignored, points, points_ignored, points, points_ignored],
+                              style_config=style_config)
 
     return df

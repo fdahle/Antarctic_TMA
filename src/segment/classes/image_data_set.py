@@ -255,8 +255,7 @@ class ImageDataSet(Dataset):
 
         # first split in train and a temporary set (for test/val)
         # no seed required as shuffle=False
-        stratifier = IterativeStratification(n_splits=2, sample_distribution_per_fold=dist_1)  #, shuffle=True,
-                                             #random_state=self.params_train["seed"])
+        stratifier = IterativeStratification(n_splits=2, sample_distribution_per_fold=dist_1)
 
         # get the idx (=index number, not an id)
         temp_idx, train_idx = next(stratifier.split(X=list_of_ids, y=list_of_labels))

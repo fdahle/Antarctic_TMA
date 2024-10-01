@@ -102,8 +102,9 @@ def create_agisoft_fld(image_ids: list[str],
         elements = text_string.split(",")
 
         # Group the elements in chunks of 4 and convert them into tuples of four integers
-        text_boxes = [(int(elements[i]), int(elements[i + 1]), int(elements[i + 2]), int(elements[i + 3]))
-                      for i in range(0, len(elements), 4)  # Step by 4 to create tuples of 4 ints
+        text_boxes = [
+            (int(elements[i]), int(elements[i + 1]), int(elements[i + 2]), int(elements[i + 3]))
+            for i in range(0, len(elements), 4)  # Step by 4 to create tuples of 4 ints
         ]
 
         # load the mask

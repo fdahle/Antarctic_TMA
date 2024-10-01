@@ -1,6 +1,6 @@
 import geopandas as gpd
 import Metashape
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon
 
 
 def export_footprints(chunk, save_fld):

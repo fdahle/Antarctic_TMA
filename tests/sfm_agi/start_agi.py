@@ -1,3 +1,5 @@
+"""run an agisoft project with given images"""
+
 # Python imports
 import os
 
@@ -10,15 +12,15 @@ from shapely import wkt
 os.environ['KMP_WARNINGS'] = '0'
 
 # Local imports
-import src.sfm_agi.run_agi as ra
+import src.sfm_agi.run_agi as ra  # noqa
 
 import src.base.connect_to_database as ctd  # noqa
 import src.georef.snippets.calc_azimuth as ca  # noqa
+import src.load.load_military_focal_length as lmfl  # noqa
 import src.sfm_agi.old.run_agi_relative as rar  # noqa
 import src.sfm_agi.old.run_agi_absolute as raa  # noqa
 import src.other.extract.extract_ids_by_area as eia  # noqa
 
-"""
 # define the image ids
 image_ids = [
     "CA181332V0124", "CA181332V0125", "CA181332V0127", "CA181332V0128",
@@ -27,34 +29,70 @@ image_ids = [
     "CA184332V0072", "CA184332V0073", "CA184332V0074", "CA184332V0075",
     "CA184332V0077", "CA184332V0078", "CA184332V0079"
 ]
-"""
-# some settings
-project_name = "tp_gcp_test"
-use_positions = False  # if true, camera position and rotations will be given to agisoft
-horizontal_camera_accuracy = 100  # in m
-vertical_camera_accuracy = 100  # in m
-gcp_accuracy = "TODO"
-limit_images = 4
-only_vertical = True
-overwrite = False
-resume = True
 
-min_x = -2358616.2502435083
-min_y = 1225594.5941433292
-max_x = -2399188.311136363
-max_y = 1293414.1377820491
+image_ids = ["CA214832V0074", "CA214832V0075", "CA214832V0076",
+             "CA214832V0077", "CA214832V0078"]
+bounds=None
+
+"""
+min_x = -2412960
+min_y = 1246047
+max_x = -2393107
+max_y = 1261346
 bounds = [min_x, min_y, max_x, max_y]
 
 # get the image ids
 image_ids = eia.extract_ids_by_area(bounds, footprint_type="exact",
                                     check_clusters=True)
+"""
 
+# project settings
+project_name = "another_matching_test_triangulate"
+overwrite = True
+resume = False
+
+# accuracy settings (None means not using it)
+camera_accuracy = (100, 100, 100)  # x, y, z in m
+gcp_accuracy = (100, 100, 100)
+
+
+# input settings
+limit_images = 0  # 0 means no limit
+use_positions = False  # if true, camera position and rotations will be given to agisoft
+only_vertical = False
+
+
+"""image_ids = [
+    "CA214832V0078",
+    "CA215132V0297",
+    "CA215132V0298",
+    "CA215132V0299",
+    "CA215132V0300",
+    "CA215132V0301",
+    "CA215132V0302",
+    "CA215332V0422",
+    "CA214832V0073",
+    "CA214932V0161",
+    "CA215032V0249",
+    "CA215032V0252",
+    "CA215032V0253",
+    "CA215032V0254",
+    "CA215032V0255",
+    "CA215132V0289",
+    "CA215132V0298",
+    "CA215732V0041"
+]
+"""
 # define the path to the image folder
 path_image_folder = "/data/ATM/data_1/aerial/TMA/downloaded"
 georef_table = "images_extracted"
 
 # create lst with absolute paths
 images = [os.path.join(path_image_folder, image + ".tif") for image in image_ids]
+
+# check if we have at least 3 images
+if len(images) < 3:
+    raise ValueError("Need at least 3 images")
 
 # Convert the list to a string that looks like a tuple
 image_ids_string = ', '.join(f"'{image_id}'" for image_id in image_ids)
@@ -77,14 +115,11 @@ images = [images[image_ids.index(image_id)] for image_id in data['image_id']]
 # add images as a column to data
 data['image_path'] = images
 
-# remove images without a footprint
-data = data.dropna(subset=['footprint_exact'])
-
 if only_vertical:
     # filter for images where 'V' is in the image_id
     data = data[data['image_id'].str.contains('V')]
 
-if limit_images is not None:
+if limit_images > 1:
     data = data.head(limit_images)
 
 # get the number of unique flight paths (2:6 of image_id)
@@ -112,8 +147,13 @@ def _get_z(z_row):
     return 22000 * feet_to_meters
 
 
-print("WARNING: Using default value for focal length.")
-data['focal_length'] = data['focal_length'].fillna(154.43)
+# get the focal length from the military calibration
+data['focal_length'] = data['image_id'].apply(lambda x: lmfl.load_military_focal_length(x, None, conn))
+
+# check if there are any missing focal lengths
+if data['focal_length'].isnull().sum() > 0:
+    print("WARNING: Using default value for focal length.")
+    data['focal_length'] = data['focal_length'].fillna(154.43)
 
 # create x, y, z columns
 data['pos_x'] = data['position_exact'].apply(lambda x: x.x)
@@ -121,16 +161,16 @@ data['pos_y'] = data['position_exact'].apply(lambda x: x.y)
 data['pos_z'] = data.apply(_get_z, axis=1)
 data['pos_tuple'] = data.apply(lambda _row: (_row['pos_x'], _row['pos_y'], _row['pos_z']), axis=1)
 
-
 # create the different dicts from the dataframe
 focal_length_dict = data.set_index('image_id')['focal_length'].to_dict()
 footprint_dict = data.set_index('image_id')['footprint_exact'].to_dict()
 position_dict = data.set_index('image_id')['pos_tuple'].to_dict()
 
 # create accuracy dict
-accuracy_dict = {}
-for image_id in data['image_id']:
-    accuracy_dict[image_id] = (horizontal_camera_accuracy, horizontal_camera_accuracy, vertical_camera_accuracy)
+if camera_accuracy is not None:
+    accuracy_dict = {image_id: camera_accuracy for image_id in data['image_id']}
+else:
+    accuracy_dict = None
 
 # create rotation dict
 rotation_dict = {}
@@ -173,11 +213,9 @@ if use_positions is False:
     rotation_dict = None
     accuracy_dict = None
 
-print("TEEMP")
-focal_length_dict = None
-
 ra.run_agi(project_name, images,
            focal_lengths=focal_length_dict, camera_footprints=footprint_dict,
            camera_positions=position_dict, camera_rotations=rotation_dict,
-           camera_accuracies=accuracy_dict,
-           azimuth=azimuth, absolute_bounds=bounds, overwrite=overwrite, resume=resume)
+           camera_accuracies=accuracy_dict, gcp_accuracy=gcp_accuracy,
+           azimuth=azimuth, absolute_bounds=bounds,
+           overwrite=overwrite, resume=resume)

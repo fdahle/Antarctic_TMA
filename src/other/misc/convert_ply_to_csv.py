@@ -1,7 +1,7 @@
 import os
-import numpy as np
 import pandas as pd
 import src.load.load_pointcloud as lpc
+
 
 def convert_ply_to_csv(fld):
     """
@@ -30,9 +30,12 @@ def convert_ply_to_csv(fld):
         df.to_csv(output_file, index=False, header=False)
         print(f"Saved CSV to {output_file}")
 
+
 if __name__ == "__main__":
+
+    project_name = "another_matching_test_triangulate"
     # Define the path to the folder containing the PLY files
-    ply_fld = "/home/fdahle/Desktop/agi_test2/point_cloud_small"
+    ply_fld = f"//data/ATM/data_1/sfm/agi_projects/{project_name}/{project_name}.files/0/0/point_cloud"
 
     # Convert the PLY files to CSV files
     convert_ply_to_csv(ply_fld)

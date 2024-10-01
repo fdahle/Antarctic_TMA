@@ -7,6 +7,8 @@ import numpy as np
 import shutil
 import sys
 import json
+import geopandas as gpd
+from shapely.geometry import Point
 
 # Local imports
 import src.base.load_credentials as lc
@@ -331,9 +333,6 @@ def init_agi(project_name, images,
             os.makedirs(save_fld)
         st.save_tie_points(chunk, save_fld)
 
-    import geopandas as gpd
-    from shapely.geometry import Point, Polygon
-
     if DEBUG["save_positions"]:
         save_fld = os.path.join(project_fld, "shapes")
         if not os.path.exists(save_fld):
@@ -498,7 +497,7 @@ def init_agi(project_name, images,
         if not os.path.exists(save_fld):
             os.makedirs(save_fld)
 
-        #save_path = os.path.join(save_fld, "footprints.shp")
+        # save_path = os.path.join(save_fld, "footprints.shp")
 
         import src.sfm_agi.snippets.create_footprints as cf
         cf.create_footprints(chunk, save_fld)

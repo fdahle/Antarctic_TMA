@@ -62,8 +62,6 @@ def create_adapted_mask(existing_mask: np.ndarray, image_id: str,
     if len(text_string) > 0 and "[" not in text_string:
         text_string = "[" + text_string + "]"
 
-    print(text_string)
-
     # Replace square brackets with empty strings and semicolons with commas
     text_string = text_string.replace("[", "").replace("]", "").replace(";", ",")
 

@@ -12,7 +12,7 @@ def create_confidence_arr(dem, point_cloud, transform,
     dem[dem == dem_nodata] = np.nan
 
     # convert the transform to a numpy array
-    if type(transform) == rasterio.Affine:
+    if type(transform) is rasterio.Affine:
         transform = np.asarray(transform).reshape(3, 3)
 
     # Apply the inverse of the affine transform to map x, y to pixel coordinates

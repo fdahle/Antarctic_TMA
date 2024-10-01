@@ -4,6 +4,16 @@ from shapely.geometry import Point, Polygon
 
 
 def create_footprints(chunk, save_fld):
+    """
+
+    Args:
+        chunk:
+        save_fld:
+
+    Returns:
+
+    """
+
     points_path = save_fld + "/cameras_aligned.shp"
     footprints_path = save_fld + "/footprints_aligned.shp"
     flat_footprints_path = save_fld + "/footprints_flat.shp"
@@ -62,7 +72,7 @@ def create_footprints(chunk, save_fld):
                            [0, c_height - 1]]:
                 ray_origin = camera.unproject(Metashape.Vector([x, y, 0]))  # noqa
                 ray_target = camera.unproject(Metashape.Vector([x, y, 1]))  # noqa
-                if type(surface) == Metashape.Elevation:
+                if type(surface) is Metashape.Elevation:
                     dem_origin = transform.mulp(ray_origin)
                     dem_target = transform.mulp(ray_target)
 
@@ -113,6 +123,6 @@ def create_footprints(chunk, save_fld):
     gdf_flat_footprints.set_crs(epsg=3031, inplace=True)  # Change EPSG code as necessary
 
     # Save to a shapefile
-    #gdf.to_file(points_path)
+    # gdf.to_file(points_path)
     gdf_footprints.to_file(footprints_path)
     gdf_flat_footprints.to_file(flat_footprints_path)

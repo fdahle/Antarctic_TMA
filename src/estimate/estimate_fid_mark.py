@@ -4,7 +4,6 @@
 import copy
 import pandas as pd
 import psycopg2
-from psycopg2 import extensions
 from typing import Optional, Union
 
 # Local imports

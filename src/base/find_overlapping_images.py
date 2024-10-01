@@ -37,6 +37,11 @@ def find_overlapping_images(
     if working_modes is None:
         working_modes = ["ids", "footprints"]
 
+    # check for file extensions (raise error if yes)
+    for image_id in image_ids:
+        if "." in image_id:
+            raise ValueError("Image IDs should not contain file extensions")
+
     # verify the working modes
     for mode in working_modes:
         if mode not in ["ids", "footprints"]:
@@ -69,6 +74,8 @@ def find_overlapping_images(
             # Skip if not the important_id
             if important_id and id1 != important_id:
                 continue
+
+                print(id1)
 
             # Extract flight path and number ID from the image ID
             flight_path1, num_id1 = id1[2:6], int(id1[-4:])

@@ -26,14 +26,14 @@ class UNET_SMALL(nn.Module):
         conv2 = self.conv2(conv1)
         conv3 = self.conv3(conv2)
 
-        upconv3 = self.upconv3(conv3)
-        upconv2 = self.upconv2(torch.cat([upconv3, conv2], 1))
-        upconv1 = self.upconv1(torch.cat([upconv2, conv1], 1))
+        up_conv3 = self.upconv3(conv3)
+        up_conv2 = self.upconv2(torch.cat([up_conv3, conv2], 1))
+        up_conv1 = self.upconv1(torch.cat([up_conv2, conv1], 1))
 
         # relu to prob
-        # upconv1 = self.relu(upconv1)
+        # up_conv1 = self.relu(up_conv1)
 
-        return upconv1
+        return up_conv1
 
     @staticmethod
     def contract_block(in_channels, out_channels, kernel_size, padding):

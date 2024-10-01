@@ -9,108 +9,14 @@ import src.base.find_tie_points as ftp
 import src.export.export_ply as ep
 import src.load.load_image as li
 import src.sfm_agi.snippets.adapt_frame as af
+import src.sfm_agi.snippets.find_tie_points_for_sfm as aftp
 import src.sfm_agi.snippets.zip_folder as zp
 
-def create_custom_tie_points(chunk,
-                             files_fld,
-                             img_folder,
-                             mask_folder=None,
-                             matching_method='all', min_conf=0.7,
-                             min_points_img=10, min_tps = 25, max_tps = 4000):
+debug_delete_files = False  # if False the txt files are not deleted
 
-    # here the image ids are saved
-    image_ids = []
+def create_matching_structure(path_project_files, tp_dict, conf_dict):
 
-    # get the tif-images in the folder
-    for filename in os.listdir(img_folder):
-        if filename.lower().endswith('.tif'):
-            image_ids.append(filename)
-
-    # here the images and masks are saved
-    image_dict = {}
-    mask_dict = {}
-
-    # list with all combinations of images
-    combinations = []
-
-    if matching_method == 'all':
-
-        # create a list with all combinations of images
-        for i in range(len(image_ids)):
-            for j in range(i+1, len(image_ids)):
-
-                # skip identical images
-                if image_ids[i] == image_ids[j]:
-                    continue
-
-                if (image_ids[j], image_ids[i]) in combinations:
-                    continue
-
-                # add the combination to the list
-                combinations.append((image_ids[i], image_ids[j]))
-
-    # init tie-point detector
-    tpd = ftp.TiePointDetector('lightglue', verbose=True,
-                               min_conf_value=min_conf)
-
-    # here the tie points & confidence values are saved
-    tp_dict = {}
-    conf_dict = {}
-
-    # iterate over all combinations
-    print("Iterate combinations")
-    for id_img1, id_img2 in tqdm(combinations):
-
-        # load the images
-        if id_img1 not in image_dict:
-            path_img1 = os.path.join(img_folder, id_img1)
-            image_dict[id_img1] = li.load_image(path_img1)
-        image1 = image_dict[id_img1]
-
-        if id_img2 not in image_dict:
-            path_img2 = os.path.join(img_folder, id_img2)
-            image_dict[id_img2] = li.load_image(path_img2)
-        image2 = image_dict[id_img2]
-
-        # load the masks
-        if mask_folder is not None:
-            if id_img1 not in mask_dict:
-                path_mask1 = os.path.join(mask_folder, id_img1)
-                path_mask1 = path_mask1.replace('.tif', '_mask_adapted.tif')
-                mask_dict[id_img1] = li.load_image(path_mask1)
-            mask1 = mask_dict[id_img1]
-            if id_img2 not in mask_dict:
-                path_mask2 = os.path.join(mask_folder, id_img2)
-                path_mask2 = path_mask2.replace('.tif', '_mask_adapted.tif')
-                mask_dict[id_img2] = li.load_image(path_mask2)
-            mask2 = mask_dict[id_img2]
-        else:
-            mask1 = None
-            mask2 = None
-
-        # get the tie points
-        tps, conf = tpd.find_tie_points(image1, image2,
-                                        mask1=mask1, mask2=mask2)
-
-        print(f"Number of tie points between {id_img1} and {id_img2}: ", tps.shape[0])
-
-        # skip if too few tie points are found
-        if tps.shape[0] < min_tps:
-            continue
-
-        # limit number of tie points
-        if tps.shape[0] > max_tps:
-
-            # select the top points
-            top_indices = np.argsort(conf)[-max_tps:][::-1]
-            tps = tps[top_indices]
-
-        # save the tie points and conf
-        tp_dict[(id_img1, id_img2)] = tps
-        conf_dict[(id_img1, id_img2)] = conf
-
-
-    # here tie points are saved per image
+    # dict to save tie points per image
     points_per_image = {}
 
     # iterate over all tie points to get points per image
@@ -135,7 +41,7 @@ def create_custom_tie_points(chunk,
         points_per_image[img2_id] = np.vstack((points_per_image[img2_id], points2))
 
     # create path where the ply files are saved
-    path_pc_fld = os.path.join(files_fld, "0", "0", "point_cloud")
+    path_pc_fld = os.path.join(path_project_files, "0", "0", "point_cloud")
     if not os.path.exists(path_pc_fld):
         os.makedirs(path_pc_fld)
 
@@ -159,9 +65,11 @@ def create_custom_tie_points(chunk,
 
     # zip the folder
     output_zip_path = os.path.join(path_pc_fld, 'point_cloud.zip')
-    zp.zip_folder(path_pc_fld, output_zip_path, delete_files=True)
+    zp.zip_folder(path_pc_fld, output_zip_path, delete_files=debug_delete_files)
 
-    af.adapt_frame(files_fld, "point_cloud", "path", "point_cloud/point_cloud.zip")
+    # adapt the frame
+    af.adapt_frame(path_project_files, "point_cloud", "path", "point_cloud/point_cloud.zip")
+
 
 def _generate_ply_files(tp_dict, files_fld):
     """

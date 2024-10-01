@@ -1,9 +1,7 @@
 import os
 
 import src.base.connect_to_database as ctd
-import src.base.rotate_image as ri
-import src.export.export_tiff as et
-import src.load.load_image as li
+
 
 def check_sky(image_path, image_id=None, conn=None):
     """

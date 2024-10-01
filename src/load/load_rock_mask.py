@@ -13,6 +13,7 @@ import src.load.load_shape_data as lsd
 PATH_QUANTARTICA = "/data/ATM/data_1/quantarctica/Quantarctica3"  # noqa
 PATH_ROCK_MASK = os.path.join(PATH_QUANTARTICA, "Basemap/ADD_Rock_outcrop_?QUALITY?_res_polygon.shp")
 
+
 def load_rock_mask(bounds: list, resolution: int | float, quality: str = "high"):
     """
     Use the absolute bounds to load the rock mask from Quantarctica. The shape file

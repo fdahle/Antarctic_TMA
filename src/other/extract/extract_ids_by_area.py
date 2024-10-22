@@ -13,7 +13,7 @@ import src.base.connect_to_database as ctd
 import src.display.display_shapes as ds
 
 # Debug flags
-debug_show_footprints = False
+debug_show_footprints = True
 
 
 def extract_ids_by_area(aoi: Union[Polygon, List[float]],

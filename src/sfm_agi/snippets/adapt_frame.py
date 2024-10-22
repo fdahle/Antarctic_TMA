@@ -43,8 +43,6 @@ def adapt_frame(project_files, element_tag, attribute_name, attribute_value):
         new_element.set(attribute_name, attribute_value)
         root.append(new_element)
 
-    ET.dump(root)  # This will print the entire XML structure to the console
-
     # Save the changes back to the XML file
     tree.write(path_frame_xml)
 

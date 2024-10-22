@@ -24,10 +24,6 @@ def zip_folder(folder_path, output_zip_path, delete_files=False):
 
                 # Ensure the file being zipped is not the output zip file
                 if os.path.abspath(file_path) != os.path.abspath(output_zip_path):
-                    if os.path.relpath(file_path, folder_path) == "doc.xml":
-                        # print content of doc.xml
-                        with open(file_path, 'r') as f:
-                            print(f.read())
                     zipf.write(file_path, os.path.relpath(file_path, folder_path))
 
     # If delete_files is True, delete the unzipped files
@@ -47,10 +43,12 @@ def zip_folder(folder_path, output_zip_path, delete_files=False):
 
 if __name__ == "__main__":
 
+    project_name = "agi_agi_own"
+
     # Define the path to the folder to be zipped
-    folder_path = "/data/ATM/data_1/sfm/agi_projects/another_matching_try_unopened/another_matching_try.files/0/0/point_cloud"
-    zip_path = "/data/ATM/data_1/sfm/agi_projects/another_matching_try_unopened/another_matching_try.files/0/0/point_cloud.zip"
-    delete_files = True
+    folder_path = f"/data/ATM/data_1/sfm/agi_projects/{project_name}/{project_name}.files/0/0/point_cloud/point_cloud"
+    zip_path = f"/data/ATM/data_1/sfm/agi_projects/{project_name}/{project_name}.files/0/0/point_cloud/point_cloud.zip"
+    delete_files = False
 
     # Zip the folder
     zip_folder(folder_path, zip_path, delete_files)

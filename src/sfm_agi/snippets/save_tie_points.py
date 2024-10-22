@@ -38,14 +38,23 @@ def save_tie_points(chunk, save_path):
         for camera in [camera1, camera2]:
             valid_matches = set()
             for proj in projections[camera]:
-                track_id = proj.track_id
-                point_id = point_ids[track_id]
 
+                # get the track id
+                track_id = proj.track_id
+
+                # skip invalid points
+                try:
+                    point_id = point_ids[track_id]
+                except IndexError:
+                    continue
                 if point_id < 0:
                     continue
-                if not points[point_id].valid:  # skipping invalid points
+                if not points[point_id].valid:
                     continue
+
+                # add to valid matches
                 valid_matches.add(point_id)
+
             camera_matches_valid[camera] = valid_matches
 
         # Get valid matches
@@ -104,6 +113,13 @@ def save_tie_points(chunk, save_path):
 
         image_path = f"{save_path}/{camera1.label}_{camera2.label}.png"
 
+        style_config = {
+            'title': f"{len(valid_matches_array) + len(invalid_matches_array)} tie points "
+                     f"between {camera1.label} and {camera2.label} "
+                     f"({len(valid_matches_array)} valid, "
+                     f"{len(invalid_matches_array)} invalid)",
+        }
+
         # Display tie points
         di.display_images([image1, image2], tie_points=matches_array,
-                          tie_points_conf=conf, save_path=image_path)
+                          tie_points_conf=conf, save_path=image_path, style_config=style_config)

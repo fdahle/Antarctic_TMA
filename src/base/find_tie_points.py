@@ -22,7 +22,6 @@ import src.display.display_images as di
 # Constants
 OOM_REDUCE_VALUE = 0.9
 
-
 class TiePointDetector:
     """
     The TiePointDetector class is used to find tie points between two images using the specified matching method.
@@ -31,7 +30,7 @@ class TiePointDetector:
     def __init__(self, matching_method: str, matching_additional: bool = True, matching_extra: bool = True,
                  keep_resized_points: bool = False, min_resized_points: int = 10, num_transform_points: int = 25,
                  min_conf_value: float = 0.0, ransac_value: float = 5.0, average_threshold: float = 10.0,
-                 display: bool = False, catch=False, verbose: bool = False):
+                 tp_type=int, display: bool = False, display_level=1, catch=False, verbose: bool = False):
         """
         Initializes the TiePointDetector with specified configuration for tie-point detection and matching.
 
@@ -63,6 +62,7 @@ class TiePointDetector:
         self.min_resized_points = min_resized_points
         self.num_transform_points = num_transform_points
         self.ransac_value = ransac_value
+        self.tp_type = tp_type
 
         self.verbose = verbose
         self.catch = catch
@@ -214,7 +214,10 @@ class TiePointDetector:
                     # remove duplicates in tps and conf (can be that the same tie-points are detected
                     # in additional and extra)
                     tps, unique_indices = np.unique(tps, return_index=True, axis=0)
-                    tps = tps.astype(int)
+
+                    # cast tps
+                    tps = tps.astype(self.tp_type)
+
                     conf = conf[unique_indices]
 
                 # apply threshold filter
@@ -624,8 +627,8 @@ class TiePointDetector:
             pts_additional = np.column_stack((pts_additional[:, 2], pts_additional[:, 3],
                                               pts_additional[:, 0], pts_additional[:, 1]))
 
-        # convert tie-points to int
-        pts_additional = pts_additional.astype(int)
+        # convert tie-points
+        pts_additional = pts_additional.astype(self.tp_type)
 
         # export data for additional matching
         # path_img1 = "/data/ATM/papers/georef_paper/revision/additional_img1.tif"
@@ -818,8 +821,8 @@ class TiePointDetector:
         if switch_images:
             pts_extra = np.column_stack((pts_extra[:, 2], pts_extra[:, 3], pts_extra[:, 0], pts_extra[:, 1]))
 
-        # convert tie-points to int
-        pts_extra = pts_extra.astype(int)
+        # convert tie-points
+        pts_extra = pts_extra.astype(self.tp_type)
 
         # export data for extra matching
         # path_img1 = "/data/ATM/papers/georef_paper/revision/extra_img1.tif"
@@ -898,7 +901,7 @@ class TiePointDetector:
         pts[:, 1] = pts[:, 1] * 1 / resize_factor1
         pts[:, 2] = pts[:, 2] * 1 / resize_factor2
         pts[:, 3] = pts[:, 3] * 1 / resize_factor2
-        pts = pts.astype(int)
+        pts = pts.astype(self.tp_type)
 
         self.logger.print(f"{len(conf)} initial matches found ({np.round(np.mean(conf), 3)})")
 
@@ -1040,8 +1043,8 @@ class TiePointDetector:
         pts1[:, 0] = pts1[:, 0] * 1 / resize_factor2
         pts1[:, 1] = pts1[:, 1] * 1 / resize_factor2
 
-        pts0 = pts0.astype(int)
-        pts1 = pts1.astype(int)
+        pts0 = pts0.astype(self.tp_type)
+        pts1 = pts1.astype(self.tp_type)
 
         return pts0, pts1, conf
 

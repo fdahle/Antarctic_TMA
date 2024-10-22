@@ -16,6 +16,10 @@ def get_image_stats(chunk):
     # Access the tie points (sparse cloud points) in the chunk
     point_cloud = chunk.tie_points
     points = point_cloud.points
+
+    if points is None:
+        return {}, {}
+
     n_points = len(points)
 
     # Initialize lists and dictionaries for results

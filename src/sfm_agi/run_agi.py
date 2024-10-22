@@ -28,11 +28,14 @@ import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
 import src.load.load_image as li
 import src.load.load_pointcloud as lp
+import src.sfm_agi.other.create_tps_frame as ctf
 import src.sfm_agi.snippets.add_gcp_markers as agm
 import src.sfm_agi.snippets.add_tp_markers as atm
 import src.sfm_agi.snippets.create_adapted_mask as cam
 import src.sfm_agi.snippets.create_confidence_array as cca
+import src.sfm_agi.snippets.create_difference_dem as cdd
 import src.sfm_agi.snippets.create_matching_structure as cms  # noqa: SpellingInspection
+import src.sfm_agi.snippets.convert_ply_files as cpf
 import src.sfm_agi.snippets.find_gcps as fg
 import src.sfm_agi.snippets.find_tie_points_for_sfm as ftp
 import src.sfm_agi.snippets.georef_ortho as go
@@ -49,50 +52,63 @@ DEBUG_MODE = True  # if true errors are raised and not ignored
 
 # Variables for sfm
 fixed_focal_length = True
+use_rotations_only_for_tps = True
 pixel_size = 0.025  # in mm
 resolution_relative = 0.001  # in px
 resolution_absolute = 2  # in m
 matching_method = "overlap"  # which images should be matched (all, sequential, overlap)
 min_overlap = 0.5  # the minimum overlap for matching with overlap
 custom_matching = True  # if True, custom matching will be used (lightglue)
+max_tps = 0
+min_tp_confidence = 0.9
+tp_type = float
+input_mode = "bundler"   # how are custom tiepoints added in metashape, can be 'agi' or 'bundler'
 custom_markers = False  # if True, custom markers support the matching of Agisoft
 zoom_level_dem = 10  # in m
 use_gcp_mask = True  # filter ground control points with a mask
 mask_type = "confidence"  # "confidence" or "rock"
-min_confidence = 0.8
+min_gcp_confidence = 0.8
 mask_buffer = 10  # in pixels
 
 # Other variables
 save_text_output = True  # if True, the output will be saved in a text file
 save_commands = True  # if True, the arguments of the commands will be saved in a json file
-auto_true_for_new = False  # new projects will have all steps set to True
+auto_true_for_new = True  # new projects will have all steps set to True
 flag_display_steps = True  # an additional flag to enable/disable the display steps
-absolute_mode = False  # if False, the execution stops after the relative steps
+absolute_mode = True  # if False, the execution stops after the relative steps
 
 # Steps
 STEPS = {
-    "create_masks": True,
-    "union_masks": True,
-    "enhance_photos": True,
+    "create_masks": False,
+    "union_masks": False,
+    "enhance_photos": False,
     "match_photos": True,
     "align_cameras": True,
-    "build_depth_maps_relative": False,
-    "build_pointcloud_relative": False,
-    "build_mesh_relative": False,
-    "build_dem_relative": False,
-    "build_orthomosaic_relative": False,
-    "build_confidence_relative": False,
-    "georef_output_images": False,
-    "create_gcps": False,
-    "load_gcps": False,
-    "build_depth_maps_absolute": False,
-    "build_pointcloud_absolute": False,
-    "build_mesh_absolute": False,
-    "build_dem_absolute": False,
-    "build_orthomosaic_absolute": False,
-    "export_alignment": False,
-    "build_confidence_absolute": False,
-    "evaluate_dem": False,
+    "build_depth_maps_relative": True,
+    "build_pointcloud_relative": True,
+    "build_mesh_relative": True,
+    "build_dem_relative": True,
+    "build_orthomosaic_relative": True,
+    "build_confidence_relative": True,
+    "georef_output_images": True,
+    "create_gcps": True,
+    "load_gcps": True,
+    "build_depth_maps_absolute": True,
+    "build_pointcloud_absolute": True,
+    "build_mesh_absolute": True,
+    "build_dem_absolute": True,
+    "build_orthomosaic_absolute": True,
+    "export_alignment": True,
+    "build_confidence_absolute": True,
+    "build_difference_dem": True,
+    "evaluate_dem": True,
+    "save_to_psql": False,
+}
+
+DEBUG_STEPS = {
+    "save_tps_to_csv": True,
+    "save_transforms": True,
+    "show_connections": True   # add connections lines between the images
 }
 
 # Display settings
@@ -103,13 +119,20 @@ DISPLAY_STEPS = {
     "save_aoi": True,
 }
 
+CACHE_STEPS = {
+    'save_masks': True,
+    'use_masks': True,
+    'save_tps': True,
+    'use_tps': True,
+}
+
 
 def run_agi(project_name: str, images: list,
             camera_positions: dict | None = None, camera_accuracies: dict | None = None,
             camera_rotations: dict | None = None, camera_footprints: dict | None = None,
             camera_tie_points: dict | None = None, focal_lengths=None,
             gcp_accuracy: tuple | None = None,
-            azimuth: float = None, absolute_bounds: list | None =None,
+            azimuth: float = None, absolute_bounds: list | None = None,
             epsg_code: int = 3031,
             overwrite: bool = False, resume: bool = False):
     """
@@ -170,6 +193,23 @@ def run_agi(project_name: str, images: list,
     # check if we have image
     if len(images) == 0:
         raise ValueError("No images were provided")
+
+    # check if the number of images is equal to the (optional) dicts
+    if focal_lengths is not None and len(images) != len(focal_lengths):
+        raise ValueError(f"The number of images ({len(images)}) "
+                         f"and focal lengths ({len(focal_lengths)}) do not match.")
+    if camera_footprints is not None and len(images) != len(camera_footprints):
+        raise ValueError(f"The number of images ({len(images)}) "
+                         f"and camera footprints ({len(camera_footprints)}) do not match.")
+    if camera_positions is not None and len(images) != len(camera_positions):
+        raise ValueError(f"The number of images ({len(images)}) "
+                         f"and camera positions ({len(camera_positions)}) do not match.")
+    if camera_accuracies is not None and len(images) != len(camera_accuracies):
+        raise ValueError(f"The number of images ({len(images)}) "
+                         f"and camera accuracies ({len(camera_accuracies)}) do not match.")
+    if camera_rotations is not None and len(images) != len(camera_rotations):
+        raise ValueError(f"The number of images ({len(images)}) "
+                         f"and camera rotations ({len(camera_rotations)}) do not match.")
 
     # define path to the project folder and the project files
     project_fld = os.path.join(PATH_PROJECT_FOLDERS, project_name)
@@ -248,9 +288,20 @@ def run_agi(project_name: str, images: list,
             os.makedirs(data_fld)
 
         # init display folder
-        display_fld = os.path.join(project_fld, "display")
-        if os.path.isdir(display_fld) is False:
-            os.makedirs(display_fld)
+        if any(DISPLAY_STEPS.values()):  # check if any of the display steps are True
+            display_fld = os.path.join(project_fld, "display")
+            if os.path.isdir(display_fld) is False:
+                os.makedirs(display_fld)
+        else:
+            display_fld = None
+
+        # init debug folder
+        if any(DEBUG_STEPS.values()):  # check if any of the debug steps are True
+            debug_fld = os.path.join(project_fld, "debug")
+            if os.path.isdir(debug_fld) is False:
+                os.makedirs(debug_fld)
+        else:
+            debug_fld = None
 
         # init image folder
         img_folder = os.path.join(data_fld, "images")
@@ -335,6 +386,10 @@ def run_agi(project_name: str, images: list,
             start_time = time.time()
 
             for camera in (pbar := tqdm(chunk.cameras)):
+
+                if camera.enabled is False:
+                    continue
+
                 thumb_path = os.path.join(thumb_folder, f"{camera.label}_thumb.jpg")
 
                 image = li.load_image(camera.label)
@@ -345,6 +400,14 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             tqdm.write(f"Save Thumbnails - finished ({exec_time:.4f} s)")
 
+        # get the image dimensions
+        image_dims = {}
+        for camera in chunk.cameras:
+            if camera.enabled is False:
+                continue
+
+            image_dims[camera.label] = [camera.calibration.width, camera.calibration.height]
+
         # add focal length to the images
         if focal_lengths is not None:
 
@@ -353,6 +416,9 @@ def run_agi(project_name: str, images: list,
 
             # set focal length if given
             for camera in chunk.cameras:
+
+                if camera.enabled is False:
+                    continue
 
                 # check if focal length is given
                 if camera.label in focal_lengths:
@@ -395,6 +461,9 @@ def run_agi(project_name: str, images: list,
             # iterate over the cameras
             for camera in chunk.cameras:
 
+                if camera.enabled is False:
+                    continue
+
                 # check if camera position is given
                 if camera.label in camera_positions:
 
@@ -433,6 +502,9 @@ def run_agi(project_name: str, images: list,
             # iterate over the cameras
             for camera in chunk.cameras:
 
+                if camera.enabled is False:
+                    continue
+
                 # check if camera accuracy is given
                 if camera.label in camera_accuracies:
 
@@ -454,13 +526,17 @@ def run_agi(project_name: str, images: list,
 
             doc.save()
 
-        if camera_rotations is not None:
+        # add camera rotations to the images
+        if camera_rotations is not None and use_rotations_only_for_tps is False:
 
             print("Set Camera rotations")
             start_time = time.time()
 
             # iterate over the cameras
             for camera in chunk.cameras:
+
+                if camera.enabled is False:
+                    continue
 
                 # check if camera rotation is given
                 if camera.label in camera_rotations:
@@ -499,6 +575,9 @@ def run_agi(project_name: str, images: list,
 
             # set the images to film cameras
             for camera in chunk_temp.cameras:
+                if camera.enabled is False:
+                    continue
+
                 camera.sensor.film_camera = True
                 camera.sensor.fixed_calibration = True
 
@@ -517,16 +596,32 @@ def run_agi(project_name: str, images: list,
                 _save_command_args("detectFiducials", arguments, argument_fld)
 
             # calibrate fiducials
-            for camera in chunk_temp.cameras:
-                camera.sensor.calibrateFiducials(0.025)
+            for camera in (pbar := tqdm(chunk_temp.cameras)):
+                if camera.enabled is False:
+                    continue
+
+                pbar.set_postfix_str(f"Calibrate fiducials for {camera.label}")
+
+                try:
+                    camera.sensor.calibrateFiducials(0.025)
+                except RuntimeError:
+                    print(f"WARNING: Calibration of fiducials failed for {camera.label}")
+                    print(f"{camera.label} will be removed from SfM processing.")
+                    camera.enabled = False
 
             # define path to save masks
             mask_folder = os.path.join(data_fld, "masks_original")
             if not os.path.exists(mask_folder):
                 os.makedirs(mask_folder)
 
+            if len(chunk_temp.cameras) != len(chunk.cameras):
+                raise ValueError("The number of cameras in the temporary chunk is not equal to the original chunk.")
+
             # save masks and copy them to the original chunk as well
-            for i, camera_temp in enumerate(chunk_temp.cameras):
+            for i, camera_temp in (pbar := tqdm(enumerate(chunk_temp.cameras))):
+
+                pbar.set_postfix_str(f"Save mask for {camera_temp.label}")
+
                 if camera_temp.mask is not None:
 
                     # save the mask
@@ -546,6 +641,11 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             print(f"Create masks - finished ({exec_time:.4f} s)")
 
+        # remove all cameras that are not enabled
+        for camera in chunk.cameras:
+            if camera.enabled is False:
+                chunk.remove(camera)
+
         if STEPS["union_masks"]:
 
             tqdm.write("Union masks")
@@ -560,10 +660,13 @@ def run_agi(project_name: str, images: list,
             # iterate over the cameras
             for camera in (pbar := tqdm(chunk.cameras)):
 
+                if camera.enabled is False:
+                    continue
+
                 pbar.set_postfix_str(f"Union mask for {camera.label}")
 
                 # check if camera has a mask
-                if camera.enabled and camera.mask:
+                if camera.mask:
 
                     # get the mask
                     mask = camera.mask.image()
@@ -617,7 +720,7 @@ def run_agi(project_name: str, images: list,
             doc.save()
 
         # init variable for enhanced folder
-        enhanced_folder = None
+        enhanced_folder = os.path.join(data_fld, "images_enhanced")
 
         if STEPS["enhance_photos"]:
 
@@ -626,12 +729,15 @@ def run_agi(project_name: str, images: list,
             start_time = time.time()
 
             # create folder for the enhanced images
-            enhanced_folder = os.path.join(data_fld, "images_enhanced")
             if not os.path.exists(enhanced_folder):
                 os.makedirs(enhanced_folder)
 
             # iterate over the cameras
             for camera in (pbar := tqdm(chunk.cameras)):
+
+                if camera.enabled is False:
+                    continue
+
                 pbar.set_postfix_str(f"Enhance photo for {camera.label}")
 
                 # get old image path and also set new one
@@ -672,6 +778,8 @@ def run_agi(project_name: str, images: list,
             doc.save()
 
         if DISPLAY_STEPS["save_thumbnails"] and STEPS["enhance_photos"]:
+
+            # create folder for the thumbnails
             thumb_folder = os.path.join(display_fld, "thumbnails")
             if not os.path.exists(thumb_folder):
                 os.makedirs(thumb_folder)
@@ -681,9 +789,14 @@ def run_agi(project_name: str, images: list,
             start_time = time.time()
 
             for camera in (pbar := tqdm(chunk.cameras)):
+
+                if camera.enabled is False:
+                    continue
+
+                img_path = os.path.join(data_fld, "images_enhanced", f"{camera.label}.tif")
                 thumb_path = os.path.join(thumb_folder, f"{camera.label}_e_thumb.jpg")
 
-                image = li.load_image(camera.label)
+                image = li.load_image(img_path)
                 eth.export_thumbnail(image, thumb_path)
             pbar.close()
 
@@ -704,9 +817,9 @@ def run_agi(project_name: str, images: list,
                 mask_folder = os.path.join(data_fld, "masks_adapted")
                 if not os.path.exists(mask_folder):
                     mask_folder = None
-                
-                # enhance the photos to get better and more tie points
-                if STEPS["enhance_photos"]:
+
+                # check if there is a folder with enhanced images
+                if os.path.exists(enhanced_folder):
                     tp_img_folder = enhanced_folder
                 else:
                     tp_img_folder = img_folder
@@ -716,15 +829,32 @@ def run_agi(project_name: str, images: list,
                                                                  mask_folder=mask_folder,
                                                                  matching_method=matching_method,
                                                                  footprint_dict=camera_footprints,
-                                                                 min_overlap=min_overlap)
+                                                                 rotation_dict=camera_rotations,
+                                                                 tp_type=tp_type,
+                                                                 min_overlap=min_overlap,
+                                                                 min_conf=min_tp_confidence,
+                                                                 max_tps=max_tps,
+                                                                 use_cached_tps=CACHE_STEPS['use_tps'],
+                                                                 save_tps=CACHE_STEPS['save_tps'])
 
                 # create the ply files for the custom matching
-                cms.create_matching_structure(project_files_path, tp_dict, conf_dict)
+                cms.create_matching_structure(tp_dict, conf_dict,
+                                              project_files_path,
+                                              img_folder,
+                                              input_mode=input_mode)
 
-                # load the project again to save the custom tie points
-                doc.open(project_psx_path, ignore_lock=True)
+                # for bundler some extra steps are required
+                if input_mode == "bundler":
+                    bundler_path = os.path.join(data_fld, "bundler", "bundler.out")
+                    chunk.importCameras(bundler_path, format=Metashape.CamerasFormatBundler)
+                elif input_mode == "agi":
+                    # load the project again to save the custom tie points
+                    doc = Metashape.Document(read_only=False)  # noqa
+                    doc.open(project_psx_path, ignore_lock=True)
+                    chunk = doc.chunks[0]
 
-                chunk.triangulateTiePoints()
+                import src.sfm_agi.snippets.get_image_stats as gis
+                #gis.get_image_stats(chunk)
 
             else:
 
@@ -736,8 +866,8 @@ def run_agi(project_name: str, images: list,
                     if not os.path.exists(mask_folder):
                         mask_folder = None
 
-                    # enhance the photos to get better and more tie points
-                    if STEPS["enhance_photos"]:
+                    # check if there is a folder with enhanced images
+                    if os.path.exists(enhanced_folder):
                         tp_img_folder = enhanced_folder
                     else:
                         tp_img_folder = img_folder
@@ -759,7 +889,7 @@ def run_agi(project_name: str, images: list,
                 arguments = {
                     'generic_preselection': True,
                     'reference_preselection': True,
-                    'keep_keypoints': True,
+                    'keep_keypoints': False,
                     'filter_mask': True,
                     'mask_tiepoints': True,
                     'filter_stationary_points': True,
@@ -778,7 +908,7 @@ def run_agi(project_name: str, images: list,
                     arguments['pairs'] = pairs
                 elif matching_method == "overlap":
                     # get all camera labels as image ids
-                    image_ids = [camera.label for camera in chunk.cameras]
+                    image_ids = [camera.label for camera in chunk.cameras if camera.enabled]
 
                     # get the footprints as lst
                     footprints_lst = [camera_footprints[image_id] for image_id in image_ids]
@@ -814,8 +944,6 @@ def run_agi(project_name: str, images: list,
                 else:
                     raise ValueError(f"Matching method {matching_method} not existing")
 
-                print(arguments)
-
                 # match photos
                 chunk.matchPhotos(**arguments)
 
@@ -830,6 +958,22 @@ def run_agi(project_name: str, images: list,
             # save the project
             doc.save()
 
+        if DEBUG_STEPS["save_tps_to_csv"]:
+
+            # get path to point cloud fld (dependent on bundler)
+            point_cloud_fld = os.path.join(project_files_path, "0", "0", "point_cloud")
+            tracks_path = os.path.join(point_cloud_fld, "point_cloud", "tracks.txt")
+            # check if the folder is already unzipped (with tracks.ply)
+            if os.path.exists(tracks_path) is False:
+                # convert ply files to txt files
+                cpf.convert_ply_files(point_cloud_fld, True)
+
+            # create the dataframe with tie_point/tracks
+            tps_df = ctf.create_tps_frame(os.path.join(point_cloud_fld, "point_cloud"))
+
+            output_pth = os.path.join(debug_fld, "tie_points.csv")
+            tps_df.to_csv(output_pth, index=False)
+
         # set back to the original images
         if STEPS["enhance_photos"]:
 
@@ -839,6 +983,10 @@ def run_agi(project_name: str, images: list,
 
             # iterate over the cameras
             for camera in (pbar := tqdm(chunk.cameras)):
+
+                if camera.enabled is False:
+                    continue
+
                 pbar.set_postfix_str(f"Restore image for {camera.label}")
 
                 # get original image path
@@ -862,16 +1010,19 @@ def run_agi(project_name: str, images: list,
             print("Save key points")
             start_time = time.time()
 
+            # define point cloud folder
+            point_cloud_fld = os.path.join(project_files_path, "0", "0", "point_cloud")
+
             # define save path
             kp_fld = os.path.join(display_fld, "key_points")
             if not os.path.exists(kp_fld):
                 os.makedirs(kp_fld)
 
             # get image ids
-            image_ids = [camera.label for camera in chunk.cameras]
+            image_ids = [camera.label for camera in chunk.cameras if camera.enabled]
 
             # call snippet to save key points
-            skp.save_key_points(image_ids, project_fld, kp_fld)
+            skp.save_key_points(image_ids, point_cloud_fld, kp_fld)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -900,6 +1051,9 @@ def run_agi(project_name: str, images: list,
                 'adaptive_fitting': True
             }
 
+            if custom_matching and input_mode == "bundler":
+                arguments['reset_alignment'] = True
+
             # align cameras
             chunk.alignCameras(**arguments)
 
@@ -914,7 +1068,7 @@ def run_agi(project_name: str, images: list,
             num_cameras = len(chunk.cameras)
             num_aligned = 0
             for camera in chunk.cameras:
-                if camera.transform:
+                if camera.transform and camera.enabled:
                     num_aligned += 1
 
             if num_aligned == 0:
@@ -941,8 +1095,6 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             print(f"Save tie points - finished ({exec_time:.4f} s)")
 
-        exit()
-
         # build depth maps
         if STEPS["build_depth_maps_relative"]:
 
@@ -967,12 +1119,15 @@ def run_agi(project_name: str, images: list,
         print("Create relative bounding box")
         start_time = time.time()
 
-        # update alignment, transform and projection
-        chunk.optimizeCameras()
-        chunk.updateTransform()
+        # update alignment and transform
+        if camera_positions is not None:
+            chunk.optimizeCameras()
+            chunk.updateTransform()
 
-        projection_absolute = Metashape.OrthoProjection()
-        projection_absolute.crs = chunk.crs
+        # update projection
+        if camera_positions is not None:
+            projection_absolute = Metashape.OrthoProjection()
+            projection_absolute.crs = chunk.crs
 
         # get center and size of the chunk
         center = chunk.region.center
@@ -986,11 +1141,12 @@ def run_agi(project_name: str, images: list,
                                        center.y + size.y / 2,
                                        center.z + size.z / 2])
 
-        min_corner = chunk.crs.project(chunk.transform.matrix.mulp(min_corner))
-        max_corner = chunk.crs.project(chunk.transform.matrix.mulp(max_corner))
+        if camera_positions is not None:
+            min_corner = chunk.crs.project(chunk.transform.matrix.mulp(min_corner))
+            max_corner = chunk.crs.project(chunk.transform.matrix.mulp(max_corner))
 
         # restrain the bounding box to the absolute bounds if given
-        if absolute_bounds is not None:
+        if camera_positions is not None and absolute_bounds is not None:
             min_corner.x = min(min_corner.x, absolute_bounds[0])
             min_corner.y = min(min_corner.y, absolute_bounds[1])
             max_corner.x = max(max_corner.x, absolute_bounds[2])
@@ -1112,8 +1268,6 @@ def run_agi(project_name: str, images: list,
                 arguments['resolution'] = resolution_relative
             else:
                 arguments['resolution'] = resolution_absolute
-
-            print(arguments['region'])
 
             # build the DEM
             chunk.buildDem(**arguments)
@@ -1259,7 +1413,6 @@ def run_agi(project_name: str, images: list,
 
             eti.export_tiff(conf_arr, output_conf_path,
                             transform=transform, overwrite=True)
-
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build relative confidence array - finished ({exec_time:.4f} s)")
@@ -1304,21 +1457,40 @@ def run_agi(project_name: str, images: list,
             # check which cameras are aligned
             aligned = []
             for camera in chunk.cameras:
+
+                if camera.enabled is False:
+                    continue
+
                 if camera.transform:
                     aligned.append(True)
                 else:
                     aligned.append(False)
 
             # create path for the geo-referenced ortho and transform file
-            ortho_georef_path = os.path.join(data_fld, "ortho_georeferenced.tif")
-            transform_path = os.path.join(data_fld, "transform.txt")
+            georef_data_fld = os.path.join(data_fld, "georef")
+            if os.path.isdir(georef_data_fld) is False:
+                os.makedirs(georef_data_fld)
+            ortho_georef_path = os.path.join(georef_data_fld, "ortho_georeferenced.tif")
+            transform_path = os.path.join(georef_data_fld, "transform.txt")
 
             # get the transform of dem/ortho (identical for both)
             transform, mask_bounds = go.georef_ortho(ortho, footprints.values(), aligned,
                                                      azimuth=azimuth, auto_rotate=True,
                                                      trim_image=True,
+                                                     tp_type=tp_type,
                                                      save_path_ortho=ortho_georef_path,
                                                      save_path_transform=transform_path)
+
+            # try again with complete autorotate
+            if transform is None and azimuth is not None:
+                transform, mask_bounds = go.georef_ortho(ortho, footprints.values(), aligned,
+                                                         azimuth=None, auto_rotate=True,
+                                                         trim_image=True,
+                                                         tp_type=tp_type,
+                                                         save_path_ortho=ortho_georef_path,
+                                                         save_path_transform=transform_path)
+            if transform is None:
+                raise ValueError("Transform is not defined. Check the georef_ortho function.")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -1330,7 +1502,10 @@ def run_agi(project_name: str, images: list,
             start_time = time.time()
 
             # define output path in which gcp files are saved
-            gcp_path = os.path.join(data_fld, "gcps.csv")
+            gcp_fld = os.path.join(data_fld, "georef")
+            if not os.path.exists(gcp_fld):
+                os.makedirs(gcp_fld)
+            gcp_path = os.path.join(gcp_fld, "gcps.csv")
 
             if bounding_box_relative is None:
                 raise ValueError("Bounding box is not defined. Please create a bounding box first.")
@@ -1393,7 +1568,7 @@ def run_agi(project_name: str, images: list,
                         raise ValueError("Confidence array is not defined. Please create a confidence array first.")
 
                     gcp_mask = np.zeros_like(dem)
-                    gcp_mask[conf_arr > min_confidence] = 1
+                    gcp_mask[conf_arr > min_gcp_confidence] = 1
 
                 else:
                     raise ValueError(f"Mask type '{mask_type}' not supported.")
@@ -1454,10 +1629,17 @@ def run_agi(project_name: str, images: list,
             print("Export alignment")
             start_time = time.time()
 
+            cam_fld = os.path.join(data_fld, "cameras")
+            if not os.path.exists(cam_fld):
+                os.makedirs(cam_fld)
+
             # Export camera calibration and orientation
-            camera_path = os.path.join(data_fld, "cameras.txt")
+            camera_path = os.path.join(cam_fld, "cameras.txt")
             with open(camera_path, 'w') as f:
                 for camera in chunk.cameras:
+                    if camera.enabled is False:
+                        continue
+
                     if camera.transform:
                         line = camera.label + ',' + ','.join(map(str, np.asarray(camera.transform).flatten())) + '\n'
                         f.write(line)
@@ -1590,8 +1772,12 @@ def run_agi(project_name: str, images: list,
             print("Save AOI")
             start_time = time.time()
 
+            aoi_folder = os.path.join(data_fld, "aoi")
+            if not os.path.exists(aoi_folder):
+                os.makedirs(aoi_folder)
+
             # define path to save the aoi
-            aoi_path = os.path.join(data_fld, "aoi.shp")
+            aoi_path = os.path.join(aoi_folder, "aoi.shp")
 
             min_x = min_corner_abs.x  # noqa
             min_y = min_corner_abs.y
@@ -1642,6 +1828,9 @@ def run_agi(project_name: str, images: list,
             # export parameters for the point cloud
             arguments = {
                 'path': output_pc_path,
+                'crs': chunk.crs,
+                'save_point_color': True,
+                'save_point_confidence': True
             }
 
             # export the point cloud
@@ -1677,8 +1866,6 @@ def run_agi(project_name: str, images: list,
             # add region to build parameters
             if bounding_box_absolute is not None:
                 arguments['region'] = bounding_box_absolute
-
-            print(arguments)
 
             # build the DEM
             chunk.buildDem(**arguments)
@@ -1793,14 +1980,54 @@ def run_agi(project_name: str, images: list,
 
             output_conf_path = os.path.join(output_fld, project_name + "_confidence_absolute.tif")
 
-            eti.export_tiff(conf_arr, output_conf_path, transform=transform)
-
+            eti.export_tiff(conf_arr, output_conf_path, transform=transform, overwrite=True)
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute confidence array - finished ({exec_time:.4f} s)")
 
         # init empty quality dict
         quality_dict = None
+
+        if STEPS["build_difference_dem"]:
+
+            # load the historic dem
+            historic_dem_path = os.path.join(output_fld, project_name + "_dem_absolute.tif")
+            historic_dem, transform = li.load_image(historic_dem_path, return_transform=True)
+
+            min_x = min_corner_abs.x  # noqa
+            min_y = min_corner_abs.y
+            max_x = max_corner_abs.x  # noqa
+            max_y = max_corner_abs.y
+            historic_bounds = [min_x, min_y, max_x, max_y]
+
+            # modern dem will be loaded in the function itself
+            modern_dem = None
+
+            # get relative dem and define the output path
+            difference_dem_rel = cdd.create_difference_dem(historic_dem,
+                                                           modern_dem,
+                                                           historic_bounds,
+                                                           "REMA10")
+            relative_path = os.path.join(output_fld,
+                                         project_name + "_diff_rel.tif")
+
+            print(np.amin(difference_dem_rel), np.amax(difference_dem_rel))
+
+            # export the relative dem
+            eti.export_tiff(difference_dem_rel, relative_path,
+                           transform=transform, overwrite=True, no_data=np.nan)
+
+            # make relative dem absolute and define the output path
+            difference_dem_abs = np.abs(difference_dem_rel)
+            absolute_path = os.path.join(output_fld,
+                                            project_name + "_diff_abs.tif")
+
+            print(np.amin(difference_dem_abs), np.amax(difference_dem_abs))
+
+            # export the absolute dem
+            eti.export_tiff(difference_dem_abs, absolute_path,
+                            transform=transform, overwrite=True,
+                            no_data=np.nan)
 
         if STEPS["evaluate_dem"]:
             print("Evaluate dem")
@@ -1828,6 +2055,11 @@ def run_agi(project_name: str, images: list,
             quality_dict = edq.estimate_dem_quality(historic_dem, modern_dem, conf_arr,
                                                     historic_bounds=historic_bounds,
                                                     modern_source="REMA10")
+
+            # export the quality dict to a json file
+            quality_path = os.path.join(output_fld, project_name + "_quality.json")
+            with open(quality_path, 'w') as f:
+                json.dump(quality_dict, f, indent=4)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -1887,6 +2119,8 @@ def _save_command_args(method, args, output_fld):
     # some arguments are not serializable and must be changed
     if 'blending_mode' in args:
         args['blending_mode'] = str(args['blending_mode']).split('.')[-1]
+    if 'crs' in args:
+        args['crs'] = str(args['crs']).split(':')[-1][:-3]
     if 'image_format' in args:
         args['image_format'] = str(args['image_format']).split('.')[-1]
     if 'interpolation' in args:

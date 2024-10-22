@@ -74,12 +74,13 @@ def download_rema_data(tile, zoom_level,
 
         try:
             # create this bar_progress method which is invoked automatically from wget
-            def bar_progress(current, total):
+            def bar_progress(current, total, ratio):
                 """
                 create this bar_progress method which is invoked automatically from wget
                 Args:
                     current: The current progress
                     total: The total progress
+                    ratio: The ratio of current to total (not used here)
                 """
 
                 progress_message = "Downloading: %d%% [%d / %d] bytes" % (current / total * 100, current, total)
@@ -133,7 +134,7 @@ if __name__ == "__main__":
     rema_shape_data = lsd.load_shape_data(PATH_REMA_SHP)
 
     tiles = [
-        "43_06"
+        "40_10"
     ]
 
     _zoom_level = 10

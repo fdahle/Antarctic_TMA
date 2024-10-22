@@ -151,3 +151,7 @@ def clean_height_altitude() -> None:
     data = data.dropna()
 
     print(data)
+
+
+if __name__ == "__main__":
+    

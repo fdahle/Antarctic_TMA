@@ -1,10 +1,9 @@
 import os
-import zipfile
 
 import src.load.load_pointcloud as lpc
+import src.sfm_agi.snippets.unzip_folder as uzf
 
-
-def convert_ply_files(project_path):
+def convert_ply_files(project_path, unzip=True):
     """
     Iterate all folders and zip folders in the project path and extract the
     zip folders and save them as folders with the same name.
@@ -14,14 +13,8 @@ def convert_ply_files(project_path):
     """
 
     # Step 1: Iterate through all folders and extract zip files
-    for root, _, files in os.walk(project_path):
-        for file in files:
-            if file.endswith('.zip'):
-                zip_path = os.path.join(root, file)
-                extract_dir = os.path.join(root, file[:-4])  # Remove .zip extension for the folder
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
-                print(f"Extracted: {zip_path} to {extract_dir}")
+    if unzip:
+        uzf.unzip_folder(project_path)
 
     # Step 2: Find and convert all point cloud files (PLY or other formats)
     for root, _, files in os.walk(project_path):
@@ -43,5 +36,6 @@ def convert_ply_files(project_path):
 
 
 if __name__ == "__main__":
-    pth = "/data/ATM/data_1/sfm/agi_projects/tp_gcp_test_custom"
-    convert_ply_files(pth)
+    project_name = "agi_tracks2"
+    pth = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
+    convert_ply_files(pth, False)

@@ -7,14 +7,10 @@ import src.load.load_image as li
 import src.display.display_images as di
 
 
-def save_key_points(image_ids, project_fld, kp_folder, project_name=None):
-
-    if project_name is None:
-        # get name of last folder
-        project_name = os.path.basename(os.path.normpath(project_fld))
+def save_key_points(image_ids, point_cloud_fld, kp_folder):
 
     # define path to the zip file
-    path_zip = os.path.join(project_fld, f"{project_name}.files/0/0/point_cloud/point_cloud.zip")
+    path_zip = os.path.join(point_cloud_fld, "point_cloud.zip")
 
     ply_dict = {}
 
@@ -31,7 +27,12 @@ def save_key_points(image_ids, project_fld, kp_folder, project_name=None):
                     # Extract the filename without path to use as key
                     filename = os.path.basename(file)
 
+                    # ignore tracks ply
                     if filename == "tracks.ply":
+                        continue
+
+                    # ignore points ply
+                    if filename.startswith("points"):
                         continue
 
                     print("Extract coords for", filename)
@@ -55,6 +56,7 @@ def save_key_points(image_ids, project_fld, kp_folder, project_name=None):
 
     # Load the images
     for i, key in enumerate(ply_dict.keys()):
+
         image_id = image_ids[i]
 
         # Load the image

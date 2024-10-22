@@ -3,6 +3,7 @@
 import numpy as np
 import struct
 
+debug_print = True
 
 def export_ply(df, filename):
     """
@@ -38,3 +39,34 @@ def export_ply(df, filename):
                     f.write(struct.pack('<f', row[col]))
                 elif np.issubdtype(dtype, np.integer):
                     f.write(struct.pack('<i', int(row[col])))
+                else:
+                    raise ValueError(f"Unsupported data type for column {col}: {dtype}")
+
+    if debug_print:
+        print(f"Exported {df.shape[0]} rows and {len(df.columns)} columns to {filename}")
+
+if __name__ == "__main__":
+    import os
+    import pandas as pd
+
+    project_name = "agi_agi_own"
+
+    # Define the path to the folder to be zipped
+    folder_path = f"/data/ATM/data_1/sfm/agi_projects/{project_name}/{project_name}.files/0/0/point_cloud/point_cloud"
+
+    # iterate all txt files in the folder, load them and zip them
+    for root, _, files in os.walk(folder_path):
+        for file in files:
+            if file.endswith('.txt'):
+                txt_path = os.path.join(root, file)
+                ply_path = os.path.join(root, file.replace('.txt', '.ply'))
+
+                if "tracks" in txt_path:
+                    cols = ["color"]
+                else:
+                    cols = ["x", "y", "size", "id", "keypoint"]
+
+                df = pd.read_csv(txt_path, delimiter=" ", header=None)
+                df.columns = cols
+                export_ply(df, ply_path)
+                print(f"Exported {txt_path} to {ply_path}")

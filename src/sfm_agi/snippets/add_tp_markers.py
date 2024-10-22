@@ -23,8 +23,6 @@ def add_tp_markers(chunk, tp_dict, conf_dict,
         tps = tp_dict[key]
         conf = conf_dict[key]
 
-        print(tps.shape, conf.shape)
-
         # get the 10 tps with the highest confidence
         top_indices = np.argsort(conf)[-10:][::-1]
         top_tps = tps[top_indices]
@@ -38,6 +36,9 @@ def add_tp_markers(chunk, tp_dict, conf_dict,
 
             # set local position for camera
             for camera in chunk.cameras:
+
+                if camera.enabled is False:
+                    continue
 
                 if camera.label == cam1_name:
                     x = tp_row[0]

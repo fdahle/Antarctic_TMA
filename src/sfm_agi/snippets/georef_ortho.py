@@ -24,9 +24,11 @@ def georef_ortho(ortho: np.ndarray,
                  footprints: list, lst_aligned: list,
                  azimuth: int | None = None,
                  auto_rotate: bool = False,
-                 rotation_step: int = 45,
+                 rotation_step: int = 22.5,
                  max_size: int = 25000,  # in m
                  trim_image: bool = True,
+                 min_nr_tps: int = 100,
+                 tp_type: type = float,
                  save_path_ortho: str | None = None,
                  save_path_transform: str | None = None):
     """
@@ -56,7 +58,7 @@ def georef_ortho(ortho: np.ndarray,
         ortho = ortho[0, :, :]
 
     # init tie point detector
-    tpd = ftp.TiePointDetector('lightglue')
+    tpd = ftp.TiePointDetector('lightglue', tp_type=tp_type)
 
     # Calculate the percentage removed from each side
     original_height_ortho, original_width_ortho = ortho.shape[:2]
@@ -133,7 +135,7 @@ def georef_ortho(ortho: np.ndarray,
         rotation_values = [0]
     # rotate the ortho in steps of rotation_step
     elif azimuth is None and auto_rotate is True:
-        rotation_values = list(range(0, 360, rotation_step))
+        rotation_values = list(range(0, 360, int(rotation_step)))
     # azimuth is given, but we still want to rotate (for inaccurate azimuth)
     elif azimuth is not None and auto_rotate is True:
 
@@ -280,8 +282,9 @@ def georef_ortho(ortho: np.ndarray,
     points[:, 2] = points[:, 2] + trim_x_min
     points[:, 3] = points[:, 3] + trim_y_min
 
-    if points.shape[0] == 0:
-        raise ValueError("No tie points found in all tiles")
+    # check if we have enough points
+    if points.shape[0] < min_nr_tps:
+        return None, None
 
     # calculate the transform
     transform, residuals = ct.calc_transform(ortho, points,

@@ -1,73 +1,88 @@
-import os.path
 import numpy as np
-import rasterio
+
+from collections import defaultdict
+from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
 
 
 def create_confidence_arr(dem, point_cloud, transform,
-                          interpolate=False, distance=10,
-                          dem_nodata=-9999, min_confidence=0):
+                         interpolate=False, distance=10,
+                         dem_nodata=-9999, min_confidence=0):
 
-    # convert no data value to nan
     dem[dem == dem_nodata] = np.nan
 
-    # convert the transform to a numpy array
-    if type(transform) is rasterio.Affine:
-        transform = np.asarray(transform).reshape(3, 3)
+    # Initialize an array for confidence values, same shape as DEM
+    confidence_array = np.zeros_like(dem, dtype=np.float32)
+    count_array = np.zeros_like(dem, dtype=np.int32)
 
-    # Apply the inverse of the affine transform to map x, y to pixel coordinates
-    inv_transform = np.linalg.inv(transform)
-
-    # Extract x, y, and confidence values
+    # Extract X, Y, and confidence values from the point cloud
     x_coords = point_cloud[:, 0]
     y_coords = point_cloud[:, 1]
-    confidences = point_cloud[:, 3]
+    confidence_values = point_cloud[:, 10]
 
-    # Convert point cloud world coordinates to DEM pixel coordinates
-    ones = np.ones_like(x_coords)
-    points_homogeneous = np.vstack((x_coords, y_coords, ones))
-    pc_coords = inv_transform @ points_homogeneous
-    pc_coords = pc_coords[:2].astype(int)  # Get row, col coordinates
+    # Invert the transform to map world coordinates to pixel coordinates
+    inverse_transform = ~transform
 
-    # Clip coordinates to ensure they fall within the DEM bounds
-    row_indices = np.clip(pc_coords[1], 0, dem.shape[0] - 1)
-    col_indices = np.clip(pc_coords[0], 0, dem.shape[1] - 1)
+    # Convert world coordinates to pixel indices (row, col)
+    cols, rows = inverse_transform * (x_coords, y_coords)
+    cols = cols.astype(int)
+    rows = rows.astype(int)
 
-    # Create arrays to hold the sum of confidences and count of points for each DEM cell
-    confidence_sum = np.zeros(dem.shape)
-    count = np.zeros(dem.shape)
+    # Create a mask to filter out points that fall outside the DEM bounds
+    valid_mask = (rows >= 0) & (rows < dem.shape[0]) & (cols >= 0) & (cols < dem.shape[1])
+    valid_rows = rows[valid_mask]
+    valid_cols = cols[valid_mask]
+    valid_confidences = confidence_values[valid_mask]
 
-    # Accumulate confidence values and count occurrences for each DEM cell
-    for row, col, conf in zip(row_indices, col_indices, confidences):
-        confidence_sum[row, col] += conf
-        count[row, col] += 1
+    # Dictionary to accumulate confidence values for each (row, col)
+    confidence_accumulator = defaultdict(list)
 
-    # Calculate the average confidence for each DEM cell
-    with np.errstate(divide='ignore', invalid='ignore'):
-        confidence = np.true_divide(confidence_sum, count)
+    # Accumulate confidence values for each valid (row, col)
+    for row, col, confidence in zip(valid_rows, valid_cols, valid_confidences):
+        confidence_accumulator[(row, col)].append(confidence)
+
+    # Now compute the average confidence for each cell
+    for (row, col), confidences in confidence_accumulator.items():
+        confidence_array[row, col] = np.mean(confidences)
+        count_array[row, col] = len(confidences)
 
     if interpolate:
 
-        # Get the coordinates of the pixels with known confidence values
-        known_indices = np.where(~np.isnan(confidence))
-        known_points = np.vstack(known_indices).T
-        known_values = confidence[known_indices]
+        # Create mask for valid values
+        valid_mask = count_array > 0
+        invalid_mask = ~valid_mask
 
-        # Use cKDTree to find nearest neighbors within the max_distance
-        tree = cKDTree(known_points)
-        grid_x, grid_y = np.meshgrid(np.arange(dem.shape[1]), np.arange(dem.shape[0]))
-        grid_points = np.vstack([grid_y.ravel(), grid_x.ravel()]).T
+        # Get coordinates of valid and invalid points
+        valid_coords = np.argwhere(valid_mask)
+        invalid_coords = np.argwhere(invalid_mask)
 
-        # Find the nearest neighbors and distances
-        distances, indices = tree.query(grid_points, distance_upper_bound=distance)
-        confidence = np.full(dem.shape, np.nan)
+        # Values at valid coordinates
+        valid_values = confidence_array[valid_mask]
 
-        # Interpolate the confidence values
-        valid_mask = distances < distance
-        confidence[grid_y.ravel()[valid_mask], grid_x.ravel()[valid_mask]] = known_values[indices[valid_mask]]
+        # Create a KDTree for efficient distance calculation
+        tree = cKDTree(valid_coords)
+
+        # Find the distance to the nearest valid point for each invalid point
+        distances, _ = tree.query(invalid_coords)
+
+        # Mask for points within the distance threshold
+        nearby_mask = distances <= distance
+
+        # Interpolate using valid points only for the nearby invalid points
+        nearby_invalid_coords = invalid_coords[nearby_mask]  # Only interpolate close invalid points
+        confidence_filled = griddata(
+            valid_coords,
+            valid_values,
+            nearby_invalid_coords,
+            method='linear',
+            fill_value=np.nan  # Optional: fill distant points with NaN
+        )
+
+        # Now assign the interpolated values back to the original confidence array
+        confidence_array[nearby_invalid_coords[:, 0], nearby_invalid_coords[:, 1]] = confidence_filled
 
     # Handle cells with no points
-    confidence[np.isnan(confidence)] = min_confidence
-    confidence[np.isnan(dem)] = np.nan
+    confidence_array[np.isnan(confidence_array)] = min_confidence
+    confidence_array[np.isnan(dem)] = np.nan
 
-    return confidence
+    return confidence_array

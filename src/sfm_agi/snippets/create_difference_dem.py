@@ -40,17 +40,17 @@ def create_difference_dem(historic_dem, modern_dem=None,
     # resize back to the original size
     difference = ri.resize_image(difference, historic_dem.shape)
 
-    print(historic_dem.shape, modern_dem.shape, difference.shape)
-
     # set nodata values to nan
     difference[historic_dem == dem_nodata] = np.nan
 
     # set pixels to nan if a neighbour is nan
     difference = _set_nan_if_neighbor_is_nan(difference)
 
-
     if absolute:
         difference = np.abs(difference)
+
+    # there's a problem with abnormal high values that are not true
+    difference[difference > 5000] = np.nan
 
     return difference
 

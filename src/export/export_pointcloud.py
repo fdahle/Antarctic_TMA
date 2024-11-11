@@ -1,16 +1,15 @@
 """Export a point cloud as a ply file."""
 
 import os.path
-
-import numpy as np
 import open3d as o3d
+import numpy as np
 from typing import Union
 
-overwrite = False
+overwrite = True
 
 
 def export_pointcloud(input_data: Union[np.ndarray, o3d.data.PLYPointCloud],  # noqa
-                      output_path: str) -> None:
+                      output_path: str, write_ascii=True) -> None:
     """
     Export a point cloud as a ply file.
 
@@ -36,7 +35,11 @@ def export_pointcloud(input_data: Union[np.ndarray, o3d.data.PLYPointCloud],  # 
     else:
         # Create a PointCloud object and set points
         point_cloud = o3d.geometry.PointCloud()  # noqa
-        point_cloud.points = o3d.utility.Vector3dVector(np.array(input_data))  # noqa
+        point_cloud.points = o3d.utility.Vector3dVector(input_data[:, :3])
+
+        # add optional colors
+        if point_cloud.shape[1] > 3:
+            point_cloud.colors = o3d.utility.Vector3dVector(point_cloud[:, 3:6])
 
     # Save the point cloud to a PLY file
-    o3d.io.write_point_cloud(output_path, point_cloud, write_ascii=True)
+    o3d.io.write_point_cloud(output_path, point_cloud, write_ascii=write_ascii)

@@ -87,7 +87,9 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
             # download the rema tile
             if auto_download:
                 drd.download_rema_data(tile, zoom_level)
-            src = rasterio.open(rema_tile_path)
+                src = rasterio.open(rema_tile_path)
+            else:
+                return None, None
 
         # add the file to the list
         mosaic_files.append(src)

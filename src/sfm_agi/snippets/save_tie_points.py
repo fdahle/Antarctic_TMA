@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+from tqdm import tqdm
 
 import src.display.display_images as di
 import src.load.load_image as li
@@ -24,14 +25,18 @@ def save_tie_points(chunk, save_path):
         point_ids[points[point_id].track_id] = point_id
     camera_matches_valid = dict()
 
-    # iterate over all cameras
-    for camera1, camera2 in itertools.combinations(cameras, 2):
+    # get total number of pairs
+    num_pairs = len(list(itertools.combinations(cameras, 2)))
 
-        print(f"Camera pair: {camera1.label}, {camera2.label}")
+    # iterate over all cameras
+    for i, (camera1, camera2) in (pbar := tqdm(enumerate(itertools.combinations(cameras, 2)), total=num_pairs)):
+
+        pbar.set_description(f"Save tie points")
+        pbar.set_postfix_str(f"Camera pair: {camera1.label}, {camera2.label}")
 
         # Check if camera transforms are available
         if camera1.transform is None or camera2.transform is None:
-            print("Skipping pair due to missing transforms")
+            pbar.set_postfix_str("Skipping pair due to missing transforms")
             continue
 
         # Get valid matches for each camera
@@ -64,7 +69,7 @@ def save_tie_points(chunk, save_path):
         total = set([p.track_id for p in projections[camera1]]).intersection(
             set([p.track_id for p in projections[camera2]]))
 
-        print(f"Valid/Total matches: {len(valid), len(total)}")
+        pbar.set_postfix_str(f"Valid/Total matches: {len(valid), len(total)}")
 
         # Prepare numpy arrays for valid and invalid matches
         valid_matches_array = []
@@ -114,8 +119,8 @@ def save_tie_points(chunk, save_path):
         image_path = f"{save_path}/{camera1.label}_{camera2.label}.png"
 
         style_config = {
-            'title': f"{len(valid_matches_array) + len(invalid_matches_array)} tie points "
-                     f"between {camera1.label} and {camera2.label} "
+            'title': f"{len(valid_matches_array) + len(invalid_matches_array)}: "
+                     f"{camera1.label} / {camera2.label} "
                      f"({len(valid_matches_array)} valid, "
                      f"{len(invalid_matches_array)} invalid)",
         }

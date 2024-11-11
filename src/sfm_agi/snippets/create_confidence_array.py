@@ -3,6 +3,7 @@ import numpy as np
 from collections import defaultdict
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
+from tqdm import tqdm
 
 
 def create_confidence_arr(dem, point_cloud, transform,
@@ -37,14 +38,38 @@ def create_confidence_arr(dem, point_cloud, transform,
     # Dictionary to accumulate confidence values for each (row, col)
     confidence_accumulator = defaultdict(list)
 
+    pbar = None
+
     # Accumulate confidence values for each valid (row, col)
-    for row, col, confidence in zip(valid_rows, valid_cols, valid_confidences):
+    for idx, (row, col, confidence) in (pbar := tqdm(enumerate(zip(valid_rows, valid_cols, valid_confidences)), total=len(valid_rows))):
+
+        # Update progress bar
+        pbar.set_description("Accumulate confidence values")
+        pbar.set_postfix_str(f"row {row}, col {col} with confidence {confidence}")
+
+        # Append confidence value to the list
         confidence_accumulator[(row, col)].append(confidence)
 
+        # Update progress bar for the last iteration
+        if idx == len(valid_rows) - 1:
+            pbar.set_postfix_str("Finished!")
+
     # Now compute the average confidence for each cell
-    for (row, col), confidences in confidence_accumulator.items():
+    for idx, (key, confidences) in (pbar := tqdm(enumerate(confidence_accumulator.items()),
+                                                 total=len(confidence_accumulator))):
+        row, col = key
+
+        # Update progress bar
+        pbar.set_description("Compute average confidence")
+        pbar.set_postfix_str(f"row {row}, col {col}")
+
+        # Compute the average confidence value
         confidence_array[row, col] = np.mean(confidences)
         count_array[row, col] = len(confidences)
+
+        # Update progress bar for the last iteration
+        if idx == len(confidence_accumulator) - 1:
+            pbar.set_postfix_str("Finished!")
 
     if interpolate:
 

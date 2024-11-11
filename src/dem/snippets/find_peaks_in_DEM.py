@@ -1,128 +1,120 @@
-"""Finds peaks in a digital elevation model (DEM) array"""
-
-# Library imports
 import numpy as np
-import scipy.ndimage as ndimage
-from scipy.signal import peak_prominences
+
+from scipy.ndimage import gaussian_filter
+from scipy.ndimage import label
+from skimage.feature import peak_local_max
 from tqdm import tqdm
 
+import src.display.display_images as di
 
-def find_peaks_in_dem(dem: np.ndarray,
-                      use_prominence: bool = True,
-                      cell_size=10,
-                      no_data_value=-99999) -> np.ndarray:
-    """
-    Finds peaks in a digital elevation model (DEM) array by applying a maximum filter and thresholding.
-    The peaks are further refined by applying a relative threshold.
+debug_display_peaks = False
 
-    Args:
-        dem (np.ndarray): 2D numpy array representing the DEM.
 
-    Returns:
-        TODO: IS NUMPY ARRAY
-        list[tuple[int, int]]: List of coordinates of the detected peaks as (col, row) tuples.
-    """
+def find_peaks_in_dem(dem,
+                      smoothing=True,
+                      cell_size=250,
+                      no_data_value=-9999):
 
     # copy the dem to avoid changing the original
-    dem = np.copy(dem)
+    _dem = np.copy(dem)
 
-    # Ignore no_data_value
-    valid_mask = (dem != no_data_value)
+    # set no data to nan
+    _dem[_dem == no_data_value] = np.nan
 
-    # Generate a neighborhood structure
-    print("Generate neighborhood structure")
-    neighborhood = ndimage.generate_binary_structure(2, 2)
+    # Find indices where rows/columns contain only NaNs
+    nan_rows = np.isnan(_dem).all(axis=1)
+    nan_cols = np.isnan(_dem).all(axis=0)
 
-    # Find local maxima
-    print("Find local maxima")
-    local_max = ndimage.maximum_filter(dem, footprint=neighborhood) == dem
+    # Calculate counts of NaN-only rows and columns at the top and left
+    rows_lost_top = np.argmax(~nan_rows)
+    cols_lost_left = np.argmax(~nan_cols)
 
-    # Combine the two masks
-    peaks = local_max & valid_mask
+    # remove lines and columns with only NaN values
+    _dem = _dem[~np.isnan(_dem).all(axis=1)]
+    _dem = _dem[:, ~np.isnan(_dem).all(axis=0)]
 
-    # Get the coordinates of the peaks
-    peak_coords = np.argwhere(peaks)
+    # standardize dem so that the minimum value is 0
+    _dem -= np.nanmin(_dem)
 
-    if use_prominence:
+    # Apply Gaussian filter to smooth DEM (optional, helps reduce noise in peak detection)
+    if smoothing:
+        _dem = gaussian_filter(_dem, sigma=1)
 
-        # Convert the 2D coordinates into flat indices
-        peak_indices = np.ravel_multi_index((peak_coords[:, 0], peak_coords[:, 1]), dem.shape)
+    # Find peaks in the DEM
+    peaks_coords = peak_local_max(_dem, min_distance=10, threshold_abs=0, exclude_border=False)
 
-        # Calculate prominences of the peaks
-        peak_prominences_vals, left_bases, right_bases = peak_prominences(dem.flatten(), peak_indices)
+    # Extract the x, y coordinates of the peaks
+    y_peaks, x_peaks = peaks_coords[:, 0], peaks_coords[:, 1]
 
-        # Define number of grid cells
-        num_cells_x = cell_size
-        num_cells_y = cell_size
+    # merge the x and y coordinates
+    peak_coords = np.asarray(list(zip(x_peaks, y_peaks)))
 
-        # Calculate grid cell size
-        cell_size_x = dem.shape[1] // num_cells_x
-        cell_size_y = dem.shape[0] // num_cells_y
+    # check how many cells fit in the dem
+    num_cells_x = _dem.shape[1] // cell_size
+    num_cells_y = _dem.shape[0] // cell_size
 
-        # Initialize a list to store the most prominent peaks in each cell
-        most_prominent_peaks = []
+    # Initialize a list to store the selected peaks in each cell
+    selected_peaks = []
 
-        print("Find peaks per cell:")
+    # create a progress bar
+    pbar = tqdm(total=num_cells_x * num_cells_y)
 
-        # create a progress bar
-        pbar = tqdm(total=num_cells_x * num_cells_y)
+    # Iterate over the grid
+    for i in range(num_cells_y):
+        for j in range(num_cells_x):
 
-        # Iterate over the grid
-        for i in range(num_cells_y):
-            for j in range(num_cells_x):
-                pbar.update(1)
-                # Define the cell boundaries
-                cell_i_min, cell_i_max = i * cell_size_y, min((i + 1) * cell_size_y, dem.shape[0])
-                cell_j_min, cell_j_max = j * cell_size_x, min((j + 1) * cell_size_x, dem.shape[1])
+            pbar.update(1)
+            pbar.set_description(f"Find most prominent peaks")
+            pbar.set_postfix_str(f"Cell at {i+1}, {j+1}")
 
-                # Find peaks within the cell
-                cell_mask = (peak_coords[:, 0] >= cell_i_min) & (peak_coords[:, 0] < cell_i_max) & (
-                        peak_coords[:, 1] >= cell_j_min) & (peak_coords[:, 1] < cell_j_max)
-                cell_peaks = peak_coords[cell_mask]
-                cell_prominences = peak_prominences_vals[cell_mask]
+            # Define the cell boundaries
+            cell_min_x = j * cell_size
+            cell_max_x = (j + 1) * cell_size
+            cell_min_y = i * cell_size
+            cell_max_y = (i + 1) * cell_size
 
-                # Select the most prominent peak in the cell
-                if cell_peaks.size > 0:
-                    most_prominent_peak = cell_peaks[np.argmax(cell_prominences)]
-                    most_prominent_peaks.append(most_prominent_peak)
+            # get all peaks within the cell
+            cell_indices = (peak_coords[:, 0] >= cell_min_x) & (peak_coords[:, 0] < cell_max_x) & (
+                    peak_coords[:, 1] >= cell_min_y) & (peak_coords[:, 1] < cell_max_y)
+            cell_peaks = peak_coords[cell_indices]
 
-        # Convert to numpy array for easy plotting
-        most_prominent_peaks = np.array(most_prominent_peaks)
+            # skip cells with no peaks
+            if cell_peaks.shape[0] == 0:
+                continue
 
-        # switch the coordinates from row/col to x/y
-        most_prominent_peaks = np.flip(most_prominent_peaks, axis=1)
+            # get the height of the peaks
+            cell_heights = _dem[cell_peaks[:, 1], cell_peaks[:, 0]]
 
-        print(f"{most_prominent_peaks.shape[0]} peaks found")
+            # get the most high peak of each cell
+            highest_peak = cell_peaks[np.argmax(cell_heights)]
 
-        return most_prominent_peaks
-    else:
+            # append the most prominent peak to the numpy array
+            selected_peaks.append(highest_peak)
 
-        # Switch the coordinates from row/col to x/y
-        peak_coords = np.flip(peak_coords, axis=1)
+    pbar.set_postfix_str("Finished!")
 
-        print(f"{peak_coords.shape[0]} peaks found")
+    # convert to numpy array
+    selected_peaks = np.array(selected_peaks)
 
-        return peak_coords
+    # add the lost rows and columns back to the peak coordinates
+    peak_coords[:, 0] += cols_lost_left
+    peak_coords[:, 1] += rows_lost_top
+    selected_peaks[:, 0] += cols_lost_left
+    selected_peaks[:, 1] += rows_lost_top
 
+    if debug_display_peaks:
+
+        di.display_images([dem, dem],
+                          points=[peak_coords, selected_peaks])
+
+    return selected_peaks
 
 if __name__ == "__main__":
-    import numpy as np
-    import src.dem.snippets.find_peaks_in_DEM as fpiD
 
-    path_dem = "/home/fdahle/Desktop/agi_test/output/dem_relative.tif"
-    no_data_val = -32767
+    project_name = "gcp_test2"
+    dem_path = f"/data/ATM/data_1/sfm/agi_projects/{project_name}/output/{project_name}_dem_relative.tif"
 
-    # load a dem
-    import rasterio
+    import src.load.load_image as li
+    dem = li.load_image(dem_path, image_type="dem")
 
-    with rasterio.open(path_dem) as src:
-        tst_dem = src.read(1)
-
-    # find the peaks of a dem
-    tst_peaks = fpiD.find_peaks_in_DEM(tst_dem, no_data_value=no_data_val)
-
-    import src.display.display_images as di
-
-    tst_dem[tst_dem == no_data_val] = np.nan
-
-    di.display_images([tst_dem], points=[tst_peaks])
+    find_peaks_in_dem(dem, smoothing=True)

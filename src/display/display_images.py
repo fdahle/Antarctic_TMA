@@ -41,7 +41,7 @@ def display_images(images: np.ndarray | list[np.ndarray],
                    polygons_text: Optional[List[List[str]]] = None,
                    polygons_color=None,
                    tie_points: Optional[np.ndarray] = None,
-                   tie_points_conf: Optional[List[float]] = None,
+                   tie_points_conf: List[float] | np.ndarray | None = None,
                    reduce_tie_points: bool = False,
                    num_reduced_tie_points: int = 100,
                    style_config: Dict[str, Any] | None = None,
@@ -223,7 +223,7 @@ def display_images(images: np.ndarray | list[np.ndarray],
                 fig.add_artist(con)
 
         # Optionally draw points on the image
-        if points and idx < len(points):
+        if points is not None and idx < len(points):
             for point in points[idx]:
                 ax.plot(point[0], point[1], 'o',
                         color=_normalize_color(style_config['point_color']),

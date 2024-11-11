@@ -7,10 +7,11 @@ import src.display.display_images as di
 
 
 # debug variables
-debug_show_points = False
+debug_show_points = True
 
 
-def find_gcps(dem: np.ndarray, transform: np.ndarray,
+def find_gcps(dem: np.ndarray, modern_dem: np.ndarray,
+              transform: np.ndarray,
               bounding_box, zoom_level: int,
               resolution: float,
               mask: np.ndarray | None = None,
@@ -25,7 +26,7 @@ def find_gcps(dem: np.ndarray, transform: np.ndarray,
         zoom_level (int): Zoom level of the DEM we want to compare to.
         resolution (float): Resolution of the DEM.
         use_rock_mask (bool): Optional use of rock mask to apply to the gcps
-            and only export gcps that are in 1 (=rocks) in the mask.
+            and only export gcps that are in 1 (=rocks or high confidence) in the mask.
         mask_resolution (int): Resolution of the mask in meters.
         mask_buffer (int): Buffer for the mask in pixels
     Returns:

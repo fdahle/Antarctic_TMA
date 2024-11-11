@@ -3,6 +3,7 @@ import numpy as np
 import json
 from plyfile import PlyData
 
+import open3d as o3d
 
 def load_point_cloud(pointcloud_path):
     """
@@ -15,6 +16,10 @@ def load_point_cloud(pointcloud_path):
     - result_array: np.ndarray, the point cloud data as a numpy array.
     """
 
+    pcd = o3d.io.read_point_cloud(pointcloud_path)
+    return pcd
+
+    """
     if pointcloud_path.endswith(".ply"):
         ply_data = PlyData.read(pointcloud_path)
 
@@ -41,5 +46,5 @@ def load_point_cloud(pointcloud_path):
 
         # Parse the result
         result_array = np.array(json.loads(result.stdout))
-
     return result_array
+    """

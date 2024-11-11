@@ -12,22 +12,27 @@ import geopandas as gpd
 import Metashape
 import numpy as np
 import pandas as pd
+from fontTools.varLib.interpolatableHelpers import transform_from_stats
 from pyproj import CRS
 from scipy.ndimage import binary_dilation
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
 # Local imports
+import src.base.calc_bounds as cb
 import src.base.check_sky as cs
 import src.base.enhance_image as ei
 import src.base.find_overlapping_images as foi
 import src.base.load_credentials as lc
 import src.base.rotate_image as ri
+import src.base.resize_image as rei
+import src.dem.correct_dem as cd
 import src.dem.estimate_dem_quality as edq
 import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
 import src.load.load_image as li
 import src.load.load_pointcloud as lp
+import src.load.load_rock_mask as lrm
 import src.sfm_agi.other.create_tps_frame as ctf
 import src.sfm_agi.snippets.add_gcp_markers as agm
 import src.sfm_agi.snippets.add_tp_markers as atm
@@ -56,45 +61,61 @@ use_rotations_only_for_tps = True
 pixel_size = 0.025  # in mm
 resolution_relative = 0.001  # in px
 resolution_absolute = 2  # in m
-matching_method = "overlap"  # which images should be matched (all, sequential, overlap)
-min_overlap = 0.5  # the minimum overlap for matching with overlap
+matching_method = "combined"  # which images should be matched (all, sequential, overlap)
+min_overlap = 0.25  # the minimum overlap for matching with overlap
+step_range = 2
 custom_matching = True  # if True, custom matching will be used (lightglue)
-max_tps = 0
+min_tps = 15  # minimum number of tie points between images
+max_tps = 10000
 min_tp_confidence = 0.9
 tp_type = float
+tp_tolerance=0.5
 input_mode = "bundler"   # how are custom tiepoints added in metashape, can be 'agi' or 'bundler'
 custom_markers = False  # if True, custom markers support the matching of Agisoft
 zoom_level_dem = 10  # in m
 use_gcp_mask = True  # filter ground control points with a mask
-mask_type = "confidence"  # "confidence" or "rock"
+mask_type = ["rock", "confidence"]  # "confidence" or "rock"
+mask_resolution = 10
 min_gcp_confidence = 0.8
+max_gcp_error_px = 1
+max_gcp_error_m = 500
 mask_buffer = 10  # in pixels
 
 # Other variables
 save_text_output = True  # if True, the output will be saved in a text file
 save_commands = True  # if True, the arguments of the commands will be saved in a json file
-auto_true_for_new = True  # new projects will have all steps set to True
-flag_display_steps = True  # an additional flag to enable/disable the display steps
 absolute_mode = True  # if False, the execution stops after the relative steps
+
+auto_true_for_new = False  # new projects will have all steps set to True
+auto_display_true_for_new = False  # new projects will have all display steps set to True
+auto_debug_true_for_new = False  # new projects will have all debug steps set to True
+auto_cache_true_for_new = False  # new projects will have all cache steps set to True
+
+
+flag_display_steps = True  # an additional flag to enable/disable the display steps
+flag_debug_steps = True  # an additional flag to enable/disable the debug steps
+flag_cache_steps = True  # an additional flag to enable/disable the cache steps
 
 # Steps
 STEPS = {
     "create_masks": False,
     "union_masks": False,
     "enhance_photos": False,
-    "match_photos": True,
-    "align_cameras": True,
-    "build_depth_maps_relative": True,
-    "build_pointcloud_relative": True,
-    "build_mesh_relative": True,
-    "build_dem_relative": True,
-    "build_orthomosaic_relative": True,
-    "build_confidence_relative": True,
-    "georef_output_images": True,
+    "match_photos": False,
+    "align_cameras": False,
+    "build_depth_maps_relative": False,
+    "build_pointcloud_relative": False,
+    "clean_pointcloud_relative": False,
+    "build_mesh_relative": False,
+    "build_dem_relative": False,
+    "build_orthomosaic_relative": False,
+    "build_confidence_relative": False,
+    "georef_output_images": False,
     "create_gcps": True,
     "load_gcps": True,
     "build_depth_maps_absolute": True,
     "build_pointcloud_absolute": True,
+    "clean_pointcloud_absolute": True,
     "build_mesh_absolute": True,
     "build_dem_absolute": True,
     "build_orthomosaic_absolute": True,
@@ -106,28 +127,30 @@ STEPS = {
 }
 
 DEBUG_STEPS = {
-    "save_tps_to_csv": True,
-    "save_transforms": True,
-    "show_connections": True   # add connections lines between the images
+    "save_tps_to_csv": False,
+    "save_transforms": False,
+    "show_connections": False   # add connections lines between the images
 }
 
 # Display settings
 DISPLAY_STEPS = {
     "save_thumbnails": False,
-    "save_key_points": True,
-    "save_tie_points": True,
-    "save_aoi": True,
+    "save_key_points": False,
+    "save_tie_points": False,  # WARNING: This can be very slow
+    "save_aoi": False,
 }
 
 CACHE_STEPS = {
-    'save_masks': True,
+    'save_enhanced': False,
+    'use_enhanced': True,
+    'save_masks': False,
     'use_masks': True,
-    'save_tps': True,
+    'save_tps': False,
     'use_tps': True,
 }
 
 
-def run_agi(project_name: str, images: list,
+def run_agi(project_name: str, images_paths: list,
             camera_positions: dict | None = None, camera_accuracies: dict | None = None,
             camera_rotations: dict | None = None, camera_footprints: dict | None = None,
             camera_tie_points: dict | None = None, focal_lengths=None,
@@ -139,7 +162,7 @@ def run_agi(project_name: str, images: list,
 
     Args:
         project_name (str): The name of the project.
-        images (list): A list of image paths.
+        images_paths (list): A list of image paths.
         camera_positions (dict): A dictionary with camera positions. The keys are the image ids and the values are
             lists with the x, y, z coordinates. Optional.
         camera_accuracies (dict): A dictionary with camera accuracies. The keys are the image ids and the values are
@@ -176,13 +199,35 @@ def run_agi(project_name: str, images: list,
     if matching_method == "overlap" and camera_footprints is None:
         raise ValueError("Camera footprints must be provided if 'overlap' is used as matching method.")
 
-    # set all steps and display steps to True if RESUME is True
+    # set correct settings if folder not existing
+    if os.path.isdir(PATH_PROJECT_FOLDERS) is False:
+        print("Set resume to False and overwrite to true as fld is not existing")
+        resume = False
+        overwrite = True
+
+    # set all steps to True if RESUME is True
     if resume is False and auto_true_for_new:
         print("Auto setting of all steps to True due to RESUME")
         for key in STEPS:
             STEPS[key] = True
+
+    # set all display steps to True if RESUME is True
+    if resume is False and auto_display_true_for_new:
+        print("Auto setting of all display steps to True due to RESUME")
         for key in DISPLAY_STEPS:
             DISPLAY_STEPS[key] = True
+
+    # set all debug steps to True if RESUME is True
+    if resume is False and auto_debug_true_for_new:
+        print("Auto setting of all debug steps to True due to RESUME")
+        for key in DEBUG_STEPS:
+            DEBUG_STEPS[key] = True
+
+    # set all cache steps to True if RESUME is True
+    if resume is False and auto_cache_true_for_new:
+        print("Auto setting of all cache steps to True due to RESUME")
+        for key in CACHE_STEPS:
+            CACHE_STEPS[key] = True
 
     # set all display steps to False if flag_display_steps is False
     if flag_display_steps is False:
@@ -190,26 +235,45 @@ def run_agi(project_name: str, images: list,
         for key in DISPLAY_STEPS:
             DISPLAY_STEPS[key] = False
 
+    # set all debug steps to False if flag_debug_steps is False
+    if flag_debug_steps is False:
+        print("Auto setting of all debug steps to False")
+        for key in DEBUG_STEPS:
+            DEBUG_STEPS[key] = False
+
+    # set all cache steps to False if flag_cache_steps is False
+    if flag_cache_steps is False:
+        print("Auto setting of all cache steps to False")
+        for key in CACHE_STEPS:
+            CACHE_STEPS[key] = False
+
     # check if we have image
-    if len(images) == 0:
+    if len(images_paths) == 0:
         raise ValueError("No images were provided")
 
+    # check if there are duplicate entries in the images
+    if len(images_paths) != len(set(images_paths)):
+        raise ValueError("Duplicate entries in the images list")
+
     # check if the number of images is equal to the (optional) dicts
-    if focal_lengths is not None and len(images) != len(focal_lengths):
-        raise ValueError(f"The number of images ({len(images)}) "
+    if focal_lengths is not None and len(images_paths) != len(focal_lengths):
+        raise ValueError(f"The number of images ({len(images_paths)}) "
                          f"and focal lengths ({len(focal_lengths)}) do not match.")
-    if camera_footprints is not None and len(images) != len(camera_footprints):
-        raise ValueError(f"The number of images ({len(images)}) "
+    if camera_footprints is not None and len(images_paths) != len(camera_footprints):
+        raise ValueError(f"The number of images ({len(images_paths)}) "
                          f"and camera footprints ({len(camera_footprints)}) do not match.")
-    if camera_positions is not None and len(images) != len(camera_positions):
-        raise ValueError(f"The number of images ({len(images)}) "
+    if camera_positions is not None and len(images_paths) != len(camera_positions):
+        raise ValueError(f"The number of images ({len(images_paths)}) "
                          f"and camera positions ({len(camera_positions)}) do not match.")
-    if camera_accuracies is not None and len(images) != len(camera_accuracies):
-        raise ValueError(f"The number of images ({len(images)}) "
+    if camera_accuracies is not None and len(images_paths) != len(camera_accuracies):
+        raise ValueError(f"The number of images ({len(images_paths)}) "
                          f"and camera accuracies ({len(camera_accuracies)}) do not match.")
-    if camera_rotations is not None and len(images) != len(camera_rotations):
-        raise ValueError(f"The number of images ({len(images)}) "
+    if camera_rotations is not None and len(images_paths) != len(camera_rotations):
+        raise ValueError(f"The number of images ({len(images_paths)}) "
                          f"and camera rotations ({len(camera_rotations)}) do not match.")
+
+    if camera_footprints is None:
+        print("WARNING: No footprints available. Only relative mode is possible.")
 
     # define path to the project folder and the project files
     project_fld = os.path.join(PATH_PROJECT_FOLDERS, project_name)
@@ -241,11 +305,14 @@ def run_agi(project_name: str, images: list,
         tee = Tee(path_log)
 
     try:
+
+        print("Used Image ids:")
+        # create a list of images from list of image_paths
+        images = [os.path.basename(image)[:-4] for image in images_paths]
+        print(images)
+
         print("STEPS:")
         print(STEPS)
-
-        print("images:")
-        print(images)
 
         # get the license key
         licence_key = lc.load_credentials("agisoft")['licence']
@@ -258,8 +325,13 @@ def run_agi(project_name: str, images: list,
         Metashape.app.cpu_enable = False
 
         # init some path variables
-        output_dem_path = None
-        output_ortho_path = None
+        output_dem_path = None  # path to the output DEM
+        output_ortho_path = None  # path to the output orthomosaic
+        dem = None
+        ortho = None
+        transform = None
+        modern_dem = None
+        historic_dem = None
 
         # create the metashape project
         doc = Metashape.Document(read_only=False)  # noqa
@@ -312,23 +384,25 @@ def run_agi(project_name: str, images: list,
         rotated_images = []
 
         # check if all images are in already in the image folder
-        if len(os.listdir(img_folder)) != len(images):
+        if len(os.listdir(img_folder)) != len(images_paths):
 
-            tqdm.write("Copy images:")
-            time.sleep(0.1)
             start_time = time.time()
 
             # iterate the images
-            for i, image_path in (pbar := tqdm(enumerate(images), total=len(images))):
+            for i, image_path in (pbar := tqdm(enumerate(images_paths), total=len(images_paths))):
+
+                pbar.set_description("Copy image to project folder")
 
                 # get file name from path
                 file_name = os.path.basename(image_path)
+
+                pbar.set_postfix_str(f"{file_name}")
 
                 # define output path
                 output_path = os.path.join(img_folder, file_name)
 
                 # update the image path
-                images[i] = output_path
+                images_paths[i] = output_path
 
                 # only copy the image if it does not exist
                 if os.path.exists(output_path) is False:
@@ -341,7 +415,7 @@ def run_agi(project_name: str, images: list,
 
                     if correct_rotation is False:
 
-                        print(file_name, "is not correctly oriented. Rotating image..")
+                        pbar.set_postfix_str(f"{file_name} is not correctly oriented. Rotating image..")
 
                         # load the image
                         img = li.load_image(output_path)
@@ -353,69 +427,101 @@ def run_agi(project_name: str, images: list,
                         eti.export_tiff(img, output_path, overwrite=True)
 
                         rotated_images.append(file_name[:-4])
-            pbar.close()
+
+                if i == len(images_paths) - 1:
+                    pbar.set_postfix_str("Finished!")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Copy images - finished ({exec_time:.4f} s)")
+            print(f"Copy images - finished ({exec_time:.4f} s)")
 
         # add a chunk for the doc and add images
         if len(doc.chunks) == 0:
             chunk = doc.addChunk()
 
-            tqdm.write("Add Photos")
+            print("Add Photos")
             start_time = time.time()
 
             # add the images to the chunk
-            chunk.addPhotos(images, progress=_print_progress)
+            chunk.addPhotos(images_paths, progress=_print_progress)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Add Photos - finished ({exec_time:.4f} s)")
+            print(f"Add Photos - finished ({exec_time:.4f} s)")
+            time.sleep(0.1)
 
         else:
             chunk = doc.chunks[0]
 
+            # get all image-names from images
+            image_names = [os.path.basename(image)[:-4] for image in images_paths]
+
+            # disable all images that are not in the images list and enable all that are in
+            for camera in chunk.cameras:
+                if camera.label not in image_names:
+                    camera.enabled = False
+                else:
+                    camera.enabled = True
+
         if DISPLAY_STEPS["save_thumbnails"]:
+
+            # define path to the thumbnail folder
             thumb_folder = os.path.join(display_fld, "thumbnails")
             if not os.path.exists(thumb_folder):
                 os.makedirs(thumb_folder)
 
-            tqdm.write("Save Thumbnails")
-            time.sleep(0.1)
             start_time = time.time()
 
-            for camera in (pbar := tqdm(chunk.cameras)):
+            # iterate over the cameras
+            for i, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
 
+                pbar.set_description("Save Thumbnails")
+                pbar.set_postfix_str(f"{camera.label}")
+
+                # skip disabled cameras
                 if camera.enabled is False:
                     continue
 
+                # define path for the thumbnail
                 thumb_path = os.path.join(thumb_folder, f"{camera.label}_thumb.jpg")
 
+                # skip already existing thumbnails
+                if os.path.isfile(thumb_path):
+                    continue
+
+                # load image and export as thumbnail
                 image = li.load_image(camera.label)
                 eth.export_thumbnail(image, thumb_path)
-            pbar.close()
+
+                # update progressbar in last loop
+                if i == len(chunk.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Save Thumbnails - finished ({exec_time:.4f} s)")
+            print(f"Save Thumbnails - finished ({exec_time:.4f} s)")
 
         # get the image dimensions
         image_dims = {}
         for camera in chunk.cameras:
+
+            # skip disabled cameras
             if camera.enabled is False:
                 continue
 
+            # get the image dimensions
             image_dims[camera.label] = [camera.calibration.width, camera.calibration.height]
 
         # add focal length to the images
         if focal_lengths is not None:
 
-            print("Set Focal length")
             start_time = time.time()
 
             # set focal length if given
-            for camera in chunk.cameras:
+            for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
+
+                pbar.set_description("Set Focal length")
+                pbar.set_postfix_str(f"{camera.label}")
 
                 if camera.enabled is False:
                     continue
@@ -431,8 +537,6 @@ def run_agi(project_name: str, images: list,
                         print(f"WARNING: Focal length is NaN for {camera.label}")
                         continue
 
-                    print(f" - Set focal length for {camera.label} to {focal_length}")
-
                     # set the focal length of the camera
                     camera.sensor.focal_length = focal_length
                     camera.sensor.pixel_size = (pixel_size, pixel_size)
@@ -442,6 +546,10 @@ def run_agi(project_name: str, images: list,
                         camera.sensor.fixed_params = ['f']
                 else:
                     print(f"WARNING: Focal length not given for {camera.label}")
+
+                # update progressbar in last loop
+                if idx == len(chunk.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -571,7 +679,7 @@ def run_agi(project_name: str, images: list,
             chunk_temp = doc_temp.addChunk()
 
             # add the images to the temporary chunk
-            chunk_temp.addPhotos(images, progress=_print_progress)
+            chunk_temp.addPhotos(images_paths, progress=_print_progress)
 
             # set the images to film cameras
             for camera in chunk_temp.cameras:
@@ -596,12 +704,17 @@ def run_agi(project_name: str, images: list,
                 _save_command_args("detectFiducials", arguments, argument_fld)
 
             # calibrate fiducials
-            for camera in (pbar := tqdm(chunk_temp.cameras)):
+            for idx, camera in (pbar := tqdm(enumerate(chunk_temp.cameras), total=len(chunk_temp.cameras))):
+
+                # skip disabled cameras
                 if camera.enabled is False:
                     continue
 
-                pbar.set_postfix_str(f"Calibrate fiducials for {camera.label}")
+                # update progressbar
+                pbar.set_description("Calibrate fiducials")
+                pbar.set_postfix_str(f"{camera.label}")
 
+                # calibrate the fiducials
                 try:
                     camera.sensor.calibrateFiducials(0.025)
                 except RuntimeError:
@@ -609,18 +722,25 @@ def run_agi(project_name: str, images: list,
                     print(f"{camera.label} will be removed from SfM processing.")
                     camera.enabled = False
 
+                # update progressbar in last loop
+                if idx == len(chunk_temp.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
+
             # define path to save masks
             mask_folder = os.path.join(data_fld, "masks_original")
             if not os.path.exists(mask_folder):
                 os.makedirs(mask_folder)
 
+            # check if the number of cameras is equal in the temporary chunk
             if len(chunk_temp.cameras) != len(chunk.cameras):
                 raise ValueError("The number of cameras in the temporary chunk is not equal to the original chunk.")
 
             # save masks and copy them to the original chunk as well
-            for i, camera_temp in (pbar := tqdm(enumerate(chunk_temp.cameras))):
+            for i, camera_temp in (pbar := tqdm(enumerate(chunk_temp.cameras), total=len(chunk_temp.cameras))):
 
-                pbar.set_postfix_str(f"Save mask for {camera_temp.label}")
+                # update description
+                pbar.set_description("Save and copy mask")
+                pbar.set_postfix_str(f"{camera_temp.label}")
 
                 if camera_temp.mask is not None:
 
@@ -632,6 +752,11 @@ def run_agi(project_name: str, images: list,
                     camera = chunk.cameras[i]
                     camera.mask = camera_temp.mask
 
+                # update progressbar in last loop
+                if i == len(chunk_temp.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
+
+            # save the project
             doc.save()
 
             # remove the temporary doc
@@ -648,7 +773,6 @@ def run_agi(project_name: str, images: list,
 
         if STEPS["union_masks"]:
 
-            tqdm.write("Union masks")
             time.sleep(0.1)
             start_time = time.time()
 
@@ -658,12 +782,14 @@ def run_agi(project_name: str, images: list,
                 os.makedirs(mask_folder)
 
             # iterate over the cameras
-            for camera in (pbar := tqdm(chunk.cameras)):
+            for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
 
                 if camera.enabled is False:
                     continue
 
-                pbar.set_postfix_str(f"Union mask for {camera.label}")
+                # update progressbar
+                pbar.set_description("Union masks")
+                pbar.set_postfix_str(f"{camera.label}")
 
                 # check if camera has a mask
                 if camera.mask:
@@ -710,11 +836,13 @@ def run_agi(project_name: str, images: list,
                     mask_path = os.path.join(mask_folder, f"{camera.label}_mask.tif")
                     camera.mask.image().save(mask_path)
 
-            pbar.close()
+                # update progressbar in last loop
+                if idx == len(chunk.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Union masks - finished ({exec_time:.4f} s)")
+            print(f"Union masks - finished ({exec_time:.4f} s)")
 
             # save the project
             doc.save()
@@ -722,9 +850,9 @@ def run_agi(project_name: str, images: list,
         # init variable for enhanced folder
         enhanced_folder = os.path.join(data_fld, "images_enhanced")
 
+        # enhance the images
         if STEPS["enhance_photos"]:
 
-            tqdm.write("Enhance photos")
             time.sleep(0.1)
             start_time = time.time()
 
@@ -733,12 +861,13 @@ def run_agi(project_name: str, images: list,
                 os.makedirs(enhanced_folder)
 
             # iterate over the cameras
-            for camera in (pbar := tqdm(chunk.cameras)):
+            for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
 
                 if camera.enabled is False:
                     continue
 
-                pbar.set_postfix_str(f"Enhance photo for {camera.label}")
+                pbar.set_description("Enhance photos")
+                pbar.set_postfix_str(f"{camera.label}")
 
                 # get old image path and also set new one
                 image_pth = camera.photo.path
@@ -759,24 +888,42 @@ def run_agi(project_name: str, images: list,
                     mask = None
 
                 # enhance the image
-                enhanced_image = ei.enhance_image(image, mask)
+                enhanced_fld = "/data/ATM/data_1/sfm/agi_data/enhanced"
+                enhanced_cache_pth = os.path.join(enhanced_fld, f"{camera.label}.tif")
 
-                # save the enhanced image
+                # get the enhanced image if existing
+                if CACHE_STEPS['use_enhanced']:
+                    if os.path.exists(enhanced_cache_pth):
+                        enhanced_image = li.load_image(enhanced_cache_pth)
+                    else:
+                        enhanced_image = ei.enhance_image(image, mask)
+                else:
+                    enhanced_image = ei.enhance_image(image, mask)
+
+                # save the enhanced image to the cache folder
+                if CACHE_STEPS['save_enhanced'] and not os.path.exists(enhanced_cache_pth):
+                    eti.export_tiff(enhanced_image, enhanced_cache_pth, overwrite=True)
+
+                # save the enhanced image to the enhanced folder as well
                 eti.export_tiff(enhanced_image, e_image_pth, overwrite=True)
 
                 # update the image in the chunk
                 photo = camera.photo.copy()
                 photo.path = e_image_pth
                 camera.photo = photo
-            pbar.close()
+
+                # update progressbar in last loop
+                if idx == len(chunk.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Enhance photos - finished ({exec_time:.4f} s)")
+            print(f"Enhance photos - finished ({exec_time:.4f} s)")
 
             # save the project
             doc.save()
 
+        # save thumbnails of the enhanced images
         if DISPLAY_STEPS["save_thumbnails"] and STEPS["enhance_photos"]:
 
             # create folder for the thumbnails
@@ -784,25 +931,31 @@ def run_agi(project_name: str, images: list,
             if not os.path.exists(thumb_folder):
                 os.makedirs(thumb_folder)
 
-            tqdm.write("Save Thumbnails")
             time.sleep(0.1)
             start_time = time.time()
 
-            for camera in (pbar := tqdm(chunk.cameras)):
+            for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
 
                 if camera.enabled is False:
                     continue
+
+                pbar.set_description("Save Thumbnails (enhanced)")
+                pbar.set_postfix_str(f"{camera.label}")
 
                 img_path = os.path.join(data_fld, "images_enhanced", f"{camera.label}.tif")
                 thumb_path = os.path.join(thumb_folder, f"{camera.label}_e_thumb.jpg")
 
                 image = li.load_image(img_path)
                 eth.export_thumbnail(image, thumb_path)
-            pbar.close()
+
+                # update progressbar in last loop
+                if idx == len(chunk.cameras) - 1:
+                    pbar.set_postfix_str("Finished!")
+
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Save Thumbnails - finished ({exec_time:.4f} s)")
+            print(f"Save Thumbnails (enhanced) - finished ({exec_time:.4f} s)")
 
         # match photos
         if STEPS["match_photos"]:
@@ -826,13 +979,16 @@ def run_agi(project_name: str, images: list,
 
                 # find the tie points between images
                 tp_dict, conf_dict = ftp.find_tie_points_for_sfm(tp_img_folder,
+                                                                 image_dims,
                                                                  mask_folder=mask_folder,
                                                                  matching_method=matching_method,
                                                                  footprint_dict=camera_footprints,
                                                                  rotation_dict=camera_rotations,
                                                                  tp_type=tp_type,
                                                                  min_overlap=min_overlap,
+                                                                 step_range=step_range,
                                                                  min_conf=min_tp_confidence,
+                                                                 min_tps=min_tps,
                                                                  max_tps=max_tps,
                                                                  use_cached_tps=CACHE_STEPS['use_tps'],
                                                                  save_tps=CACHE_STEPS['save_tps'])
@@ -841,6 +997,7 @@ def run_agi(project_name: str, images: list,
                 cms.create_matching_structure(tp_dict, conf_dict,
                                               project_files_path,
                                               img_folder,
+                                              tolerance=tp_tolerance,
                                               input_mode=input_mode)
 
                 # for bundler some extra steps are required
@@ -861,6 +1018,7 @@ def run_agi(project_name: str, images: list,
                 if custom_markers:
 
                     print("  Find custom markers between images")
+                    raise NotImplementedError("Custom markers are currently not working")
 
                     mask_folder = os.path.join(data_fld, "masks_adapted")
                     if not os.path.exists(mask_folder):
@@ -874,6 +1032,7 @@ def run_agi(project_name: str, images: list,
 
                     # find the tie points between images
                     tp_dict, conf_dict = ftp.find_tie_points_for_sfm(tp_img_folder,
+                                                                     image_dims,
                                                                      mask_folder=mask_folder,
                                                                      matching_method=matching_method,
                                                                      footprint_dict=camera_footprints,
@@ -907,6 +1066,10 @@ def run_agi(project_name: str, images: list,
                         pairs.append((i, i + 1))
                     arguments['pairs'] = pairs
                 elif matching_method == "overlap":
+
+                    if camera_footprints is None:
+                        raise ValueError("Camera footprints must be provided if 'overlap' is used as matching method.")
+
                     # get all camera labels as image ids
                     image_ids = [camera.label for camera in chunk.cameras if camera.enabled]
 
@@ -958,6 +1121,7 @@ def run_agi(project_name: str, images: list,
             # save the project
             doc.save()
 
+        # save the tie points to a csv file
         if DEBUG_STEPS["save_tps_to_csv"]:
 
             # get path to point cloud fld (dependent on bundler)
@@ -974,32 +1138,52 @@ def run_agi(project_name: str, images: list,
             output_pth = os.path.join(debug_fld, "tie_points.csv")
             tps_df.to_csv(output_pth, index=False)
 
-        # set back to the original images
-        if STEPS["enhance_photos"]:
+        # set images back to the original images
+        time.sleep(0.1)
+        start_time = time.time()
 
-            tqdm.write("Restore original images")
-            time.sleep(0.1)
-            start_time = time.time()
+        # Initialize progress bar as None
+        pbar = None
 
-            # iterate over the cameras
-            for camera in (pbar := tqdm(chunk.cameras)):
+        # check if we update a picture
+        pic_updated = False
 
-                if camera.enabled is False:
-                    continue
+        # iterate over the cameras
+        for i, camera in enumerate(chunk.cameras):
 
-                pbar.set_postfix_str(f"Restore image for {camera.label}")
+            # skip disabled cameras
+            if camera.enabled is False:
+                continue
 
-                # get original image path
-                image_pth = os.path.join(img_folder, f"{camera.label}.tif")
+            # get original image path
+            image_pth = os.path.join(img_folder, f"{camera.label}.tif")
+
+            # check if camera has original path
+            if camera.photo.path != image_pth:
+
+                # Initialize progress bar only if it hasn’t been created yet
+                if pbar is None:
+                    pbar = tqdm(total=len(chunk.cameras))
+
+                pbar.set_description("Restore original image")
+                pbar.set_postfix_str(f"{camera.label}")
+
                 # update the image in the chunk
                 photo = camera.photo.copy()
                 photo.path = image_pth
                 camera.photo = photo
-            pbar.close()
 
+                # set flag to true
+                pic_updated = True
+
+            if i == len(chunk.cameras) - 1:
+                if pbar is not None:
+                    pbar.set_postfix_str("Finished!")
+
+        if pic_updated:
             finish_time = time.time()
             exec_time = finish_time - start_time
-            tqdm.write(f"Restore original images - finished ({exec_time:.4f} s)")
+            print(f"Restore original images - finished ({exec_time:.4f} s)")
 
             # save the project
             doc.save()
@@ -1033,18 +1217,6 @@ def run_agi(project_name: str, images: list,
 
             print("Align cameras")
             start_time = time.time()
-
-            """
-            # check if the cameras are grouped (can be removed with custom matching)
-            if len(chunk.camera_groups) == 0:
-                print("Create new camera group")
-                # create a group with all cameras
-                cam_group = chunk.addCameraGroup()
-                for camera in chunk.cameras:
-                    camera.group = cam_group
-                doc.save()
-                doc.open(project_psx_path, ignore_lock=True)
-            """
 
             arguments = {
                 'reset_alignment': False,
@@ -1083,7 +1255,6 @@ def run_agi(project_name: str, images: list,
         # save tie points
         if DISPLAY_STEPS["save_tie_points"]:
 
-            print("Save tie points")
             start_time = time.time()
 
             tp_fld = os.path.join(display_fld, "tie_points")
@@ -1417,7 +1588,7 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             print(f"Build relative confidence array - finished ({exec_time:.4f} s)")
 
-        if absolute_mode is False:
+        if absolute_mode is False or camera_footprints is None:
             print("Finished processing relative data & absolute mode is disabled")
             return
 
@@ -1440,7 +1611,8 @@ def run_agi(project_name: str, images: list,
             # load the required data
             dem = li.load_image(output_dem_path)
             ortho = li.load_image(output_ortho_path)
-            footprints = camera_footprints
+            if camera_footprints is None:
+                camera_footprints = {}
 
             # set nodata to nan
             dem[dem == -9999] = np.nan
@@ -1474,7 +1646,7 @@ def run_agi(project_name: str, images: list,
             transform_path = os.path.join(georef_data_fld, "transform.txt")
 
             # get the transform of dem/ortho (identical for both)
-            transform, mask_bounds = go.georef_ortho(ortho, footprints.values(), aligned,
+            transform, mask_bounds = go.georef_ortho(ortho, camera_footprints.values(), aligned,
                                                      azimuth=azimuth, auto_rotate=True,
                                                      trim_image=True,
                                                      tp_type=tp_type,
@@ -1483,7 +1655,8 @@ def run_agi(project_name: str, images: list,
 
             # try again with complete autorotate
             if transform is None and azimuth is not None:
-                transform, mask_bounds = go.georef_ortho(ortho, footprints.values(), aligned,
+                print("Try georef ortho again with complete autorotate")
+                transform, mask_bounds = go.georef_ortho(ortho, camera_footprints.values(), aligned,
                                                          azimuth=None, auto_rotate=True,
                                                          trim_image=True,
                                                          tp_type=tp_type,
@@ -1501,6 +1674,25 @@ def run_agi(project_name: str, images: list,
             print("Create GCPs")
             start_time = time.time()
 
+            # load dem if not loaded yet
+            if dem is None:
+                output_dem_path = os.path.join(output_fld, project_name + "_dem_relative.tif")
+                dem = li.load_image(output_dem_path)
+                # set nodata to nan
+                dem[dem == -9999] = np.nan
+
+            # load transform if not loaded yet
+            if transform is None:
+                georef_data_fld = os.path.join(data_fld, "georef")
+                transform_path = os.path.join(georef_data_fld, "transform.txt")
+                transform = lt.load_transform(transform_path, delimiter=",")
+
+            # load modern dem if not loaded yet
+            if modern_dem is None:
+                bounds = cb.calc_bounds(hist_transform, hist_dem.shape)
+
+                modern_dem, modern_transform = lr.load_rema(bounds)
+
             # define output path in which gcp files are saved
             gcp_fld = os.path.join(data_fld, "georef")
             if not os.path.exists(gcp_fld):
@@ -1517,49 +1709,31 @@ def run_agi(project_name: str, images: list,
                 resolution = resolution_absolute
 
             if use_gcp_mask:
-                if mask_type == "rock":
-                    raise NotImplementedError("Rock mask not implemented yet.")
-                    """
-                    if use_rock_mask:
+                gcp_mask = np.ones_like(dem)
 
-                        min_abs_x, min_abs_y = absolute_coords.min(axis=0)
-                        max_abs_x, max_abs_y = absolute_coords.max(axis=0)
+                if "rock" in mask_type:
 
-                        # get the bounds and load the dem
-                        absolute_bounds = (min_abs_x, min_abs_y, max_abs_x, max_abs_y)
+                    if absolute_bounds is None:
+                        absolute_bounds = cb.calc_bounds(transform, dem.shape)
 
-                        # get the rock mask
-                        rock_mask = lrm.load_rock_mask(absolute_bounds, mask_resolution)
+                    # get the rock mask
+                    rock_mask = lrm.load_rock_mask(absolute_bounds, mask_resolution)
 
-                        # give a warning if no rocks are existing in the mask
-                        if np.sum(rock_mask) == 0:
-                            print("WARNING: No rocks found in the rock mask (find_gcps.py)")
+                    # give a warning if no rocks are existing in the mask
+                    if np.sum(rock_mask) == 0:
+                        print("WARNING: No rocks found in the rock mask")
 
-                        # Apply mask buffer by dilating the mask (expanding the regions of 1s)
-                        kernel = np.ones((mask_buffer, mask_buffer), dtype=bool)
-                        rock_mask = binary_dilation(rock_mask, structure=kernel)
+                    # Apply mask buffer by dilating the mask (expanding the regions of 1s)
+                    kernel = np.ones((mask_buffer, mask_buffer), dtype=bool)
+                    rock_mask = binary_dilation(rock_mask, structure=kernel)
 
-                        y_mask_coords = (df['y_abs'].values - min_abs_y) / mask_resolution
-                        x_mask_coords = (df['x_abs'].values - min_abs_x) / mask_resolution
+                    if rock_mask.shape != gcp_mask.shape:
+                        rock_mask = rei.resize_image(rock_mask, (gcp_mask.shape[0], gcp_mask.shape[1]))
 
-                        # cast to int
-                        y_mask_coords = y_mask_coords.astype(int)
-                        x_mask_coords = x_mask_coords.astype(int)
+                    # set the mask to 0 where the rockmask is zero as well
+                    gcp_mask[rock_mask == 0] = 0
 
-                        # Check if the coordinates are within the bounds of the DEM
-                        valid_coords = (y_mask_coords >= 0) & (y_mask_coords < rock_mask.shape[0]) & \
-                                       (x_mask_coords >= 0) & (x_mask_coords < rock_mask.shape[1])
-
-                        # Filter only the valid points
-                        x_mask_coords = x_mask_coords[valid_coords]
-                        y_mask_coords = y_mask_coords[valid_coords]
-                        df = df[valid_coords]
-
-                        # create the mask
-                        mask = rock_mask[y_mask_coords, x_mask_coords] == 1
-                    """
-
-                elif mask_type == "confidence":
+                if "confidence" in mask_type:
 
                     conf_path = os.path.join(output_fld, project_name + "_confidence_relative.tif")
                     conf_arr = li.load_image(conf_path)
@@ -1567,20 +1741,17 @@ def run_agi(project_name: str, images: list,
                     if conf_arr is None:
                         raise ValueError("Confidence array is not defined. Please create a confidence array first.")
 
-                    gcp_mask = np.zeros_like(dem)
-                    gcp_mask[conf_arr > min_gcp_confidence] = 1
+                    gcp_mask[conf_arr < min_gcp_confidence] = 0
 
-                else:
-                    raise ValueError(f"Mask type '{mask_type}' not supported.")
+                # apply buffer to mask
+                kernel = np.ones((mask_buffer, mask_buffer), dtype=bool)
+                gcp_mask = binary_dilation(gcp_mask, structure=kernel)
+
             else:
                 gcp_mask = None
 
-            # apply buffer to mask
-            kernel = np.ones((mask_buffer, mask_buffer), dtype=bool)
-            gcp_mask = binary_dilation(gcp_mask, structure=kernel)
-
             # call snippet to export gcps
-            gcp_df = fg.find_gcps(dem, transform,
+            gcp_df = fg.find_gcps(dem, modern_dem, transform,
                                   bounding_box_relative, zoom_level_dem,
                                   resolution, mask=gcp_mask, ortho=ortho)
 
@@ -1601,7 +1772,7 @@ def run_agi(project_name: str, images: list,
             start_time = time.time()
 
             # set path to gpcs
-            gcp_path = os.path.join(data_fld, "gcps.csv")
+            gcp_path = os.path.join(data_fld, "georef", "gcps.csv")
 
             if os.path.isfile(gcp_path) is False:
                 raise FileNotFoundError(f"GCP file does not exist at '{gcp_path}'")
@@ -1617,7 +1788,6 @@ def run_agi(project_name: str, images: list,
 
             # "https://www.agisoft.com/forum/index.php?topic=7446.0"
             # "https://www.agisoft.com/forum/index.php?topic=10855.0"
-            print("FINISHED")
             doc.save()
 
             finish_time = time.time()
@@ -1664,6 +1834,93 @@ def run_agi(project_name: str, images: list,
         finish_time = time.time()
         exec_time = finish_time - start_time
         print(f"Set to absolute mode - finished ({exec_time:.4f} s)")
+
+        import math
+        while True:
+
+            # init variables for the loop
+            all_markers_valid = True
+            valid_markers = 0
+
+            # get the errors of the gcps
+            for marker in chunk.markers:
+
+                # check if the marker is enabled
+                if marker.enabled is False:
+                    continue
+                else:
+                    valid_markers += 1
+
+                # check if marker is defined in 3D
+                if not marker.position:
+                    print(marker.label + " is not defined in 3D, skipping...")
+                    continue
+
+                # get the position of the marker
+                position = marker.position
+
+                # define variables for projection error
+                proj_error_px = list()
+                proj_error_m = list()
+                proj_sqsum_px = 0
+                proj_sqsum_m = 0
+
+                # iterate over all cameras
+                for camera in marker.projections.keys():
+                    if not camera.transform:
+                        continue  # skipping not aligned cameras
+
+                    # get marker name
+                    # image_name = camera.label
+
+                    # get real and estimate position (relative)
+                    proj = marker.projections[camera].coord  # noqa
+                    reproj = camera.project(position)
+
+                    # remove z coordinate from proj
+                    proj = Metashape.Vector([proj.x, proj.y])  # noqa
+
+                    # get real and estimate position (absolute)
+                    est = chunk.crs.project(
+                        chunk.transform.matrix.mulp(marker.position))
+                    ref = marker.reference.location
+
+                    # calculate px error
+                    error_norm_px = (reproj - proj).norm()
+                    proj_error_px.append(error_norm_px)
+                    proj_sqsum_px += error_norm_px ** 2
+
+                    # calculate m error
+                    error_norm_m = (est - ref).norm()  # The .norm() method gives the total error. Removing it gives X/Y/Z error
+                    proj_error_m.append(error_norm_m)
+                    proj_sqsum_m += error_norm_m ** 2
+
+                if len(proj_error_px):
+                    error_px = math.sqrt(proj_sqsum_px / len(proj_error_px))
+                    error_m = math.sqrt(proj_sqsum_m / len(proj_error_m))
+                    # print(f"{marker.label} projection error: {error_px:.2f} px, {error_m:.2f} m")
+                else:
+                    continue
+
+                if error_px > max_gcp_error_px or error_m > max_gcp_error_m:
+                    marker.enabled = False
+                    all_markers_valid = False
+
+            # update alignment and transform
+            chunk.optimizeCameras()
+            chunk.updateTransform()
+
+            if valid_markers == 0:
+                raise Exception("No valid markers found. Check the previous steps for completeness.")
+
+            if all_markers_valid:
+                print(f"All markers are valid ({valid_markers}/{len(chunk.markers)}).")
+                break
+
+        # remove all markers that are not enabled
+        for marker in chunk.markers:
+            if marker.enabled is False:
+                chunk.remove(marker)
 
         if STEPS["build_depth_maps_absolute"]:
 
@@ -1990,28 +2247,24 @@ def run_agi(project_name: str, images: list,
 
         if STEPS["build_difference_dem"]:
 
+            print("Build absolute difference DEM")
+            start_time = time.time()
+
             # load the historic dem
-            historic_dem_path = os.path.join(output_fld, project_name + "_dem_absolute.tif")
-            historic_dem, transform = li.load_image(historic_dem_path, return_transform=True)
+            if historic_dem is None:
+                historic_dem_path = os.path.join(output_fld, project_name + "_dem_absolute.tif")
+                historic_dem, transform = li.load_image(historic_dem_path, return_transform=True)
 
-            min_x = min_corner_abs.x  # noqa
-            min_y = min_corner_abs.y
-            max_x = max_corner_abs.x  # noqa
-            max_y = max_corner_abs.y
-            historic_bounds = [min_x, min_y, max_x, max_y]
-
-            # modern dem will be loaded in the function itself
-            modern_dem = None
+            # get the bounds of the historic dem
+            h_bounds = cb.calc_bounds(transform, historic_dem.shape)
 
             # get relative dem and define the output path
             difference_dem_rel = cdd.create_difference_dem(historic_dem,
                                                            modern_dem,
-                                                           historic_bounds,
+                                                           h_bounds,
                                                            "REMA10")
             relative_path = os.path.join(output_fld,
                                          project_name + "_diff_rel.tif")
-
-            print(np.amin(difference_dem_rel), np.amax(difference_dem_rel))
 
             # export the relative dem
             eti.export_tiff(difference_dem_rel, relative_path,
@@ -2022,12 +2275,14 @@ def run_agi(project_name: str, images: list,
             absolute_path = os.path.join(output_fld,
                                             project_name + "_diff_abs.tif")
 
-            print(np.amin(difference_dem_abs), np.amax(difference_dem_abs))
-
             # export the absolute dem
             eti.export_tiff(difference_dem_abs, absolute_path,
                             transform=transform, overwrite=True,
                             no_data=np.nan)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Build absolute difference dem - finished ({exec_time:.4f} s)")
 
         if STEPS["evaluate_dem"]:
             print("Evaluate dem")
@@ -2035,25 +2290,18 @@ def run_agi(project_name: str, images: list,
 
             # load the historic dem
             historic_dem_path = os.path.join(output_fld, project_name + "_dem_absolute.tif")
-            historic_dem = li.load_image(historic_dem_path)
+            historic_dem, transform = li.load_image(historic_dem_path, return_transform=True)
 
-            # create historic bounds
-            min_x = min_corner_abs.x  # noqa
-            min_y = min_corner_abs.y
-            max_x = max_corner_abs.x  # noqa
-            max_y = max_corner_abs.y
-            historic_bounds = [min_x, min_y, max_x, max_y]
+            # get the bounds of the historic dem
+            h_bounds = cb.calc_bounds(transform, historic_dem.shape)
 
             # load the confidence dem
             confidence_dem_path = os.path.join(output_fld, project_name + "_confidence_absolute.tif")
             conf_arr = li.load_image(confidence_dem_path)
 
-            # load the modern dem
-            modern_dem = None  # will be loaded in the function itself
-
             # estimate the quality of the DEM
             quality_dict = edq.estimate_dem_quality(historic_dem, modern_dem, conf_arr,
-                                                    historic_bounds=historic_bounds,
+                                                    historic_bounds=h_bounds,
                                                     modern_source="REMA10")
 
             # export the quality dict to a json file
@@ -2065,12 +2313,110 @@ def run_agi(project_name: str, images: list,
             exec_time = finish_time - start_time
             print(f"Evaluate dem - finished ({exec_time:.4f} s)")
 
+        if STEPS["correct_dem"]:
+            print("Correct DEM")
+            start_time = time.time()
+
+            if historic_dem is None:
+                # load the historic dem
+                historic_dem_path = os.path.join(output_fld, project_name + "_dem_absolute.tif")
+                historic_dem, transform = li.load_image(historic_dem_path, return_transform=True)
+
+            if modern_dem is None:
+                bounds = cb.calc_bounds(hist_transform, hist_dem.shape)
+
+                modern_dem, modern_transform = lr.load_rema(bounds)
+
+            # resize the modern DEM to the same size as the historic DEM
+            if modern_dem.shape != historic_dem.shape:
+                # resize the modern DEM to the same size as the historic DEM
+                modern_dem = rei.resize_image(modern_dem, hist_dem.shape)
+
+            corrected_dem, _, _ = cd.correct_dem(historic_dem, modern_dem)
+
+            et.export_tiff(corrected_dem, os.path.join(output_fld, project_name + "_dem_corrected.tif"))
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Correct DEM - finished ({exec_time:.4f} s)")
+
+        if STEPS["build_difference_dem"] and STEPS["correct_dem"]:
+
+            print("Build absolute difference DEM (corrected)")
+            start_time = time.time()
+
+            # load the corrected dem
+            if corrected_dem is None:
+                corrected_dem_path = os.path.join(output_fld, project_name + "_dem_corrected.tif")
+                corrected_dem, transform = li.load_image(corrected_dem_path, return_transform=True)
+
+            # get the bounds of the corrected dem
+            c_bounds = cb.calc_bounds(transform, corrected_dem.shape)
+
+            # get relative dem and define the output path
+            difference_dem_rel_c = cdd.create_difference_dem(corrected_dem,
+                                                           modern_dem,
+                                                           c_bounds,
+                                                           "REMA10")
+            relative_path_c = os.path.join(output_fld,
+                                         project_name + "_diff_rel_corrected.tif")
+
+            # export the relative dem
+            eti.export_tiff(difference_dem_rel_c, relative_path_c,
+                           transform=transform, overwrite=True, no_data=np.nan)
+
+            # make relative dem absolute and define the output path
+            difference_dem_abs_c = np.abs(difference_dem_rel_c)
+            absolute_path_c = os.path.join(output_fld,
+                                            project_name + "_diff_abs_corrected.tif")
+
+            # export the absolute dem
+            eti.export_tiff(difference_dem_abs_c, absolute_path_c,
+                            transform=transform, overwrite=True,
+                            no_data=np.nan)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Build absolute difference dem (corrected) - finished ({exec_time:.4f} s)")
+
+
+        if STEPS["evaluate_dem"] and STEPS["correct_dem"]:
+
+            print("Evaluate corrected dem")
+            start_time = time.time()
+
+            # load the corrected dem
+            if corrected_dem is None:
+                corrected_dem_path = os.path.join(output_fld, project_name + "_dem_corrected.tif")
+                corrected_dem, transform = li.load_image(corrected_dem_path, return_transform=True)
+
+            # get the bounds of the historic dem
+            c_bounds = cb.calc_bounds(transform, corrected_dem.shape)
+
+            # load the confidence dem
+            confidence_dem_path = os.path.join(output_fld, project_name + "_confidence_absolute_corrected.tif")
+            conf_arr = li.load_image(confidence_dem_path)
+
+            # estimate the quality of the DEM
+            quality_dict = edq.estimate_dem_quality(historic_dem, modern_dem, conf_arr,
+                                                    historic_bounds=h_bounds,
+                                                    modern_source="REMA10")
+
+            # export the quality dict to a json file
+            quality_path = os.path.join(output_fld, project_name + "_quality_corrected.json")
+            with open(quality_path, 'w') as f:
+                json.dump(quality_dict, f, indent=4)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Evaluate corrected dem - finished ({exec_time:.4f} s)")
+
         if STEPS["save_to_psql"]:
 
             if quality_dict is None:
                 raise ValueError("Quality dict must be created before saving to psql.")
 
-            sstd.save_sfm_to_db(project_name, quality_dict, images)
+            sstd.save_sfm_to_db(project_name, quality_dict, images_paths)
 
     except Exception as e:
         print("!!ERROR!!")

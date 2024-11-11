@@ -89,7 +89,7 @@ class TiePointDetector:
                         input_img2: np.ndarray,
                         mask1: Optional[np.ndarray] = None,
                         mask2: Optional[np.ndarray] = None,
-                        save_path: Optional[str] = None):
+                        save_path: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
         """
         Finds tie points between two input images, optionally using masks to limit the search area.
 
@@ -157,7 +157,7 @@ class TiePointDetector:
 
                 if tps.shape[0] < self.min_resized_points:
                     self.logger.print(f"Not enough resized tie-points found ({len(conf)} of {self.min_resized_points})")
-                    return np.empty((0, 4)), np.empty((0, 1))
+                    return np.empty((0, 4)), np.empty(0)
 
                 # optional additional matching
                 if self.matching_additional:
@@ -246,9 +246,24 @@ class TiePointDetector:
 
         except (Exception,) as e:
             if self.catch:
-                return np.empty((0, 4)), np.empty((0, 1))
+                return np.empty((0, 4)), np.empty(0)
             else:
                 raise e
+
+        # make empty arrays at least 2dimensional
+        if tps.shape[0] == 0:
+            tps = np.empty((0, 4))
+            conf = np.empty(0)
+
+        # check if there are negative values
+        if np.any(tps < 0):
+            raise ValueError("Negative tie points found")
+
+        # check if tps are out of bounds
+        if (np.any(tps[:, 0] >= img1.shape[1]) or np.any(tps[:, 1] >= img1.shape[0]) or
+                np.any(tps[:, 2] >= img2.shape[1]) or np.any(tps[:, 3] >= img2.shape[0])):
+
+            raise ValueError("Tie points out of bounds")
 
         return tps, conf
 

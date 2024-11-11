@@ -198,6 +198,9 @@ def georef_ortho(ortho: np.ndarray,
                 ortho_tile_rotated, rot_matrix = ri.rotate_image(ortho_tile, rotation,
                                                                  return_rot_matrix=True)
 
+                # set pixel values to nan
+                ortho_tile_rotated[ortho_tile_rotated == 255] = 0
+
                 # resize ortho to sat size
                 zoom_factors = (sat_tile.shape[1] / ortho_tile_rotated.shape[0],
                                 sat_tile.shape[2] / ortho_tile_rotated.shape[1])
@@ -266,8 +269,8 @@ def georef_ortho(ortho: np.ndarray,
             points_tile[:, 3] = points_tile[:, 3] + h * ortho_height_small
 
             # cast column 2 and 3 to int
-            points_tile[:, 2] = points_tile[:, 2].astype(int)
-            points_tile[:, 3] = points_tile[:, 3].astype(int)
+            points_tile[:, 2] = points_tile[:, 2].astype(tp_type)
+            points_tile[:, 3] = points_tile[:, 3].astype(tp_type)
 
             points.append(points_tile)
 
@@ -284,6 +287,7 @@ def georef_ortho(ortho: np.ndarray,
 
     # check if we have enough points
     if points.shape[0] < min_nr_tps:
+        return None, None
         return None, None
 
     # calculate the transform

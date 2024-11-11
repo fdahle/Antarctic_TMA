@@ -4,6 +4,7 @@
 import copy
 import cv2
 import numpy as np
+from sympy import false
 
 
 def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size: str = "size",
@@ -45,6 +46,12 @@ def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size:
     else:
         bool_axis_moved = False
 
+    # boolean images are not supported by cv2.resize
+    is_bool = False
+    if img.dtype == bool:
+        is_bool = True
+        img = img.astype(np.uint8) * 255  # Convert to 0 and 255 for binary representation
+
     # Perform the actual resizing
     if interpolation == "nearest":
         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_NEAREST)
@@ -57,5 +64,9 @@ def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size:
 
     if verbose:
         print(f"Image resized from {input_img.shape} to {img.shape}")
+
+    # convert back to bool
+    if is_bool:
+        img = img.astype(bool)
 
     return img

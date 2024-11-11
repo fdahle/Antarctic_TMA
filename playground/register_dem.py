@@ -32,7 +32,7 @@ def register_dem(dem, footprints,
     # resize the input dem to the size of the rema dem
     dem_resized = resize_dem_with_nan(dem, dem_rema.shape, order=3)
 
-    import src.dem.snippets.find_peaks_in_DEM as fpd
+    import src.dem.snippets.find_peaks_in_DEM_old as fpd
     peaks_resized = fpd.find_peaks_in_dem(dem_resized, no_data_value=-32767)
     peaks_rema = fpd.find_peaks_in_dem(dem_rema)
 

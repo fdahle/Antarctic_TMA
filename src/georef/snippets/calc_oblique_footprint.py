@@ -14,11 +14,11 @@ import src.load.load_rema as lr
 
 # constants
 FEET_TO_METER = 0.3048
-ADAPT_POLY_WITH_REMA = False
+ADAPT_POLY_WITH_REMA = True
 
 
 def calc_oblique_footprint(center: shapely.Point, direction: str, focal_length: float,
-                           altitude: float, azimuth: float):
+                           altitude: float, azimuth: float, rema_size=10):
     """
     "https://gis.stackexchange.com/questions/75405/aerial-photograph-footprint-size-calculation"
 
@@ -57,7 +57,7 @@ def calc_oblique_footprint(center: shapely.Point, direction: str, focal_length: 
         "fovH": 60,
         "xPos": x,
         "yPos": y,
-        "zPos": altitude,
+        "zPos": altitude_meters,
         "fx": focal_length / 1000,  # / 1000,  # convert to m
         "fy": focal_length / 1000,  # / 1000,
         "px": 0.009,  # / 1000,
@@ -375,12 +375,16 @@ def calc_oblique_footprint(center: shapely.Point, direction: str, focal_length: 
 
     if ADAPT_POLY_WITH_REMA:
         # get average elevation data for this initial footprint
-        rema_data = lr.load_rema(polygon.bounds)
+        rema_data, _ = lr.load_rema(polygon.bounds, auto_download=False,
+                                    zoom_level=rema_size,
+                                    return_empty_rema=True)
+        if rema_data is None:
+            return None
         avg_ground_height = np.average(rema_data)
 
         # recalculate the height of camera (in relation to the ground)
-        altitude = altitude - avg_ground_height
-        camera_params["zPos"] = altitude
+        altitude_meters = altitude_meters - avg_ground_height
+        camera_params["zPos"] = altitude_meters
 
         # calculate polygon again
         polygon, origin = get_bounds(camera_params)

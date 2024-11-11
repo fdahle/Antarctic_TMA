@@ -97,6 +97,8 @@ def add_gcp_markers(chunk,
                     if accuracy is not None:
                         marker.reference.accuracy = Metashape.Vector([accuracy[0], accuracy[1], accuracy[2]])  # noqa
 
+                    pbar.set_postfix_str(f"Created marker for {camera.label}")
+
                 # set relative projection for the marker
                 m_proj = Metashape.Marker.Projection(Metashape.Vector([x, y]), True)  # noqa
                 marker.projections[camera] = m_proj  # noqa

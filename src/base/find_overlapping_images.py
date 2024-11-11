@@ -5,17 +5,19 @@ import geopandas as gpd
 from typing import Dict, Optional
 from shapely.geometry import Polygon
 
+import src.display.display_shapes as ds
+
+debug_show_overlap = False
+debug_only_matches = False
 
 def find_overlapping_images(
         image_ids: list[str],
         footprints: Optional[list[Polygon]] = None,
         important_id: Optional[str] = None,
-        max_id_range: int = 2,
-        min_overlap: Optional[float] = None,
-        working_modes: Optional[list[str]] = None) -> \
+        min_overlap: Optional[float] = 0.0) -> \
         Dict[str, list[str]]:
     """
-    Finds overlapping images based on their IDs or geographical footprints.
+    Finds overlapping images based on geographical footprints.
     Args:
         image_ids: A list of image identifiers in the format CAXXXX32VXXXX.
         footprints: A list of shapely Polygon objects representing image footprints.
@@ -34,30 +36,16 @@ def find_overlapping_images(
         ValueError: If required parameters are not provided or invalid.
     """
 
-    if working_modes is None:
-        working_modes = ["ids", "footprints"]
-
     # check for file extensions (raise error if yes)
     for image_id in image_ids:
         if "." in image_id:
             raise ValueError("Image IDs should not contain file extensions")
 
-    # verify the working modes
-    for mode in working_modes:
-        if mode not in ["ids", "footprints"]:
-            raise ValueError(f"working_modes must only contain 'ids' or 'footprints', not '{mode}'")
-
     if type(image_ids) is not list:
         raise ValueError("image_ids must be a list")
 
-    if "ids" in working_modes and max_id_range <= 0:
-        raise ValueError("max_id_range must be a positive integer")
-
-    if "footprints" in working_modes:
-        if footprints is None:
-            raise ValueError("footprints must be provided if 'footprints' is in working_modes")
-        if min_overlap is not None and (min_overlap < 0 or min_overlap > 1):
-            raise ValueError("min_overlap must be a float between 0 and 1")
+    if footprints is None:
+        raise ValueError("footprints must be provided if 'footprints' is in working_modes")
 
     if isinstance(footprints, gpd.GeoSeries):
         footprints_list = list(footprints.geometry)
@@ -67,73 +55,53 @@ def find_overlapping_images(
     # Initialize the dictionary with all image_ids as keys and empty lists as values
     overlap_dict = {image_id: [] for image_id in image_ids}
 
-    if "ids" in working_modes:
 
-        for i, id1 in enumerate(image_ids):
+    # Iterate through each polygon and compare it with the subsequent polygons only
+    for i, poly1 in enumerate(footprints_list):
 
-            # Skip if not the important_id
-            if important_id and id1 != important_id:
+        # Only process if it's the important_id
+        if important_id and image_ids[i] != important_id:
+            continue
+
+        for j in range(i + 1, len(footprints_list)):
+            poly2 = footprints_list[j]
+
+            # Check if the IDs are already in the overlap_dict
+            if image_ids[j] in overlap_dict[image_ids[i]]:
                 continue
 
-                print(id1)
+            # Check if polygons intersect
+            if poly1.intersects(poly2):
 
-            # Extract flight path and number ID from the image ID
-            flight_path1, num_id1 = id1[2:6], int(id1[-4:])
+                # Calculate overlap percentage
+                intersection_area = poly1.intersection(poly2).area
+                smaller_area = min(poly1.area, poly2.area)
+                overlap_percentage = intersection_area / smaller_area
 
-            if important_id:
-                start_idx = 0
+                if overlap_percentage >= min_overlap:
+                    overlap_dict[image_ids[i]].append(image_ids[j])
+                    overlap_dict[image_ids[j]].append(image_ids[i])
+
+                if debug_show_overlap:
+                    style_config = {
+                        "title": f"Overlap between {image_ids[i]} and {image_ids[j]}: "
+                                 f"{round(overlap_percentage, 3)} overlap",
+                        "colors": ["red", "blue"]
+                    }
+
+                    ds.display_shapes([poly1, poly2], style_config=style_config)
             else:
-                start_idx = i + 1
+                if debug_show_overlap and debug_only_matches is False:
+                    style_config = {
+                        "title": f"Overlap between {image_ids[i]} and {image_ids[j]}: no overlap",
+                        "colors": ["red", "blue"]
+                    }
 
-            for j in range(start_idx, len(image_ids)):
+                    ds.display_shapes([poly1, poly2], style_config=style_config)
 
-                id2 = image_ids[j]
-
-                # Skip comparing with itself
-                if id1 == id2:
-                    continue
-
-                # Extract flight path and number ID from the image ID
-                flight_path2, num_id2 = id2[2:6], int(id2[-4:])
-
-                # Check if the flight paths are the same and the number IDs are within the max_id_range
-                if flight_path1 == flight_path2 and abs(num_id1 - num_id2) <= max_id_range:
-                    overlap_dict[id1].append(id2)
-                    overlap_dict[id2].append(id1)
-
-    if "footprints" in working_modes:
-
-        # Iterate through each polygon and compare it with the subsequent polygons only
-        for i, poly1 in enumerate(footprints_list):
-
-            # Only process if it's the important_id
-            if important_id and image_ids[i] != important_id:
-                continue
-
-            for j in range(i + 1, len(footprints_list)):
-                poly2 = footprints_list[j]
-
-                # Check if the IDs are already in the overlap_dict
-                if image_ids[j] in overlap_dict[image_ids[i]]:
-                    continue
-
-                # Check if polygons intersect
-                if poly1.intersects(poly2):
-
-                    if min_overlap is not None:
-
-                        # Calculate overlap percentage
-                        overlap_percentage = (poly1.intersection(poly2).area / poly1.union(poly2).area) * 100
-
-                        # they overlap more than the min_overlap
-                        if overlap_percentage >= min_overlap:
-                            overlap_dict[image_ids[i]].append(image_ids[j])
-                            overlap_dict[image_ids[j]].append(image_ids[i])
-
-                    else:
-                        # If no min_overlap specified, just add the overlapping IDs
-                        overlap_dict[image_ids[i]].append(image_ids[j])
-                        overlap_dict[image_ids[j]].append(image_ids[i])
+    # remove potential duplicates
+    for key in overlap_dict.keys():
+        overlap_dict[key] = list(set(overlap_dict[key]))
 
     # filter dict for important_id
     if important_id and important_id in overlap_dict.keys():

@@ -1,9 +1,12 @@
+import copy
 import os
 import numpy as np
 import pandas as pd
 import xml.etree.ElementTree as Element_tree
-
-from scipy.spatial.distance import cdist
+from numba import njit
+from sklearn.neighbors import KDTree
+from tqdm import tqdm
+from io import StringIO
 
 import src.load.load_image as li
 import src.export.export_ply as ep
@@ -18,6 +21,23 @@ def create_matching_structure(tp_dict, conf_dict,
                               min_tps=10, tolerance=1,
                               s_min=1, s_max=50,
                               camera_data=None):
+    """
+
+    Args:
+        tp_dict:
+        conf_dict:
+        project_files_folder:
+        img_folder:
+        input_mode:
+        min_tps:
+        tolerance: tolerance for the distance between points to be considered as a match (in pixels)
+        s_min:
+        s_max:
+        camera_data:
+
+    Returns:
+
+    """
 
     # mode can be 'agi' or 'bundler'
     if input_mode not in ['agi', 'bundler']:
@@ -32,28 +52,37 @@ def create_matching_structure(tp_dict, conf_dict,
             os.makedirs(path_pc_fld)
 
     # init variables
-    arr = None  # array to keep data of all matches
+    track_counter = 0  # counter for the tracks
     image_dict = {}  # dict to store the loaded images
     image_dims = {}  # dict to store the image dimensions
-    track_counter = 0  # counter for the tracks
 
     # sort dict by key
     tp_dict = dict(sorted(tp_dict.items()))
     conf_dict = dict(sorted(conf_dict.items()))
 
     # convert the image names to a sorted list and map them to an index
-    image_names = sorted(set([key[0] for key in tp_dict.keys()] + [key[1] for key in tp_dict.keys()]))
+    image_names = [f.split(".")[0] for f in os.listdir(img_folder) if f.endswith(".tif")]
+    image_names = sorted(image_names)
     image_map = {name: idx for idx, name in enumerate(image_names)}
 
-    # create one dataframe from different tp_dicts
-    for key in tp_dict.keys():
+    # List to collect rows before converting them to a DataFrame
+    all_rows = []
 
-        # get the tps and conf for a specific image pair
+    # add the points to the dataframe
+    for idx, key in (pbar := tqdm(enumerate(tp_dict.keys()), total=len(tp_dict))):
+
+        # set description and postfix
+        pbar.set_description("Add tie_points to dataframe")
+        pbar.set_postfix_str(f"{key[0]} and {key[1]}")
+
+        # get the tps and conf for this specific image pair
         tps = tp_dict[key]
         conf = conf_dict[key]
 
         # skip if there are too few tps
         if tps.shape[0] < min_tps:
+            if idx == len(tp_dict) - 1:
+                pbar.set_postfix_str("Finished!")
             continue
 
         # get the two image ids
@@ -68,13 +97,13 @@ def create_matching_structure(tp_dict, conf_dict,
         if img1_id not in image_dict.keys():
             img1 = li.load_image(img1_id, img_folder)
             image_dict[img1_id] = img1
-            image_dims[img1_idx] = img1.shape[:2]
+            image_dims[img1_idx] = (img1.shape[1], img1.shape[0])
         else:
             img1 = image_dict[img1_id]
         if img2_id not in image_dict.keys():
             img2 = li.load_image(img2_id, img_folder)
             image_dict[img2_id] = img2
-            image_dims[img2_idx] = img2.shape[:2]
+            image_dims[img2_idx] = (img2.shape[1], img2.shape[0])
         else:
             img2 = image_dict[img2_id]
 
@@ -118,85 +147,103 @@ def create_matching_structure(tp_dict, conf_dict,
         points1 = np.hstack((points1, pixel_values1.reshape(-1, 1)))
         points2 = np.hstack((points2, pixel_values2.reshape(-1, 1)))
 
-        # add the points to the array
-        if arr is None:
-            arr = np.vstack((points1, points2))
-        else:
-            arr = np.vstack((arr, points1, points2))
+        # extend the all_rows list
+        all_rows.extend(points1.tolist())
+        all_rows.extend(points2.tolist())
+
+        # update the progress bar
+        if idx == len(tp_dict) - 1:
+            pbar.set_postfix_str("Finished!")
+
+    # Create DataFrame from the collected data
+    df = pd.DataFrame(all_rows, columns=['x', 'y', 'image_idx', 'confidence', 'track_idx', 'color'])
 
     # check that each track_id has a count of 2
-    track_counts = np.unique(arr[:, 4], return_counts=True)
-    for track_id, count in zip(track_counts[0], track_counts[1]):
-        if count != 2:
-            raise ValueError(f"Track {track_id} has {count} points")
-
-    # convert to dataframe
-    df = pd.DataFrame(arr)
-    df.columns = ['x', 'y', 'image_idx', 'confidence', 'track_idx', 'color']
-
-    # Get the x, y, and image_idx columns
-    coords = df[['x', 'y']].values
-    image_idx = df['image_idx'].values
-
-    # Compute the pairwise Euclidean distances
-    distances = cdist(coords, coords)
-
-    # Find pairs of points with distances less than the tolerance
-    close_pairs = np.where((distances < tolerance) & (distances > 0))  # Exclude distance of 0 (same point)
-
-    # only keep pairs if the image_idx is identical for these pairs
-    pairs = [(i, j) for i, j in zip(*close_pairs) if image_idx[i] == image_idx[j]]
+    track_id_counts = df.groupby('track_idx').size()
+    if (track_id_counts != 2).any():
+        print("Some track_ids do not appear exactly 2 times.")
 
     # Create a set to track processed indices
     processed = set()
 
-    # Loop through matches and merge corresponding rows together
-    for elem in pairs:
+    # iterate the image_idx to find tracks over multiple images
+    for idx, image_key in (pbar := tqdm(enumerate(image_map.keys()), total=len(image_map))):
 
-        # assure that matches only has two elements
-        if len(elem) != 2:
-            raise ValueError("Matches should only have two elements")
+        pbar.set_description("Merge tracks")
+        pbar.set_postfix_str(f"Image {image_key}")
 
-        # get the indices of the points
-        i, j = elem
+        # get the idx
+        image_idx = image_map[image_key]
 
-        # only merge if the points are not already processed
-        if i not in processed and j not in processed:
+        # get subset of df
+        df_sub = df[df['image_idx'] == image_idx].copy()
 
-            # get the track_idx for both points
-            track_idx_i = df.iloc[i]['track_idx']
-            track_idx_j = df.iloc[j]['track_idx']
+        # Get coords columns
+        coords = df_sub[['x', 'y']].values
 
-            # Find the minimum track_idx between the two points
-            min_track_idx = min(track_idx_i, track_idx_j)
+        # assure that there are any points in the image
+        if coords.shape[0] == 0:
+            continue
 
-            # get the average x, y
-            avg_x = (df.iloc[i]['x'] + df.iloc[j]['x']) / 2
-            avg_y = (df.iloc[i]['y'] + df.iloc[j]['y']) / 2
+        # Use KDTree for efficient neighbor search within the tolerance
+        tree = KDTree(coords)
 
-            # get the average color
-            avg_color = int((df.iloc[i]['color'] + df.iloc[j]['color']) / 2)
+        # Find indices of points within the given tolerance
+        indices = tree.query_radius(coords, r=tolerance)
 
-            # update the coordinates at i and j
-            df.at[i, 'x'] = avg_x
-            df.at[j, 'x'] = avg_x
-            df.at[i, 'y'] = avg_y
-            df.at[j, 'y'] = avg_y
+        # Convert the result to a list of pairs (i, j)
+        pairs = [(i, j) for i, neighbors in enumerate(indices) for j in neighbors if i != j]
 
-            # Update all entries with the same track_idx
-            df.loc[df['track_idx'] == track_idx_i, 'color'] = avg_color
-            df.loc[df['track_idx'] == track_idx_j, 'color'] = avg_color
-            df.loc[df['track_idx'] == track_idx_i, 'track_idx'] = min_track_idx
-            df.loc[df['track_idx'] == track_idx_j, 'track_idx'] = min_track_idx
+        # remove pairs where one of the points is already processed
+        pairs = [(i, j) for i, j in pairs if i not in processed and j not in processed]
 
-            # Mark both points as processed to avoid updating them again
-            processed.add(i)
-            processed.add(j)
+        # Skip if there are no pairs
+        if len(pairs) == 0:
+            continue
+
+        # Pre-extract necessary columns as numpy arrays for fast in-loop access
+        track_idx_arr = df_sub['track_idx'].values
+        color_arr = df_sub['color'].values
+        x_arr = df_sub['x'].values
+        y_arr = df_sub['y'].values
+
+        # Use Numba to process the pairs and update arrays
+        x_arr, y_arr, color_arr, track_idx_arr, track_idx_mapping = _merge_points(pairs, x_arr, y_arr, color_arr, track_idx_arr)
+
+        # Put the updated values back into df_sub
+        df_sub['x'] = x_arr
+        df_sub['y'] = y_arr
+        df_sub['color'] = color_arr
+        df_sub['track_idx'] = track_idx_arr
+
+        # Put the updated df_sub back into the original df
+        df.loc[df['image_idx'] == image_idx, ['x', 'y', 'color', 'track_idx']] = df_sub[['x', 'y', 'color', 'track_idx']]
+
+        # update the tracking indices for the other elements as well
+        for max_track_idx, min_track_idx in track_idx_mapping.items():
+            df.loc[df['track_idx'] == max_track_idx, 'track_idx'] = min_track_idx
+
+            # add min_track_idx to processed
+            processed.add(min_track_idx)
+
+        if idx == len(image_map) - 1:
+            pbar.set_postfix_str("Finished!")
 
     # remove duplicates with the same value in image_idx and track_idx
     df = df.drop_duplicates(subset=['image_idx', 'track_idx'])
 
+    # set image_idx and track_idx to integer
+    df['image_idx'] = df['image_idx'].astype(int)
+    df['track_idx'] = df['track_idx'].astype(int)
+
+    # check that all track_ids appear at least 2 times
+    track_id_counts = df.groupby('track_idx').size()
+    if (track_id_counts < 2).any():
+        raise ValueError("Some track_ids do not appear at least 2 times.")
+
     if input_mode == "agi":
+
+        raise NotImplementedError("This part of the code is not working currently.")
 
         # list to store the number of points per image
         points_per_image = []
@@ -272,8 +319,27 @@ def create_matching_structure(tp_dict, conf_dict,
         project_path_bundler_fld = os.path.join(project_path_data_fld, "data", "bundler")
         if os.path.isdir(project_path_bundler_fld) is False:
             os.makedirs(project_path_bundler_fld)
+
+        # define the path to the bundler file
         bundler_path = os.path.join(project_path_bundler_fld, "bundler.out")
-        print(bundler_path)
+
+        # add the image dimensions (split in x and y) to the df
+        df['image_dims_x'] = df['image_idx'].apply(lambda x: image_dims[x][0])
+        df['image_dims_y'] = df['image_idx'].apply(lambda x: image_dims[x][1])
+
+        # calculate bundler_x and bundler_y
+        df['bundler_x'] = df['x'] - df['image_dims_x'] / 2
+        df['bundler_y'] = df['image_dims_y'] / 2 - df['y']
+
+        # remove gaps in the track_idx
+        unique_track_ids = sorted(df['track_idx'].unique())
+        sequential_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_track_ids)}
+        df['track_idx'] = df['track_idx'].map(sequential_mapping)
+
+        # group the df by track_idx
+        df_grouped = df.groupby('track_idx')
+
+        # write the bundler file
         with open(bundler_path, 'w') as f:
 
             # Step 1: Write header
@@ -288,44 +354,43 @@ def create_matching_structure(tp_dict, conf_dict,
                 f.write(f'{cam["rotation_matrix"][6]} {cam["rotation_matrix"][7]} {cam["rotation_matrix"][8]}\n')
                 f.write(f'{cam["translation_vector"][0]} {cam["translation_vector"][1]} {cam["translation_vector"][2]}\n')
 
-            visited_tracks = set()
+            # Buffer for bulk writing
+            buffer = StringIO()
 
             # Step 3: Write point matches
             # iterate over the dataframe
-            for i, row in df.iterrows():
+            for track_idx, group in (pbar := tqdm(df_grouped, total=df_grouped.ngroups)):
 
-                # get the track_idx of the row
-                track_idx = row['track_idx']
+                # set progress bar description and postfix
+                pbar.set_description("Write tracks to bundler file")
+                pbar.set_postfix_str(f"Track: {track_idx}")
 
-                # skip if the track_idx is already visited
-                if track_idx in visited_tracks:
-                    continue
-                else:
-                    # add the track_idx to the visited tracks
-                    visited_tracks.add(track_idx)
-
-                # get all rows with the same track_idx
-                match_array = df[df['track_idx'] == track_idx]
+                # calculate average color
+                avg_color = int(group['color'].mean())
 
                 # Dummy 3D point (since we only have 2D matches)
-                f.write('0.0 0.0 0.0\n')  # XYZ coordinates of the point
-                f.write(f'{int(row['color'])} {int(row['color'])} {int(row['color'])}\n')  # RGB color of the point (dummy value)
+                buffer.write('0.0 0.0 0.0\n')  # XYZ coordinates of the point
+                buffer.write(f'{avg_color} {avg_color} {avg_color}\n')  # RGB color of the point (dummy value)
 
-                fstr = f"{match_array.shape[0]} "
-                for j, _row in match_array.iterrows():
+                # Number of images in which the point appears
+                fstr = f"{group.shape[0]} "
 
-                    # get image dimension
-                    h, w = image_dims[int(_row['image_idx'])]
-                    x_bundler = _row['x'] - w / 2
-                    y_bundler = h / 2 - _row['y']
-
+                # Iterate over the rows in the group
+                for _, _row in group.iterrows():
                     fstr += f"{int(_row['image_idx'])} "  # image index
                     fstr += f"{int(_row['track_idx'])} "  # track index
-                    fstr += f"{x_bundler} {y_bundler} "  # x, y coordinates
+                    fstr += f"{_row['bundler_x']} {_row['bundler_y']} "  # x, y coordinates
 
                 # remove last space and add newline
                 fstr = fstr[:-1]
-                f.write(fstr + "\n")
+                buffer.write(fstr + "\n")
+
+                # Update the progress bar when finished
+                if track_idx == df_grouped.ngroups - 1:
+                    pbar.set_postfix_str("Finished!")
+
+            # Write all the buffered content at once to the file
+            f.write(buffer.getvalue())
 
     else:
         raise ValueError("Mode should be either 'agi' or 'bundler'")
@@ -360,6 +425,7 @@ def _create_doc_xml(xml_path, points_per_image, num_matches):
 
         c_counter += 1
 
+    # TODO: FIX METADATA
     metadata = {
         "Info/LastSavedDateTime": "2024:08:19 16:30:19",
         "Info/LastSavedSoftwareVersion": "2.1.2.18358",
@@ -409,3 +475,46 @@ def _create_doc_xml(xml_path, points_per_image, num_matches):
 
     with open(xml_path, "w") as f:
         f.write(full_xml)
+
+
+
+@njit
+def _merge_points(pairs, x_arr, y_arr, color_arr, track_idx_arr):
+    """ Merges points in pairs and updates their x, y, color, and track_idx """
+    processed = set()
+    track_idx_mapping = {}
+
+    for i, j in pairs:
+
+        # Get track_idx and color for both points
+        track_idx_i = track_idx_arr[i]
+        track_idx_j = track_idx_arr[j]
+
+        if track_idx_i in processed or track_idx_j in processed:
+            continue
+
+        # Find the minimum and maximum track_idx between the two points
+        min_track_idx = min(track_idx_i, track_idx_j)
+        max_track_idx = max(track_idx_i, track_idx_j)
+
+        # Compute the average x, y, and color values
+        avg_x = (x_arr[i] + x_arr[j]) / 2
+        avg_y = (y_arr[i] + y_arr[j]) / 2
+        avg_color = (color_arr[i] + color_arr[j]) // 2  # integer division
+
+        # Update coordinates and color for both points
+        x_arr[i] = x_arr[j] = avg_x
+        y_arr[i] = y_arr[j] = avg_y
+        color_arr[i] = color_arr[j] = avg_color
+
+        # Update track_idx for both points
+        track_idx_arr[i] = track_idx_arr[j] = min_track_idx
+
+        # Record the mapping from max_track_idx to min_track_idx
+        track_idx_mapping[max_track_idx] = min_track_idx
+
+        # Mark points as processed
+        processed.add(track_idx_i)
+        processed.add(track_idx_j)
+
+    return x_arr, y_arr, color_arr, track_idx_arr, track_idx_mapping

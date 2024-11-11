@@ -9,7 +9,7 @@ import src.base.connect_to_database as ctd
 
 # Variables
 input_fld = "/data/ATM/data_1/georef/"
-overwrite = False
+overwrite = True
 
 
 def update_georef_psql():
@@ -56,6 +56,13 @@ def update_georef_psql():
         row_centers = centers[centers["image_id"] == image_id]
         row_azimuth = azimuths[azimuths["image_id"] == image_id]
         row_approx = footprint_approx[footprint_approx["image_id"] == image_id]
+
+        if row_centers.shape[0] == 0:
+            continue
+        if row_azimuth.shape[0] == 0:
+            continue
+        if row_approx.shape[0] == 0:
+            continue
 
         # extract the data
         footprint = row["geometry"]

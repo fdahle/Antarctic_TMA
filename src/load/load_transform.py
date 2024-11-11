@@ -9,7 +9,8 @@ import numpy as np
 DEFAULT_TRANSFORM_FLD = "C:/Users/Felix/Documents/GitHub/Antarctic_TMA/data/transformation"
 
 
-def load_transform(transform_id: str, transform_fld: str | None = None) -> np.ndarray:
+def load_transform(transform_id: str, transform_fld: str | None = None,
+                   delimiter=";") -> np.ndarray:
     """
     Loads a transformation matrix from a specified file.
     Args:
@@ -24,7 +25,7 @@ def load_transform(transform_id: str, transform_fld: str | None = None) -> np.nd
     absolute_transform_path = _create_absolute_path(transform_id, transform_fld)
 
     # load the matrix
-    data_arr = np.loadtxt(absolute_transform_path)
+    data_arr = np.loadtxt(absolute_transform_path, delimiter=delimiter)
 
     # reshape to right format
     transform_matrix = data_arr.reshape([3, 3])

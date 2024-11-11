@@ -5,10 +5,12 @@ import os
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import shapely
 from tqdm import tqdm
 
 # Local imports
 import src.base.connect_to_database as ctd
+import src.display.display_shapes as ds
 import src.georef.snippets.calc_azimuth as ca
 import src.georef.snippets.calc_oblique_footprint as ego
 
@@ -17,10 +19,12 @@ georef_types = ["sat", "img", "calc"]
 overwrite = True
 use_avg_height = True
 use_avg_focal_length = True
+rema_size=32
 
 # Constants
 PATH_GEOREF_FLD = "/data/ATM/data_1/georef/"
 
+debug_show_footprints = False
 
 def georef_oblique(georef_type):
 
@@ -40,7 +44,8 @@ def georef_oblique(georef_type):
 
     # get height and azimuth for all vertical images
     sql_string = ("SELECT images.image_id, images.altitude, "
-                  "ie.height, ie.altimeter_value, ie.focal_length "
+                  "ie.height, ie.altimeter_value, ie.focal_length, "
+                  "ST_ASTEXT(ie.footprint_exact) AS footprint_exact "
                   "FROM images JOIN images_extracted ie on images.image_id = ie.image_id "
                   f"WHERE images.image_id IN {image_ids}")
     meta_data = ctd.execute_sql(sql_string, conn)
@@ -84,6 +89,9 @@ def georef_oblique(georef_type):
             else:
                 print("Could not find altitude for image_id", image_id)
                 continue
+
+        vertical_footprint = meta_row[("footprint_exact")]
+        vertical_polygon = shapely.from_wkt(vertical_footprint)
 
         # get the adapted azimuth for this image
         azimuth = ca.calc_azimuth(image_id, center_shp_data)
@@ -130,7 +138,21 @@ def georef_oblique(georef_type):
             # create oblique polygons
             oblique_polygon = ego.calc_oblique_footprint(center, direction,
                                                           focal_length, altitude,
-                                                          azimuth)
+                                                          azimuth, rema_size)
+            if oblique_polygon is None:
+                print(f"Could not create oblique polygon for {new_image_id}")
+                continue
+
+            style_config = {
+                "title": new_image_id,
+                "colors": ["blue", "red"]
+            }
+
+            if debug_show_footprints:
+
+                ds.display_shapes([vertical_polygon.iloc[0],
+                                   oblique_polygon], style_config=style_config)
+
             # save new entry
             new_entries['image_id'].append(new_image_id)
             new_entries['geometry'].append(oblique_polygon)

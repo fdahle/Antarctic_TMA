@@ -54,6 +54,9 @@ def check_sky(segmented, sky_id: int = 6,
     except (Exception,):
         sky_bottom = 0
 
+    print("skyTOP, skyBOTTOM")
+    print(sky_top, sky_bottom)
+
     # image is right
     if sky_top > sky_bottom:
         image_is_correct = True

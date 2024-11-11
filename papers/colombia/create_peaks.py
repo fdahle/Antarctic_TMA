@@ -1,7 +1,7 @@
 import numpy as np
 
 import src.load.load_image as li
-import src.dem.snippets.find_peaks_in_DEM as fpiD
+import src.dem.snippets.find_peaks_in_DEM_old as fpiD
 
 path_dem = "/data/ATM/colombia/data/DEM/DEM_5m.tif"
 path_peaks = "/data/ATM/colombia/data/peaks/peaks.shp"

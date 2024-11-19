@@ -15,43 +15,27 @@ def find_peaks_in_dem(dem,
                       cell_size=250,
                       no_data_value=-9999):
 
-    # copy the dem to avoid changing the original
-    _dem = np.copy(dem)
+    # get the nanmin and nanmax of the dem
+    dem_min = np.nanmin(dem)
+    dem_max = np.nanmax(dem)
 
-    # set no data to nan
-    _dem[_dem == no_data_value] = np.nan
+    # adapt minimum threshold value based on dem_min and dem_max
+    range_factor = 0.05
+    peak_threshold = (dem_max - dem_min) * range_factor
 
-    # Find indices where rows/columns contain only NaNs
-    nan_rows = np.isnan(_dem).all(axis=1)
-    nan_cols = np.isnan(_dem).all(axis=0)
+    # define min distance between peaks
+    min_distance = int(cell_size * 0.1)
 
-    # Calculate counts of NaN-only rows and columns at the top and left
-    rows_lost_top = np.argmax(~nan_rows)
-    cols_lost_left = np.argmax(~nan_cols)
-
-    # remove lines and columns with only NaN values
-    _dem = _dem[~np.isnan(_dem).all(axis=1)]
-    _dem = _dem[:, ~np.isnan(_dem).all(axis=0)]
-
-    # standardize dem so that the minimum value is 0
-    _dem -= np.nanmin(_dem)
+    print("peak threshold: ", peak_threshold)
+    print("min distance: ", min_distance)
 
     # Apply Gaussian filter to smooth DEM (optional, helps reduce noise in peak detection)
     if smoothing:
-        _dem = gaussian_filter(_dem, sigma=1)
-
-    # Find peaks in the DEM
-    peaks_coords = peak_local_max(_dem, min_distance=10, threshold_abs=0, exclude_border=False)
-
-    # Extract the x, y coordinates of the peaks
-    y_peaks, x_peaks = peaks_coords[:, 0], peaks_coords[:, 1]
-
-    # merge the x and y coordinates
-    peak_coords = np.asarray(list(zip(x_peaks, y_peaks)))
+        _dem = gaussian_filter(dem, sigma=1)
 
     # check how many cells fit in the dem
-    num_cells_x = _dem.shape[1] // cell_size
-    num_cells_y = _dem.shape[0] // cell_size
+    num_cells_x = dem.shape[1] // cell_size
+    num_cells_y = dem.shape[0] // cell_size
 
     # Initialize a list to store the selected peaks in each cell
     selected_peaks = []
@@ -64,7 +48,7 @@ def find_peaks_in_dem(dem,
         for j in range(num_cells_x):
 
             pbar.update(1)
-            pbar.set_description(f"Find most prominent peaks")
+            pbar.set_description(f"Find peaks")
             pbar.set_postfix_str(f"Cell at {i+1}, {j+1}")
 
             # Define the cell boundaries
@@ -73,20 +57,28 @@ def find_peaks_in_dem(dem,
             cell_min_y = i * cell_size
             cell_max_y = (i + 1) * cell_size
 
-            # get all peaks within the cell
-            cell_indices = (peak_coords[:, 0] >= cell_min_x) & (peak_coords[:, 0] < cell_max_x) & (
-                    peak_coords[:, 1] >= cell_min_y) & (peak_coords[:, 1] < cell_max_y)
-            cell_peaks = peak_coords[cell_indices]
+            # get the cell
+            cell = dem[cell_min_y:cell_max_y, cell_min_x:cell_max_x]
 
-            # skip cells with no peaks
-            if cell_peaks.shape[0] == 0:
+            # skip cells with less than X percent of data
+            if np.isnan(cell).sum() > 0.25 * cell_size * cell_size:
                 continue
 
+            # find all peaks in the cell
+            peak_coords = peak_local_max(cell, min_distance=min_distance,
+                                         threshold_abs=peak_threshold)
+
+            # switch x and y
+            peak_coords = np.flip(peak_coords, axis=1)
+
             # get the height of the peaks
-            cell_heights = _dem[cell_peaks[:, 1], cell_peaks[:, 0]]
+            cell_heights = cell[peak_coords[:, 1], peak_coords[:, 0]]
 
             # get the most high peak of each cell
-            highest_peak = cell_peaks[np.argmax(cell_heights)]
+            highest_peak = cell[np.argmax(cell_heights)]
+
+            print(highest_peak)
+            exit()
 
             # append the most prominent peak to the numpy array
             selected_peaks.append(highest_peak)
@@ -95,12 +87,6 @@ def find_peaks_in_dem(dem,
 
     # convert to numpy array
     selected_peaks = np.array(selected_peaks)
-
-    # add the lost rows and columns back to the peak coordinates
-    peak_coords[:, 0] += cols_lost_left
-    peak_coords[:, 1] += rows_lost_top
-    selected_peaks[:, 0] += cols_lost_left
-    selected_peaks[:, 1] += rows_lost_top
 
     if debug_display_peaks:
 

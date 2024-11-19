@@ -17,24 +17,36 @@ import src.sfm_agi.run_agi as ra  # noqa
 import src.base.connect_to_database as ctd  # noqa
 import src.georef.snippets.calc_azimuth as ca  # noqa
 import src.load.load_military_focal_length as lmfl  # noqa
-import src.sfm_agi.old.run_agi_relative as rar  # noqa
-import src.sfm_agi.old.run_agi_absolute as raa  # noqa
 import src.other.extract.extract_ids_by_area as eia  # noqa
 
 # define the image ids
 #image_ids = ["CA214732V0045", "CA214732V0046", "CA214732V0047", "CA214732V0048"]
 image_ids = ['CA214831L0071', 'CA214831L0072', 'CA214831L0073', 'CA214831L0074', 'CA214832V0070', 'CA214832V0071', 'CA214832V0072', 'CA214832V0073', 'CA214832V0074', 'CA214931L0155', 'CA214931L0156', 'CA214931L0157', 'CA214931L0158', 'CA214931L0159', 'CA214932V0155', 'CA214932V0156', 'CA214932V0157', 'CA214932V0158', 'CA215031L0251', 'CA215031L0252', 'CA215031L0253', 'CA215031L0254', 'CA215032V0251', 'CA215032V0252', 'CA215032V0253', 'CA215131L0296', 'CA215131L0297', 'CA215131L0298', 'CA215131L0299', 'CA215132V0295', 'CA215132V0296', 'CA215132V0297', 'CA215132V0298', 'CA215132V0299', 'CA215132V0300', 'CA215133R0296', 'CA215133R0297', 'CA215133R0298', 'CA215133R0299', 'CA215733R0041']
-
+image_ids = ["CA216632V0280", "CA216632V0281", "CA216632V0282", "CA216632V0283",
+             "CA216632V0284", "CA216632V0285", "CA216632V0286", "CA216632V0287"]
 bounds = None
 
+project_source = "crane"
+path_project_csv = f"/data/ATM/data_1/sfm/agi_data/research_areas/{project_source}.csv"
+# read the csv
+df = pd.read_csv(path_project_csv)
+# get image_ids as list
+image_ids = df["'image_id'"].tolist()
+# remove all ' from every string
+image_ids = [image_id.replace("'", "") for image_id in image_ids]
+
+
 # project settings
-project_name = "new_test_9"
+project_name = "crane"
 overwrite = False
 resume = True
 
+if project_source != project_name:
+    raise ValueError("Project name and project source are not the same")
+
 # accuracy settings (None means not using it)
 camera_accuracy = (100, 100, 100)  # x, y, z in m
-gcp_accuracy = (20, 20, 20)
+gcp_accuracy = (5, 5, 10)
 
 # input settings
 limit_images = 0  # 0 means no limit

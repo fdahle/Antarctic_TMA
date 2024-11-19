@@ -1,10 +1,11 @@
 """ load data from shape files """
-
+import logging
 import fiona
 import geopandas as gpd
 from shapely.geometry import shape
 from shapely.validation import explain_validity
 
+logging.getLogger('fiona').setLevel(logging.ERROR)
 
 def load_shape_data(path_to_file: str,
                     verbose: bool = False) -> gpd.GeoDataFrame:

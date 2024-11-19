@@ -1,6 +1,6 @@
 import itertools
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import src.display.display_images as di
 import src.load.load_image as li
@@ -27,6 +27,9 @@ def save_tie_points(chunk, save_path):
 
     # get total number of pairs
     num_pairs = len(list(itertools.combinations(cameras, 2)))
+
+    # close possible open tqdm instances
+    tqdm._instances.clear()  # noqa
 
     # iterate over all cameras
     for i, (camera1, camera2) in (pbar := tqdm(enumerate(itertools.combinations(cameras, 2)), total=num_pairs)):

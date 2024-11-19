@@ -3,8 +3,11 @@
 # Python imports
 import os
 
+import numpy as np
+
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
+from scipy.ndimage import binary_dilation
 from shapely.geometry import box
 
 import src.load.load_shape_data as lsd
@@ -13,8 +16,9 @@ import src.load.load_shape_data as lsd
 PATH_QUANTARTICA = "/data/ATM/data_1/quantarctica/Quantarctica3"  # noqa
 PATH_ROCK_MASK = os.path.join(PATH_QUANTARTICA, "Basemap/ADD_Rock_outcrop_?QUALITY?_res_polygon.shp")
 
-
-def load_rock_mask(bounds: list, resolution: int | float, quality: str = "high"):
+def load_rock_mask(bounds: list, resolution: int | float,
+                   quality: str = "high",
+                   mask_buffer: int = 0) -> np.ndarray:
     """
     Use the absolute bounds to load the rock mask from Quantarctica. The shape file
     will be limited to the bounds and rasterized with the given resolution.
@@ -71,7 +75,13 @@ def load_rock_mask(bounds: list, resolution: int | float, quality: str = "high")
         out_shape=out_shape,
         transform=transform,
         fill=0,  # Fill value for areas outside the polygons
-        dtype='uint8'
-    )
+        dtype='uint8')
+
+    # Apply mask buffer by dilating the mask (expanding the regions of 1s)
+    if mask_buffer > 0:
+
+        kernel = np.ones((mask_buffer, mask_buffer),
+                         dtype=bool)
+        rasterized = binary_dilation(rasterized, structure=kernel)
 
     return rasterized

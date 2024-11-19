@@ -15,19 +15,23 @@ def calc_transform(image: np.ndarray, tps: np.ndarray, conf: Optional[np.ndarray
                    epsg_code: int = 3031, simplify_points: bool = False,
                    n_clusters: int = -1) -> tuple[np.ndarray, np.ndarray]:
     """
-    Calculates the transformation matrix and residuals for geo-referencing an image using Ground Control Points (GCPs).
+    Calculates the transformation matrix and residuals for geo-referencing an image
+    using Ground Control Points (GCPs).
 
     Args:
         image (np.ndarray): The input image array.
-        tps (np.ndarray): 2D numpy array of tie points with each row representing a tie point as (x, y, x_abs, y_abs).
-        conf (Optional[np.ndarray], optional): Array of confidence values for each tie point. Defaults to None.
-        transform_method (str, optional): Method to calculate the transformation. Options are "rasterio" or "gdal".
-            Defaults to "rasterio".
+        tps (np.ndarray): 2D numpy array of tie points with each row representing
+            a tie point as (x_abs, y_abs, x, y).
+        conf (Optional[np.ndarray], optional): Array of confidence values
+            for each tie point. Defaults to None.
+        transform_method (str, optional): Method to calculate the transformation.
+            Options are "rasterio" or "gdal". Defaults to "rasterio".
         gdal_order (int, optional): Order of the polynomial for GDAL transformation. Defaults to 1.
         no_data_value (int, optional): No data value for the image. Defaults to 0.
-        epsg_code (int, optional): EPSG code for the coordinate reference system. Defaults to 3031.
-        simplify_points (bool, optional): Flag to enable simplification of tie points using clustering.
-            Defaults to False.
+        epsg_code (int, optional): EPSG code for the coordinate reference system.
+            Defaults to 3031.
+        simplify_points (bool, optional): Flag to enable simplification of tie
+            points using clustering. Defaults to False.
         n_clusters (int, optional): Number of clusters for simplifying tie points.
             If -1, the optimal number of clusters is calculated. Defaults to -1.
 

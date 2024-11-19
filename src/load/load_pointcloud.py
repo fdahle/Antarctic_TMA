@@ -1,11 +1,10 @@
-import subprocess
+import os
+
 import numpy as np
-import json
-from plyfile import PlyData
 
 import open3d as o3d
 
-def load_point_cloud(pointcloud_path):
+def load_point_cloud(pointcloud_path, return_arr=False):
     """
     Load point cloud data from a file. Supports both PLY files and other formats via a wrapper script.
 
@@ -13,38 +12,30 @@ def load_point_cloud(pointcloud_path):
     - pointcloud_path: str, the path to the point cloud file.
 
     Returns:
-    - result_array: np.ndarray, the point cloud data as a numpy array.
+    - result_array: np.ndarray, the point cloud x y z as a numpy array.
     """
+
+    # check if the point cloud exists
+    if not os.path.exists(pointcloud_path):
+        raise FileNotFoundError(f"The point cloud file {pointcloud_path} "
+                                f"does not exist.")
 
     pcd = o3d.io.read_point_cloud(pointcloud_path)
+
+    # Convert the point cloud to a numpy array
+    if return_arr:
+        pcd = np.asarray(pcd.points)
+
     return pcd
 
-    """
-    if pointcloud_path.endswith(".ply"):
-        ply_data = PlyData.read(pointcloud_path)
 
-        # Access the vertex data
-        vertex_data = ply_data['vertex'].data
+if __name__ == "__main__":
+    PATH_PROJECT_FOLDERS = "/data/ATM/data_1/sfm/agi_projects"
+    project_name = ("grf_test")
+    project_fld = os.path.join(PATH_PROJECT_FOLDERS, project_name)
+    output_fld = os.path.join(project_fld, "output")
+    output_path_pc_rel = os.path.join(output_fld,
+                                      project_name + "_pointcloud_relative.ply")
 
-        # Dynamically extract all available properties in the vertex data
-        properties = vertex_data.dtype.names
-        extracted_data = [vertex_data[prop] for prop in properties]
-
-        # Stack the extracted data column-wise
-        result_array = np.column_stack(extracted_data)
-
-    else:
-        conda_env_python = "/home/fdahle/miniconda3/envs/point_env/bin/python"
-        script_path = "/src/load/o3d_wrapper.py"
-
-        result = subprocess.run(
-            [conda_env_python, script_path, pointcloud_path],
-            check=True,
-            stdout=subprocess.PIPE,
-            text=True
-        )
-
-        # Parse the result
-        result_array = np.array(json.loads(result.stdout))
-    return result_array
-    """
+    point_cloud = load_point_cloud(output_path_pc_rel)
+    print(np.asarray(point_cloud).shape)

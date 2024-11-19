@@ -65,6 +65,7 @@ def add_gcp_markers(chunk,
 
             # check if camera is aligned
             if not camera.transform:
+                print("No transform for camera", camera.label)
                 continue
 
             # project the point to the camera
@@ -99,11 +100,14 @@ def add_gcp_markers(chunk,
 
                     pbar.set_postfix_str(f"Created marker for {camera.label}")
 
+                print(f"Marker {marker.label} added to {camera.label} at {x}, {y}")
+
                 # set relative projection for the marker
                 m_proj = Metashape.Marker.Projection(Metashape.Vector([x, y]), True)  # noqa
                 marker.projections[camera] = m_proj  # noqa
             else:
-                pbar.set_postfix_str(f"Projection for {camera.label} is outside the image")
+                debug_str = f"width: {x} {camera.image().width} height: {y} {camera.image().height}"
+                pbar.set_postfix_str(f"Projection for {camera.label} is outside the image, {debug_str}")
 
     pbar.close()
 

@@ -1,5 +1,5 @@
-import copy
 import os
+
 import numpy as np
 import pandas as pd
 import xml.etree.ElementTree as Element_tree
@@ -9,15 +9,11 @@ from tqdm import tqdm
 from io import StringIO
 
 import src.load.load_image as li
-import src.export.export_ply as ep
-import src.sfm_agi.snippets.adapt_frame as af
-import src.sfm_agi.snippets.zip_folder as zp
 
 debug_delete_files = False
 
 def create_matching_structure(tp_dict, conf_dict,
                               project_files_folder, img_folder,
-                              input_mode="agi",
                               min_tps=10, tolerance=1,
                               s_min=1, s_max=50,
                               camera_data=None):
@@ -28,7 +24,6 @@ def create_matching_structure(tp_dict, conf_dict,
         conf_dict:
         project_files_folder:
         img_folder:
-        input_mode:
         min_tps:
         tolerance: tolerance for the distance between points to be considered as a match (in pixels)
         s_min:
@@ -38,18 +33,6 @@ def create_matching_structure(tp_dict, conf_dict,
     Returns:
 
     """
-
-    # mode can be 'agi' or 'bundler'
-    if input_mode not in ['agi', 'bundler']:
-        raise ValueError("Mode should be either 'agi' or 'bundler'")
-
-    # create the path where the ply files are saved
-    if input_mode == "agi":
-        orig_pc_fld = os.path.join(project_files_folder, "0", "0", "point_cloud")
-        path_pc_fld = os.path.join(orig_pc_fld, "point_cloud")
-        if not os.path.exists(path_pc_fld):
-            print("Create folder at ", path_pc_fld)
-            os.makedirs(path_pc_fld)
 
     # init variables
     track_counter = 0  # counter for the tracks
@@ -208,7 +191,8 @@ def create_matching_structure(tp_dict, conf_dict,
         y_arr = df_sub['y'].values
 
         # Use Numba to process the pairs and update arrays
-        x_arr, y_arr, color_arr, track_idx_arr, track_idx_mapping = _merge_points(pairs, x_arr, y_arr, color_arr, track_idx_arr)
+        x_arr, y_arr, color_arr, track_idx_arr, track_idx_mapping = _merge_points(pairs, x_arr, y_arr,
+                                                                                  color_arr, track_idx_arr)
 
         # Put the updated values back into df_sub
         df_sub['x'] = x_arr
@@ -217,7 +201,8 @@ def create_matching_structure(tp_dict, conf_dict,
         df_sub['track_idx'] = track_idx_arr
 
         # Put the updated df_sub back into the original df
-        df.loc[df['image_idx'] == image_idx, ['x', 'y', 'color', 'track_idx']] = df_sub[['x', 'y', 'color', 'track_idx']]
+        df.loc[df['image_idx'] == image_idx, ['x', 'y', 'color', 'track_idx']] = df_sub[
+            ['x', 'y', 'color', 'track_idx']]
 
         # update the tracking indices for the other elements as well
         for max_track_idx, min_track_idx in track_idx_mapping.items():
@@ -241,160 +226,100 @@ def create_matching_structure(tp_dict, conf_dict,
     if (track_id_counts < 2).any():
         raise ValueError("Some track_ids do not appear at least 2 times.")
 
-    if input_mode == "agi":
+    # replace with dummy data if camera_data is None:
+    if camera_data is None:
 
-        raise NotImplementedError("This part of the code is not working currently.")
+        camera_data = []
+        # create dummy camera data
+        for _ in image_map.keys():
+            camera_data.append({
+                "focal_length": 1.0,
+                "k1": 0.0,
+                "k2": 0.0,
+                "rotation_matrix": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+                "translation_vector": [0.0, 0.0, 0.0]
+            })
 
-        # list to store the number of points per image
-        points_per_image = []
+    # get number of points
+    num_points = sum([matches.shape[0] for matches in tp_dict.values()])
 
-        # create the p0 to px files
-        for idx in image_map.values():
+    # create fld for the bundler file
+    project_path_data_fld = os.path.abspath(os.path.join(project_files_folder, '..'))
+    project_path_bundler_fld = os.path.join(project_path_data_fld, "data", "bundler")
+    if os.path.isdir(project_path_bundler_fld) is False:
+        os.makedirs(project_path_bundler_fld)
 
-            # get the data for this particular image
-            df_img = df[df['image_idx'] == idx]
+    # define the path to the bundler file
+    bundler_path = os.path.join(project_path_bundler_fld, "bundler.out")
 
-            # only select certain columns and rename them
-            df_img = df_img[['x', 'y', 'confidence', 'track_idx']]
-            df_img.columns = ['x', 'y', 'size', 'id']
+    # add the image dimensions (split in x and y) to the df
+    df['image_dims_x'] = df['image_idx'].apply(lambda x: image_dims[x][0])
+    df['image_dims_y'] = df['image_idx'].apply(lambda x: image_dims[x][1])
 
-            # save the number of points per image
-            points_per_image.append(df_img.shape[0])
+    # calculate bundler_x and bundler_y
+    df['bundler_x'] = df['x'] - df['image_dims_x'] / 2
+    df['bundler_y'] = df['image_dims_y'] / 2 - df['y']
 
-            # create the path
-            px_name = f"p{idx}.ply"
-            px_path = os.path.join(path_pc_fld, px_name)
+    # remove gaps in the track_idx
+    unique_track_ids = sorted(df['track_idx'].unique())
+    sequential_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_track_ids)}
+    df['track_idx'] = df['track_idx'].map(sequential_mapping)
 
-            # export the ply file
-            ep.export_ply(df_img, px_path)
+    # group the df by track_idx
+    df_grouped = df.groupby('track_idx')
 
-        # sort the dataframe by track_idx
-        df = df.sort_values(by='track_idx')
+    # write the bundler file
+    with open(bundler_path, 'w') as f:
 
-        # get the unique track_idx and color
-        df_tracks = df[['track_idx', 'color']].drop_duplicates()
+        # Step 1: Write header
+        f.write('# Bundle file v0.3\n')
+        f.write(f'{len(camera_data)} {num_points}\n')  # Number of cameras and number of points (we'll update later)
 
-        # get average color for each track
-        df_tracks = df_tracks.groupby('track_idx').mean().reset_index()
-        df_tracks = df_tracks[['color']].astype(int)
+        # Step 2: Write camera data
+        for cam in camera_data:
+            f.write(f'{cam["focal_length"]} {cam["k1"]} {cam["k2"]}\n')  # focal length, distortion coefficients
+            f.write(f'{cam["rotation_matrix"][0]} {cam["rotation_matrix"][1]} {cam["rotation_matrix"][2]}\n')
+            f.write(f'{cam["rotation_matrix"][3]} {cam["rotation_matrix"][4]} {cam["rotation_matrix"][5]}\n')
+            f.write(f'{cam["rotation_matrix"][6]} {cam["rotation_matrix"][7]} {cam["rotation_matrix"][8]}\n')
+            f.write(f'{cam["translation_vector"][0]} {cam["translation_vector"][1]} {cam["translation_vector"][2]}\n')
 
-        # get number of all matches
-        num_matches = df_tracks.shape[0]
+        # Buffer for bulk writing
+        buffer = StringIO()
 
-        # create the tracks file
-        tracks_path = os.path.join(path_pc_fld, "tracks.ply")
-        ep.export_ply(df_tracks, tracks_path)
+        # Step 3: Write point matches
+        # iterate over the dataframe
+        for track_idx, group in (pbar := tqdm(df_grouped, total=df_grouped.ngroups)):
 
-        # create the doc.xml file
-        xml_path = os.path.join(path_pc_fld, "doc.xml")
-        _create_doc_xml(xml_path, points_per_image, num_matches)
+            # set progress bar description and postfix
+            pbar.set_description("Write tracks to bundler file")
+            pbar.set_postfix_str(f"Track: {track_idx}")
 
-        # zip the folder
-        output_zip_path = os.path.join(orig_pc_fld, 'point_cloud.zip')
-        zp.zip_folder(path_pc_fld, output_zip_path, delete_files=debug_delete_files)
+            # calculate average color
+            avg_color = int(group['color'].mean())
 
-        # adapt the frame
-        af.adapt_frame(project_files_folder, "point_cloud", "path", "point_cloud/point_cloud.zip")
+            # Dummy 3D point (since we only have 2D matches)
+            buffer.write('0.0 0.0 0.0\n')  # XYZ coordinates of the point
+            buffer.write(f'{avg_color} {avg_color} {avg_color}\n')  # RGB color of the point (dummy value)
 
-    elif input_mode == "bundler":
+            # Number of images in which the point appears
+            fstr = f"{group.shape[0]} "
 
-        # replace with dummy data if camera_data is None:
-        if camera_data is None:
-            camera_data = []
-            # create dummy camera data
-            for _ in image_map.keys():
-                camera_data.append({
-                    "focal_length": 1.0,
-                    "k1": 0.0,
-                    "k2": 0.0,
-                    "rotation_matrix": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-                    "translation_vector": [0.0, 0.0, 0.0]
-                })
+            # Iterate over the rows in the group
+            for _, _row in group.iterrows():
+                fstr += f"{int(_row['image_idx'])} "  # image index
+                fstr += f"{int(_row['track_idx'])} "  # track index
+                fstr += f"{_row['bundler_x']} {_row['bundler_y']} "  # x, y coordinates
 
-        # get number of points
-        num_points = sum([matches.shape[0] for matches in tp_dict.values()])
+            # remove last space and add newline
+            fstr = fstr[:-1]
+            buffer.write(fstr + "\n")
 
-        # create fld for the bundler file
-        project_path_data_fld = os.path.abspath(os.path.join(project_files_folder, '..'))
-        project_path_bundler_fld = os.path.join(project_path_data_fld, "data", "bundler")
-        if os.path.isdir(project_path_bundler_fld) is False:
-            os.makedirs(project_path_bundler_fld)
+            # Update the progress bar when finished
+            if track_idx == df_grouped.ngroups - 1:
+                pbar.set_postfix_str("Finished!")
 
-        # define the path to the bundler file
-        bundler_path = os.path.join(project_path_bundler_fld, "bundler.out")
-
-        # add the image dimensions (split in x and y) to the df
-        df['image_dims_x'] = df['image_idx'].apply(lambda x: image_dims[x][0])
-        df['image_dims_y'] = df['image_idx'].apply(lambda x: image_dims[x][1])
-
-        # calculate bundler_x and bundler_y
-        df['bundler_x'] = df['x'] - df['image_dims_x'] / 2
-        df['bundler_y'] = df['image_dims_y'] / 2 - df['y']
-
-        # remove gaps in the track_idx
-        unique_track_ids = sorted(df['track_idx'].unique())
-        sequential_mapping = {old_id: new_id for new_id, old_id in enumerate(unique_track_ids)}
-        df['track_idx'] = df['track_idx'].map(sequential_mapping)
-
-        # group the df by track_idx
-        df_grouped = df.groupby('track_idx')
-
-        # write the bundler file
-        with open(bundler_path, 'w') as f:
-
-            # Step 1: Write header
-            f.write('# Bundle file v0.3\n')
-            f.write(f'{len(camera_data)} {num_points}\n')  # Number of cameras and number of points (we'll update later)
-
-            # Step 2: Write camera data
-            for cam in camera_data:
-                f.write(f'{cam["focal_length"]} {cam["k1"]} {cam["k2"]}\n')  # focal length, distortion coefficients
-                f.write(f'{cam["rotation_matrix"][0]} {cam["rotation_matrix"][1]} {cam["rotation_matrix"][2]}\n')
-                f.write(f'{cam["rotation_matrix"][3]} {cam["rotation_matrix"][4]} {cam["rotation_matrix"][5]}\n')
-                f.write(f'{cam["rotation_matrix"][6]} {cam["rotation_matrix"][7]} {cam["rotation_matrix"][8]}\n')
-                f.write(f'{cam["translation_vector"][0]} {cam["translation_vector"][1]} {cam["translation_vector"][2]}\n')
-
-            # Buffer for bulk writing
-            buffer = StringIO()
-
-            # Step 3: Write point matches
-            # iterate over the dataframe
-            for track_idx, group in (pbar := tqdm(df_grouped, total=df_grouped.ngroups)):
-
-                # set progress bar description and postfix
-                pbar.set_description("Write tracks to bundler file")
-                pbar.set_postfix_str(f"Track: {track_idx}")
-
-                # calculate average color
-                avg_color = int(group['color'].mean())
-
-                # Dummy 3D point (since we only have 2D matches)
-                buffer.write('0.0 0.0 0.0\n')  # XYZ coordinates of the point
-                buffer.write(f'{avg_color} {avg_color} {avg_color}\n')  # RGB color of the point (dummy value)
-
-                # Number of images in which the point appears
-                fstr = f"{group.shape[0]} "
-
-                # Iterate over the rows in the group
-                for _, _row in group.iterrows():
-                    fstr += f"{int(_row['image_idx'])} "  # image index
-                    fstr += f"{int(_row['track_idx'])} "  # track index
-                    fstr += f"{_row['bundler_x']} {_row['bundler_y']} "  # x, y coordinates
-
-                # remove last space and add newline
-                fstr = fstr[:-1]
-                buffer.write(fstr + "\n")
-
-                # Update the progress bar when finished
-                if track_idx == df_grouped.ngroups - 1:
-                    pbar.set_postfix_str("Finished!")
-
-            # Write all the buffered content at once to the file
-            f.write(buffer.getvalue())
-
-    else:
-        raise ValueError("Mode should be either 'agi' or 'bundler'")
-
+        # Write all the buffered content at once to the file
+        f.write(buffer.getvalue())
 
 def _create_doc_xml(xml_path, points_per_image, num_matches):
     # Create the root element

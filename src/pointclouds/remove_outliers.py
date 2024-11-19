@@ -1,40 +1,33 @@
-"""remove outliers from a point cloud"""
 import numpy as np
 import open3d as o3d
-import time
-
 from sklearn.decomposition import PCA
 
-
-# debug variables
+# Debug variables
 debug_show_pointcloud = False
 
-
-def remove_outliers(point_cloud: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:  # noqa
+def remove_outliers(point_cloud: o3d.geometry.PointCloud | np.ndarray) -> o3d.geometry.PointCloud | np.ndarray:
     """
     Removes outliers from a point cloud using Statistical Outlier Removal.
 
     Args:
-        point_cloud (o3d.geometry.PointCloud): The input point cloud to clean.
+        point_cloud (o3d.geometry.PointCloud | np.ndarray): The input point cloud to clean.
 
     Returns:
-        o3d.geometry.PointCloud: The cleaned point cloud with outliers removed.
+        o3d.geometry.PointCloud | np.ndarray: The cleaned point cloud with outliers removed.
     """
 
-    # get points from the pc
-    if isinstance(point_cloud, o3d.geometry.PointCloud):
-        points = np.asarray(point_cloud.points)
-    elif isinstance(point_cloud, np.ndarray):
-        points = point_cloud[:, :3]
+    # Create an Open3D point cloud from the numpy array if necessary
+    if isinstance(point_cloud, np.ndarray):
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(point_cloud[:, :3])
     else:
-        raise ValueError("Input point cloud must be an Open3D PointCloud or a numpy array.")
+        pcd = point_cloud
 
-    start = time.time()
-
-    # Outlier removal using Statistical Outlier Removal
+    # Outlier removal using PCA and distance thresholding
     pca = PCA(n_components=3)
+    points = np.asarray(pcd.points)  # Extract points as numpy array for PCA
     pca.fit(points)
-    plane_normal = pca.components_[2]  # The normal vector of the main plane
+    plane_normal = pca.components_[2]  # Normal vector of the main plane
     plane_point = pca.mean_  # A point on the plane (mean of points)
 
     # Calculate distances of each point to the plane
@@ -43,24 +36,32 @@ def remove_outliers(point_cloud: o3d.geometry.PointCloud) -> o3d.geometry.PointC
     # Find statistical outliers based on distance from the plane
     mean_distance = np.mean(distances)
     std_distance = np.std(distances)
+    threshold = mean_distance + 3 * std_distance  # Threshold for outliers
 
-    # Define a threshold for outliers (e.g., 3 standard deviations)
-    threshold = mean_distance + 3 * std_distance
-
-    # Separate inliers
+    # Identify inliers
     inlier_indices = np.where(distances <= threshold)[0]
+    outlier_indices = np.where(distances > threshold)[0]
 
-    # print number of removed points
+    # Print number of removed points
     print(f"Removed {len(points) - len(inlier_indices)} outliers from the point cloud")
 
-    # select inliers from the original point cloud
-    point_cloud_inliers = point_cloud.select_by_index(inlier_indices)
+    # Show the point cloud with inliers marked as red
+    if debug_show_pointcloud:
+        # Create a copy for inliers and outliers
+        pcd_inliers = pcd.select_by_index(inlier_indices)
+        pcd_outliers = pcd.select_by_index(outlier_indices)
 
-    end = time.time()
-    print(f"Time taken to remove outliers: {end - start:.2f} seconds")
+        # Color inliers (default or green) and outliers (red)
+        pcd_outliers.paint_uniform_color([1, 0, 0])  # Red for outliers
 
-    # convert to numpy array if input was numpy array
-    #if isinstance(point_cloud, np.ndarray):
-        #print(ind)
+        # Display both together
+        o3d.visualization.draw_geometries([pcd_inliers, pcd_outliers],
+                                          window_name="Inliers (Green) and Outliers (Red)")
 
-    return point_cloud_inliers
+    # Select inliers based on input type
+    if isinstance(point_cloud, np.ndarray):
+        # Return a numpy array with only the inliers
+        return point_cloud[inlier_indices, :]
+    else:
+        # Return an Open3D point cloud with only the inliers
+        return pcd.select_by_index(inlier_indices)

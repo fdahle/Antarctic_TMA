@@ -1,6 +1,6 @@
 import os
 
-import src.load.load_pointcloud as lpc
+import src.load.load_ply as lp
 import src.sfm_agi.snippets.unzip_folder as uzf
 
 def convert_ply_files(project_path, unzip=True):
@@ -20,19 +20,19 @@ def convert_ply_files(project_path, unzip=True):
     for root, _, files in os.walk(project_path):
         for file in files:
             if file.endswith('.ply') or file.endswith('.other_format_extension'):  # Add any other formats
-                pointcloud_file = os.path.join(root, file)
+                ply_file = os.path.join(root, file)
                 txt_file = os.path.join(root, file.replace('.ply', '.txt')) if file.endswith('.ply') else os.path.join(
                     root, file + '.txt')
 
-                # Load the point cloud data (either PLY or other formats)
-                point_cloud_data = lpc.load_point_cloud(pointcloud_file)
+                # Load the ply data
+                ply_data = lp.load_ply(ply_file)
 
                 # Convert the point cloud data to a readable text file
                 with open(txt_file, 'w') as f:
-                    for row in point_cloud_data:
+                    for row in ply_data:
                         f.write(" ".join(map(str, row)) + "\n")
 
-                print(f"Converted {pointcloud_file} to {txt_file}")
+                print(f"Converted {ply_file} to {txt_file}")
 
 
 if __name__ == "__main__":

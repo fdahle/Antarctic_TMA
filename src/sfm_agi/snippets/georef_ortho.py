@@ -5,11 +5,9 @@ import copy
 
 import cv2  # noqa
 import numpy as np
-from shapely.geometry import Polygon
 
 # Local imports
 import src.base.find_tie_points as ftp
-import src.base.resize_image as rei
 import src.base.rotate_image as ri
 import src.base.rotate_points as rp
 import src.display.display_images as di
@@ -17,8 +15,9 @@ import src.georef.snippets.apply_transform as at
 import src.georef.snippets.calc_transform as ct
 import src.load.load_satellite as ls
 
-debug_show_tie_points = False
-
+debug_show_rotated_tie_points = False
+debug_show_trimmed_tie_points = False
+debug_show_final_tie_points = False
 
 def georef_ortho(ortho: np.ndarray,
                  footprints: list, lst_aligned: list,
@@ -58,7 +57,9 @@ def georef_ortho(ortho: np.ndarray,
         ortho = ortho[0, :, :]
 
     # init tie point detector
-    tpd = ftp.TiePointDetector('lightglue', tp_type=tp_type)
+    tpd = ftp.TiePointDetector('lightglue',
+                               min_conf_value=0.5,
+                               tp_type=tp_type)
 
     # Calculate the percentage removed from each side
     original_height_ortho, original_width_ortho = ortho.shape[:2]
@@ -88,8 +89,6 @@ def georef_ortho(ortho: np.ndarray,
     # Filter aligned footprints
     aligned_footprints = [footprint for footprint, aligned in zip(footprints, lst_aligned) if aligned]
 
-    print(f"Found {len(aligned_footprints)} aligned footprints out of {len(footprints)}")
-
     # Get the min and max for all footprints
     min_abs_x = min([footprint.bounds[0] for footprint in aligned_footprints])
     min_abs_y = min([footprint.bounds[1] for footprint in aligned_footprints])
@@ -106,28 +105,9 @@ def georef_ortho(ortho: np.ndarray,
     min_abs_y = min_abs_y + (height_tmp * (top_trim_percentage / 100))
     max_abs_y = max_abs_y - (height_tmp * (bottom_trim_percentage / 100))
 
-    # Calculate the size of the bounding rectangle
-    width_abs_px = max_abs_x - min_abs_x
-    height_abs_px = max_abs_y - min_abs_y
-
-    if width_abs_px > max_size or height_abs_px > max_size:
-
-        # check how often the width and height fit into the max size
-        width_factor = width_abs_px // max_size
-        height_factor = height_abs_px // max_size
-
-        # factor should be at least 1
-        width_factor = max(1, int(width_factor))
-        height_factor = max(1, int(height_factor))
-
-    # no tiling needed
-    else:
-        height_factor = 1
-        width_factor = 1
-
-    # divide by the factor to get width and height of the small tiles
-    width_small = width_abs_px / width_factor
-    height_small = height_abs_px / height_factor
+    # load the complete satellite image
+    sat_bounds = (min_abs_x, min_abs_y, max_abs_x, max_abs_y)
+    sat, sat_transform = ls.load_satellite(sat_bounds, return_transform=True)
 
     # 4 different cases for rotation values:
     # no azimuth but also no rotation (images are already aligned)
@@ -149,155 +129,88 @@ def georef_ortho(ortho: np.ndarray,
 
         # assure all entries are between 0 and 360
         rotation_values = [x % 360 for x in rotation_values]
-
     # azimuth is given and we trust it
     elif azimuth is not None and auto_rotate is False:
         rotation_values = [azimuth]
     else:
         raise ValueError("Invalid combination of azimuth and auto_rotate")
 
-    # get width and height of ortho
-    ortho_width_small = int(trimmed_ortho.shape[1] / width_factor)
-    ortho_height_small = int(trimmed_ortho.shape[0] / height_factor)
+    # save the best value
+    best_rot_mat = None
+    best_tps = np.empty((0, 4))
+    best_conf = np.empty((0, 1))
 
-    # here we save the points
-    points = []
+    #try different rotations
+    for rotation in rotation_values:
+        print(f"  - try rotation of {rotation}")
 
-    # iterate through all factors
-    for h in range(height_factor):
-        for w in range(width_factor):
+        # rotate the ortho
+        ortho_rotated, rot_mat = ri.rotate_image(trimmed_ortho, rotation,
+                                                 return_rot_matrix=True)
 
-            print(f" - Georef tile ({h}, {w})")
+        # find tie points
+        tie_points, conf = tpd.find_tie_points(sat, ortho_rotated)
 
-            # tile the ortho as well
-            ortho_tile = trimmed_ortho[h * ortho_height_small:(h + 1) * ortho_height_small,
-                                       w * ortho_width_small:(w + 1) * ortho_width_small]
+        print("    ", tie_points.shape[0], "tie points found")
+        if debug_show_rotated_tie_points:
+            style_config = {
+                "title": f"{tie_points.shape[0]} tie points "
+                         f"found at rotation {rotation}",
+            }
+            di.display_images([sat, ortho_rotated],
+                              tie_points=tie_points, tie_points_conf=conf,
+                              style_config=style_config)
 
-            # get the new min and max values
-            tile_min_x = min_abs_x + width_small * w
-            tile_min_y = min_abs_y + height_small * h
-            tile_max_x = tile_min_x + width_small
-            tile_max_y = tile_min_y + height_small
+        # check if the new tie points are better than the old ones
+        if tie_points.shape[0] > best_tps.shape[0]:
+            best_tps = tie_points
+            best_conf = conf
+            best_rot_mat = rot_mat
+            best_rot = rotation
 
-            # Create the bounding rectangle
-            tile_poly = Polygon([(tile_min_x, tile_min_y), (tile_min_x, tile_max_y),
-                                 (tile_max_x, tile_max_y), (tile_max_x, tile_min_y)])
+    # get the best values
+    tps = best_tps
+    conf = best_conf
+    rot_mat = best_rot_mat
+    rotation = best_rot
 
-            # get satellite image for the bounding rectangle
-            sat_tile, sat_transform_tile = ls.load_satellite(tile_poly)
+    # rotate points back
+    tps[:, 2:] = rp.rotate_points(tps[:, 2:],
+                                  rot_mat, invert=True)
 
-            # init best values
-            best_points = np.empty((0, 4))
-            best_rot_matrix = None
-            best_zoom_factors = None
-
-            # iterate all rotations
-            for rotation in rotation_values:
-                print(f"  - try rotation of {rotation}")
-
-                ortho_tile_rotated, rot_matrix = ri.rotate_image(ortho_tile, rotation,
-                                                                 return_rot_matrix=True)
-
-                # set pixel values to nan
-                ortho_tile_rotated[ortho_tile_rotated == 255] = 0
-
-                # resize ortho to sat size
-                zoom_factors = (sat_tile.shape[1] / ortho_tile_rotated.shape[0],
-                                sat_tile.shape[2] / ortho_tile_rotated.shape[1])
-                ortho_tile_resized = rei.resize_image(ortho_tile_rotated, (sat_tile.shape[1], sat_tile.shape[2]))
-
-                # find tps between ortho and sat
-                points_tile, _ = tpd.find_tie_points(sat_tile, ortho_tile_resized)
-
-                # display the tie points
-                if debug_show_tie_points:
-                    style_config = {
-                        "title": f"{points_tile.shape[0]} tie points found at rotation {rotation}",
-                    }
-                    di.display_images([sat_tile, ortho_tile_resized],
-                                      tie_points=points_tile,
-                                      style_config=style_config)
-
-                # skip if no points were found
-                if points_tile.shape[0] == 0:
-                    print(f"  - No tie points found")
-                    continue
-
-                # remove outliers
-                if points_tile.shape[0] > 4:
-                    _, filtered_tile = cv2.findHomography(points_tile[:, 0:2],
-                                                          points_tile[:, 2:4],
-                                                          cv2.RANSAC, 5.0)
-                    filtered_tile = filtered_tile.flatten()
-                    points_tile = points_tile[filtered_tile == 0]
-
-                # skip if no points were found
-                if points_tile.shape[0] == 0:
-                    print(f"  - No tie points found")
-                    continue
-
-                print(f"  - {points_tile.shape[0]} tie points found")
-
-                # check if we have the best rotation
-                if points_tile.shape[0] > best_points.shape[0]:
-                    best_points = points_tile
-                    best_rot_matrix = rot_matrix
-                    best_zoom_factors = zoom_factors
-
-            # no points found in this tile
-            if best_rot_matrix is None:
-                continue
-
-            # get the best ortho
-            points_tile = best_points
-            rot_matrix = best_rot_matrix
-            zoom_factors = best_zoom_factors
-
-            # account for resizing
-            points_tile[:, 2] = points_tile[:, 2] * (1 / zoom_factors[1])
-            points_tile[:, 3] = points_tile[:, 3] * (1 / zoom_factors[0])
-
-            # rotate points back
-            points_tile[:, 2:] = rp.rotate_points(points_tile[:, 2:], rot_matrix, invert=True)
-
-            # convert points to absolute values
-            absolute_points_tile = np.array([sat_transform_tile * tuple(point) for point in points_tile[:, 0:2]])
-            points_tile[:, 0:2] = absolute_points_tile
-
-            # account for the tile offset
-            points_tile[:, 2] = points_tile[:, 2] + w * ortho_width_small
-            points_tile[:, 3] = points_tile[:, 3] + h * ortho_height_small
-
-            # cast column 2 and 3 to int
-            points_tile[:, 2] = points_tile[:, 2].astype(tp_type)
-            points_tile[:, 3] = points_tile[:, 3].astype(tp_type)
-
-            points.append(points_tile)
-
-    # check if we found points
-    if len(points) > 0:
-        # convert list of points to numpy array
-        points = np.vstack(points)
-    else:
-        points = np.empty((0, 4))
+    if debug_show_trimmed_tie_points:
+        di.display_images([sat, trimmed_ortho],
+                          tie_points=tps, tie_points_conf=conf)
 
     # account for the trimming
-    points[:, 2] = points[:, 2] + trim_x_min
-    points[:, 3] = points[:, 3] + trim_y_min
+    tps[:, 2] = tps[:, 2] + trim_x_min
+    tps[:, 3] = tps[:, 3] + trim_y_min
+
+    if debug_show_final_tie_points:
+        di.display_images([sat, ortho],
+                          tie_points=tps, tie_points_conf=conf)
+
+    # convert points to absolute values
+    absolute_points = np.array([sat_transform * tuple(point) for point in tps[:, 0:2]])
+    tps[:, 0:2] = absolute_points
+
 
     # check if we have enough points
-    if points.shape[0] < min_nr_tps:
-        return None, None
+    if tps.shape[0] < min_nr_tps:
+        print(f"Not enough tie points ({tps.shape[0]}) found")
         return None, None
 
     # calculate the transform
-    transform, residuals = ct.calc_transform(ortho, points,
+    transform, residuals = ct.calc_transform(ortho, tps,
                                              transform_method="rasterio",
                                              gdal_order=3)
 
     # apply the transform to the ortho
     if save_path_ortho is not None:
-        at.apply_transform(trimmed_ortho, transform, save_path_ortho)
+        # set the things we trim to nan
+        ortho[ortho == 255] = 0
+
+        at.apply_transform(ortho, transform, save_path_ortho)
 
     # reshape the transform to a 3x3 matrix
     transform = np.reshape(transform, (3, 3))
@@ -334,4 +247,4 @@ def georef_ortho(ortho: np.ndarray,
     if save_path_transform is not None:
         np.savetxt(save_path_transform, transform, delimiter=',')
 
-    return transform, transformed_bounds
+    return transform, transformed_bounds, rotation

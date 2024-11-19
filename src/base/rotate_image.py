@@ -39,7 +39,10 @@ def rotate_image(image: np.ndarray,
         # Create an identity matrix for the rotation matrix
         rotation_matrix = np.array([[1, 0, 0],
                                     [0, 1, 0]], dtype=np.float32)
-        return image, rotation_matrix
+        if return_rot_matrix:
+            return image, rotation_matrix
+        else:
+            return image
 
     # Get the rotation matrix
     rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)

@@ -1,15 +1,17 @@
 """Exports a given image to a TIFF file"""
 
-import rasterio
-from rasterio.transform import Affine
 import os
+
+import rasterio
 import numpy as np
+
+from rasterio.transform import Affine
 from typing import LiteralString
 
 
 def export_tiff(img: np.ndarray, output_path: LiteralString | str | bytes,
                 overwrite: bool = False,
-                transform: Affine = None,
+                transform: Affine | np.ndarray | None = None,
                 use_lzw: bool = False,
                 crs: str = 'EPSG:3031', no_data=None) -> None:
     """
@@ -30,7 +32,17 @@ def export_tiff(img: np.ndarray, output_path: LiteralString | str | bytes,
 
     # Check if file exists and raise error if overwrite is False
     if os.path.exists(output_path) and not overwrite:
-        raise FileExistsError(f"The file {output_path} already exists. Set 'overwrite' to True to overwrite the file.")
+        raise FileExistsError(f"The file {output_path} already exists. "
+                              f"Set 'overwrite' to True to overwrite the file.")
+
+    # convert bool numpy array to uint8
+    if img.dtype == bool:
+        img = img.astype(np.uint8)
+
+    # Convert transform to Affine if necessary
+    if isinstance(transform, np.ndarray):
+
+        transform = Affine(*transform.flatten()[:6])
 
     # Define metadata for the TIFF file
     metadata = {

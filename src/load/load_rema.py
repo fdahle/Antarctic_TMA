@@ -21,7 +21,8 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
               rema_folder: str = DEFAULT_REMA_FLD,
               zoom_level: int = 10,
               auto_download=False,
-              return_empty_rema: bool = False,) -> (np.ndarray | None, np.ndarray | None):
+              return_empty_rema: bool = False,
+              return_transform=False) -> (np.ndarray | None, np.ndarray | None):
     """
     Loads REMA height data from a specified folder, merges them based on a bounding box. It is
     required to prove the path to the shape file containing the mosaic tiles. Optionally returns
@@ -89,7 +90,13 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
                 drd.download_rema_data(tile, zoom_level)
                 src = rasterio.open(rema_tile_path)
             else:
-                return None, None
+                if return_empty_rema:
+                    if return_transform:
+                        return None, None
+                    else:
+                        return None
+                else:
+                    raise ValueError("Couldn't download REMA")
 
         # add the file to the list
         mosaic_files.append(src)
@@ -97,7 +104,10 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     # what happens if no rema files are found
     if len(mosaic_files) == 0:
         if return_empty_rema:
-            return None, None
+            if return_transform:
+                return None, None
+            else:
+                return None
         else:
             raise ValueError("No satellite images were found")
 
@@ -127,4 +137,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
 
     cropped = cropped[0, :, :]
 
-    return cropped, transform_cropped
+    if return_transform:
+        return cropped, transform_cropped
+    else:
+        return cropped

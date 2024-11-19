@@ -44,6 +44,7 @@ def display_images(images: np.ndarray | list[np.ndarray],
                    tie_points_conf: List[float] | np.ndarray | None = None,
                    reduce_tie_points: bool = False,
                    num_reduced_tie_points: int = 100,
+                   separate_min_max: bool = False,
                    style_config: Dict[str, Any] | None = None,
                    save_path: str | None = None,
                    save_type: str = "png") -> None:
@@ -55,6 +56,7 @@ def display_images(images: np.ndarray | list[np.ndarray],
         image_types (Optional[List[str]], optional): A list of strings indicating the type of each image.
         overlays (Optional[List[np.ndarray]], optional): A list of overlay images to display on top of the main images.
         points (Optional[List[List[Tuple[int, int]]]], optional): Points to mark on the images. Defaults to None.
+            Expected in (x,y)
         lines (Optional[List[List[Tuple[int, int, int, int]]]], optional): Lines to draw on the images.
             Defaults to None.
         bounding_boxes (Optional[List[List[Tuple[int, int, int, int]]]], optional): Bounding boxes to
@@ -123,13 +125,26 @@ def display_images(images: np.ndarray | list[np.ndarray],
         new_conf = tie_points_conf
 
     # Calculate global cmin and cmax for all DEM images
-    dem_min = np.inf
-    dem_max = -np.inf
-    if image_types is not None:
+    if separate_min_max is False:
+        dem_min = np.inf
+        dem_max = -np.inf
+        if image_types is not None:
+            for img, img_type in zip(images, image_types):
+                if img_type == "dem":
+                    dem_min = min(dem_min, np.nanmin(img))
+                    dem_max = max(dem_max, np.nanmax(img))
+        img_min_vals = [dem_min] * len(images)
+        img_max_vals = [dem_max] * len(images)
+    if separate_min_max:
+        img_min_vals = []
+        img_max_vals = []
         for img, img_type in zip(images, image_types):
             if img_type == "dem":
-                dem_min = min(dem_min, np.nanmin(img))
-                dem_max = max(dem_max, np.nanmax(img))
+                img_min_vals.append(np.nanmin(img))
+                img_max_vals.append(np.nanmax(img))
+            else:
+                img_min_vals.append(None)
+                img_max_vals.append(None)
 
     # create the plot
     fig, axarr = plt.subplots(plot_shape[0], plot_shape[1], squeeze=False)
@@ -177,6 +192,8 @@ def display_images(images: np.ndarray | list[np.ndarray],
         if img_type == "gray":
             ax.imshow(img, cmap="gray")
         elif img_type == "dem":
+            dem_min = img_min_vals[idx]  # noqa
+            dem_max = img_max_vals[idx]  # noqa
             ax.imshow(img, cmap="terrain", vmin=dem_min, vmax=dem_max)
         elif img_type == "color":
             ax.imshow(img, interpolation=None)

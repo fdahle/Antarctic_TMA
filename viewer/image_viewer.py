@@ -17,7 +17,7 @@ img_size = (800, 800)
 
 view_directions = ["V", "R", "L"]
 
-input_ids = ['CA184732V0050', 'CA184633R0318']
+input_ids = []
 input_type = 'ids'
 #input_type = "flight_path"
 

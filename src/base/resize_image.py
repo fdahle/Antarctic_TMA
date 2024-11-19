@@ -4,11 +4,12 @@
 import copy
 import cv2
 import numpy as np
-from sympy import false
 
-
-def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size: str = "size",
-                 interpolation: str = "nearest", verbose: bool = False) -> np.ndarray:
+def resize_image(input_img: np.ndarray,
+                 new_size: tuple[int, int] | float, size: str = "size",
+                 interpolation: str = "nearest",
+                 return_scale_factor: bool = False,
+                 verbose: bool = False) -> np.ndarray:
     """
     Resizes an image to a specific size or proportion by interpolating it using methods from OpenCV.
 
@@ -20,6 +21,7 @@ def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size:
         size (str): Type of resizing to perform. Options are "size" for specific dimensions or "proportion" for scaling
             by a factor.
         interpolation (str): Method of interpolation for resizing. Currently, only "nearest" is implemented.
+        return_scale_factor (bool): If true, returns the scaling factor for x and y.
         verbose (bool): If true, prints status of operations.
 
     Returns:
@@ -28,11 +30,21 @@ def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size:
 
     # Determine new height and width
     if size == "size":
-        height, width = new_size
-    elif size == "proportion":
 
+        # check if new size has 3 dimension
+        if len(new_size) == 3:
+            # remove dimension with the smallest value
+            new_size = np.delete(new_size, np.argmin(new_size))
+        height, width = new_size
+
+        scale_x = width / input_img.shape[1]
+        scale_y = height / input_img.shape[0]
+
+    elif size == "proportion":
         height = int(input_img.shape[0] * new_size)
         width = int(input_img.shape[1] * new_size)
+
+        scale_x = scale_y = new_size
     else:
         raise ValueError("The 'size' parameter should be either 'size' or 'proportion'.")
 
@@ -69,4 +81,8 @@ def resize_image(input_img: np.ndarray, new_size: tuple[int, int] | float, size:
     if is_bool:
         img = img.astype(bool)
 
-    return img
+    # Return both image and scaling factors if requested
+    if return_scale_factor:
+        return img, scale_x, scale_y
+    else:
+        return img

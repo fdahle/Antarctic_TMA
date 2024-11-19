@@ -10,9 +10,9 @@ import src.load.load_shape_data as lsd
 PATH_ROCK_MASK = "/data/ATM/data_1/quantarctica/Quantarctica3/Geology/ADD/ADD_RockOutcrops_Landsat8.shp"
 
 
-def estimate_dem_quality(historic_dem, modern_dem=None,
+def estimate_dem_quality(dem_abs, modern_dem=None,
                          conf_dem=None,
-                         historic_bounds=None,
+                         abs_bounds=None,
                          modern_source="REMA32",
                          use_rock_mask=False):
 
@@ -20,7 +20,7 @@ def estimate_dem_quality(historic_dem, modern_dem=None,
     if modern_dem is None:
 
         # historic bounds are required to load the modern dem
-        if historic_bounds is None:
+        if abs_bounds is None:
             raise ValueError("historic_bounds must be provided if modern_dem is not provided")
 
         if modern_source == "REMA2":
@@ -32,10 +32,10 @@ def estimate_dem_quality(historic_dem, modern_dem=None,
         else:
             raise ValueError("modern source not supported")
 
-        modern_dem, _ = lr.load_rema(historic_bounds, zoom_level=zoom_level)
+        modern_dem, _ = lr.load_rema(abs_bounds, zoom_level=zoom_level)
 
     # resize the historic dem to the modern dem
-    historic_dem = ri.resize_image(historic_dem, modern_dem.shape)
+    dem_abs = ri.resize_image(dem_abs, modern_dem.shape)
 
     # load the rock-mask
     if use_rock_mask:
@@ -44,15 +44,15 @@ def estimate_dem_quality(historic_dem, modern_dem=None,
         rock_shapes = lsd.load_shape_data(PATH_ROCK_MASK)
 
         # create polygon from bounds
-        min_x, min_y, max_x, max_y = historic_bounds
+        min_x, min_y, max_x, max_y = abs_bounds
         bounds_polygon = box(min_x, min_y, max_x, max_y)
 
         # Filter out rock shapes that are outside the bounds
         rock_shapes = rock_shapes[rock_shapes.geometry.intersects(bounds_polygon)]
 
         # Calculate the resolution of the DEM
-        x_res = (max_x - min_x) / historic_dem.shape[1]
-        y_res = (max_y - min_y) / historic_dem.shape[0]
+        x_res = (max_x - min_x) / dem_abs.shape[1]
+        y_res = (max_y - min_y) / dem_abs.shape[0]
 
         # Create an affine transformation (mapping pixels to coordinates)
         transform = features.Affine.translation(min_x, max_y) * features.Affine.scale(x_res, -y_res)
@@ -60,7 +60,7 @@ def estimate_dem_quality(historic_dem, modern_dem=None,
         # Rasterize the rock polygons onto the DEM grid
         rock_mask = features.rasterize(
             ((geom, 1) for geom in rock_shapes.geometry),
-            out_shape=historic_dem.shape,
+            out_shape=dem_abs.shape,
             transform=transform,
             fill=0,
             dtype=np.uint8
@@ -70,11 +70,15 @@ def estimate_dem_quality(historic_dem, modern_dem=None,
 
     quality_dict = {}
 
-    quality_dict = _calc_stats("all", modern_dem, historic_dem, quality_dict)
+    quality_dict = _calc_stats("all", modern_dem, dem_abs, quality_dict)
 
     if use_rock_mask:
         modern_dem[rock_mask == 0] = np.nan
-        quality_dict = _calc_stats("rock", modern_dem, historic_dem, quality_dict)
+        quality_dict = _calc_stats("rock", modern_dem, dem_abs, quality_dict)
+
+    # Convert all numpy float32 values in quality_dict to standard Python float
+    quality_dict = {key: float(value) if isinstance(value, np.float32) else value for key, value in
+                    quality_dict.items()}
 
     return quality_dict
 

@@ -37,6 +37,15 @@ def download_rema_data(tile, zoom_level,
 
     print(f"Start: download_rema_data ({tile})")
 
+    # save current stdout and stderr
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
+    # restore original stdout and stderr
+    sys.stdout = sys.__stdout__
+    sys.stderr = sys.__stderr__
+
+    # set destination folder
     if destination_folder is None:
         destination_folder = PATH_REMA_FLD + str(zoom_level) + "m"
 
@@ -123,6 +132,10 @@ def download_rema_data(tile, zoom_level,
             else:
                 raise e
 
+    # restore original stdout and stderr
+    sys.stdout = original_stdout
+    sys.stderr = original_stderr
+
     print(f"Finished: download_rema_data ({tile})")
 
     return True
@@ -134,7 +147,7 @@ if __name__ == "__main__":
     rema_shape_data = lsd.load_shape_data(PATH_REMA_SHP)
 
     tiles = [
-        "40_10"
+        "42_06"
     ]
 
     _zoom_level = 10

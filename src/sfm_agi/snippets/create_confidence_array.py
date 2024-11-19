@@ -1,14 +1,32 @@
 import numpy as np
+import open3d as o3d
+import rasterio
 
 from collections import defaultdict
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
-def create_confidence_arr(dem, point_cloud, transform,
-                         interpolate=False, distance=10,
-                         dem_nodata=-9999, min_confidence=0):
+def create_confidence_arr(dem: np.ndarray,
+                          point_cloud: np.ndarray,
+                          transform,
+                          interpolate: bool = False, distance: int = 10,
+                          dem_nodata: int = -9999, min_confidence=0):
+
+    # check if the point cloud is from open3d
+    if isinstance(point_cloud, o3d.geometry.PointCloud):
+        raise ValueError("Input point cloud must be a numpy array"
+                         " in order to access custom attributes.")
+
+    # check if transform is a numpy array
+    if isinstance(transform, np.ndarray):
+        # remove last row if it is [0, 0, 1]
+        if transform.shape[0] == 9 and np.allclose(transform[-3:], [0, 0, 1]):
+            transform = transform[:-3]
+
+        # convert np-array to rasterio transform
+        transform = rasterio.transform.Affine(*transform)
 
     dem[dem == dem_nodata] = np.nan
 
@@ -38,7 +56,8 @@ def create_confidence_arr(dem, point_cloud, transform,
     # Dictionary to accumulate confidence values for each (row, col)
     confidence_accumulator = defaultdict(list)
 
-    pbar = None
+    # close possible open tqdm instances
+    tqdm._instances.clear()  # noqa
 
     # Accumulate confidence values for each valid (row, col)
     for idx, (row, col, confidence) in (pbar := tqdm(enumerate(zip(valid_rows, valid_cols, valid_confidences)), total=len(valid_rows))):
@@ -53,6 +72,9 @@ def create_confidence_arr(dem, point_cloud, transform,
         # Update progress bar for the last iteration
         if idx == len(valid_rows) - 1:
             pbar.set_postfix_str("Finished!")
+
+    # close possible open tqdm instances
+    tqdm._instances.clear()  # noqa
 
     # Now compute the average confidence for each cell
     for idx, (key, confidences) in (pbar := tqdm(enumerate(confidence_accumulator.items()),

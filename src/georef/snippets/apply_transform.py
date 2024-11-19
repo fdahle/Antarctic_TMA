@@ -11,7 +11,7 @@ from typing import Union
 def apply_transform(image: np.ndarray,
                     transform: Union[np.ndarray, Affine],
                     save_path: str,
-                    epsg_code: int = 3031) -> None:
+                    epsg_code: int = 3031,) -> None:
     """
     Applies a transformation to an image and saves it as a GeoTIFF.
 

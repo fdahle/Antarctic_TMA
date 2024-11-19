@@ -19,7 +19,8 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
                    satellite_type: str = "sentinel2",
                    satellite_crs: int = 3031,
                    month: int = 0,
-                   return_empty_sat: bool = False) -> (
+                   return_empty_sat: bool = False,
+                   return_transform: bool= False) -> (
         Tuple)[Optional[np.ndarray], Optional[Affine]]:
     """
     Loads satellite images from a specified folder, merges them based on a bounding box,
@@ -100,7 +101,10 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
 
     if len(mosaic_files) == 0:
         if return_empty_sat:
-            return None, None,
+            if return_transform:
+                return None, None
+            else:
+                return None,
         else:
             raise ValueError("No satellite images were found")
 
@@ -126,4 +130,7 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
         with mem_file.open() as dataset:
             cropped, transform_cropped = rasterio.mask.mask(dataset, [bounds], crop=True)
 
-    return cropped, transform_cropped
+    if return_transform:
+        return cropped, transform_cropped
+    else:
+        return cropped

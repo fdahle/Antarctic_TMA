@@ -1,8 +1,11 @@
 import copy
 import os
-import numpy as np
-from pathlib import Path
+import psutil
 
+import numpy as np
+
+
+from pathlib import Path
 from tqdm import tqdm
 
 import src.base.find_overlapping_images as foi
@@ -61,8 +64,6 @@ def find_tie_points_for_sfm(img_folder,
     # dict for the tie points & confidence values
     tp_dict = {}
     conf_dict = {}
-
-    import psutil
 
     # keep the latest image1 and mask1 in memory (need to keep track of the id)
     old_img_1_id = None

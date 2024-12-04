@@ -1,15 +1,21 @@
+"""convert ply files in a folder to text files"""
+
+# Library imports
 import os
 
+# Local imports
 import src.load.load_ply as lp
 import src.sfm_agi.snippets.unzip_folder as uzf
 
-def convert_ply_files(project_path, unzip=True):
+def convert_ply_files(project_path: str, unzip: bool = True) -> None:
     """
-    Iterate all folders and zip folders in the project path and extract the
-    zip folders and save them as folders with the same name.
-    Then convert the ply files in all folders to readable text files
+     Extracts all zip files within a project directory and converts point cloud  (ply) files
+     into readable text files for easier processing.
+    Args:
+        project_path (str): Path to the project directory containing files and folders.
+        unzip (bool, optional): Whether to unzip compressed folders before processing. Defaults to True.
     Returns:
-
+        None
     """
 
     # Step 1: Iterate through all folders and extract zip files
@@ -25,7 +31,11 @@ def convert_ply_files(project_path, unzip=True):
                     root, file + '.txt')
 
                 # Load the ply data
-                ply_data = lp.load_ply(ply_file)
+                try:
+                    ply_data = lp.load_ply(ply_file)
+                except Exception as e:
+                    print(f"Error loading {ply_file}: {e}")
+                    continue
 
                 # Convert the point cloud data to a readable text file
                 with open(txt_file, 'w') as f:
@@ -33,9 +43,3 @@ def convert_ply_files(project_path, unzip=True):
                         f.write(" ".join(map(str, row)) + "\n")
 
                 print(f"Converted {ply_file} to {txt_file}")
-
-
-if __name__ == "__main__":
-    project_name = "agi_tracks2"
-    pth = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
-    convert_ply_files(pth, False)

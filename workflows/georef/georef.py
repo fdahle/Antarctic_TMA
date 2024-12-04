@@ -13,7 +13,7 @@ from tqdm import tqdm
 # import base functions
 import src.base.connect_to_database as ctd
 import src.base.create_mask as cm
-import src.base.find_overlapping_images as foi
+import src.base.find_overlapping_images_id as foi
 import src.base.modify_csv as mc
 
 # import export functions
@@ -42,18 +42,18 @@ import src.load.load_transform as lt
 DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 
 # define input bounds or image ids
-INPUT_TYPE = "all"  # can be either "bounds" or "ids or all
+INPUT_TYPE = "all"  # can be either "bounds" or "ids" or "all"
 BOUNDS = []  # min_x, min_y, max_x, max_y
-IMAGE_IDS = []
+IMAGE_IDS = [""]
 
 # which type of geo-referencing should be done
-GEOREF_WITH_SATELLITE = True
+GEOREF_WITH_SATELLITE = False
 GEOREF_WITH_IMAGE = False
-GEOREF_WITH_CALC = False
+GEOREF_WITH_CALC = True
 
 # settings for sat
 MIN_COMPLEXITY = 0.05
-VERIFY_IMAGE_POSITIONS = False
+VERIFY_IMAGE_POSITIONS = True
 
 # settings for verifying
 DISTANCE_THRESHOLD = 100  # TODO UPDATE THIS!
@@ -64,7 +64,7 @@ CALC_TYPES = ["sat"]
 # define if images of a certain type should be overwritten
 OVERWRITE_SAT = False
 OVERWRITE_IMG = False
-OVERWRITE_CALC = True
+OVERWRITE_CALC = False
 
 # define if images with missing data should be done again
 RETRY_MISSING_SAT = True
@@ -144,19 +144,6 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
 
         # iterate all images
         for img_counter, image_id in enumerate(tqdm(input_ids)):
-
-            # TEMP: ignore images from yesterday and today
-            try:
-                if processed_images_sat.get(image_id, {}).get('date')[:-6] in ["31.07.2024", "01.08.2024", "02.08.2024",
-                                                                               "03.08.2024", "04.08.2024", "05.08.2024",
-                                                                               "06.08.2024", "07.08.2024", "08.08.2024",
-                                                                               "09.08.2024", "10.08.2024", "11.08.2024",
-                                                                               "12.08.2024", "13.08.2024", "14.08.2024",
-                                                                               "15.08.2024", "16.08.2024"]:
-                    print(f"{image_id} recently covered {processed_images_sat.get(image_id, {}).get('date')[:-6]}")
-                    continue
-            except (Exception,):
-                pass
 
             # check if image is already geo-referenced with satellite
             if (processed_images_sat.get(image_id, {}).get('status') == "georeferenced" and
@@ -359,7 +346,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         if verify_image_positions:
 
             # load footprint and ids of images that are already geo-referenced by satellite
-            path_sat_shapefile = "/data/ATM/data_1/georef/sat_footprints.shp"
+            path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
 
             # iterate all images
@@ -399,9 +386,9 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
 
         print("Start geo-referencing with image")
 
-        # get all geo-referenced images
-        sat_tif_files = glob.glob(os.path.join(DEFAULT_SAVE_FOLDER + "/sat", '*.tif'))
-        sat_tif_files = [os.path.splitext(os.path.basename(file))[0] for file in sat_tif_files]
+        sql_string = "SELECT image_ID FROM images_extracted WHERE footprint_type='sat'"
+        data = ctd.execute_sql(sql_string, conn)
+        sat_tif_files = data['image_id'].tolist()
 
         # get all fid marks from images
         sql_string_fid_marks = f"SELECT * FROM images_fid_points"
@@ -412,6 +399,8 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         data_extracted = ctd.execute_sql(sql_string_extracted, conn)
 
         for img_counter, image_id in enumerate(tqdm(input_ids)):
+
+            image_id = str(image_id)
 
             # skip images that are already geo-referenced with satellite
             if processed_images_sat.get(image_id, {}).get('status') == "georeferenced":
@@ -464,9 +453,8 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 image_ids.append(image_id)
 
                 # get overlapping images
-                overlap_dict = foi.find_overlapping_images(image_ids,
-                                                           important_id=image_id, max_id_range=1,
-                                                           working_modes=["ids"])
+                overlap_dict = foi.find_overlapping_images_id(image_ids,
+                                                              important_id=image_id, max_id_range=1)
                 georeferenced_ids = overlap_dict[image_id]
 
                 if len(georeferenced_ids) == 0:
@@ -481,6 +469,9 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 georeferenced_transforms = []
                 georeferenced_masks = []
 
+                # set path to transform folder
+                transform_folder = "/data/ATM/data_1/georef/transforms"
+
                 # load the georeferenced images
                 for georef_id in georeferenced_ids:
                     # load image
@@ -488,8 +479,8 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                     georeferenced_images.append(georef_image)
 
                     # load transform
-                    georef_transform = lt.load_transform(DEFAULT_SAVE_FOLDER + "/sat/" +
-                                                         georef_id + "_transform.txt")
+                    georef_transform = lt.load_transform(transform_folder + "/sat/" +
+                                                         georef_id + "_transform.txt", delimiter=" ")
                     georeferenced_transforms.append(georef_transform)
 
                     # get data for mask
@@ -638,6 +629,9 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
             georeferenced_footprints.extend(img_shapes)
             georeferenced_ids.extend(img_ids)
 
+        # create a list of image_ids that do not have enough images to calculate the transform
+        flight_path_not_enough_images = []
+
         for img_counter, image_id in enumerate(tqdm(input_ids)):
 
             # skip images that are already geo-referenced with satellite
@@ -673,6 +667,19 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 print(f"{image_id} already failed")
                 continue
 
+            # get flight path from image
+            flight_path = image_id[2:6]
+            if flight_path in flight_path_not_enough_images:
+                print("Not enough images to calculate a position")
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
+
+                processed_images_calc[image_id] = {"method": "calc", "status": "failed",
+                                                   "reason": "no_transform", "time": "",
+                                                   "date": date_time_str}
+                continue
+
             # backup the processed_images every 10th iteration
             if img_counter % 10 == 0:
                 source_directory = os.path.dirname(csv_path_calc)
@@ -694,12 +701,24 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 print(f"Geo-reference {image_id} with calc")
 
                 # load the image
-                image = li.load_image(image_id)
+                try:
+                    image = li.load_image(image_id)
 
-                # the actual geo-referencing
-                transform, residuals, tps, conf = georef_calc.georeference(image, image_id,
-                                                                           georeferenced_ids,
-                                                                           georeferenced_footprints)
+                    # the actual geo-referencing
+                    transform, residuals, tps, conf = georef_calc.georeference(image, image_id,
+                                                                               georeferenced_ids,
+                                                                            georeferenced_footprints)
+                except:
+                    transform = None
+
+                if type(transform) == str and transform == 'not_enough':
+                    # get flight path from image
+                    flight_path = image_id[2:6]
+
+                    # add flight path to list
+                    flight_path_not_enough_images.append(flight_path)
+
+                    transform = None
 
                 # skip images we can't geo-reference
                 if transform is None:

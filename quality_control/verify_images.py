@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 src_path = (Path(__file__).parent.parent / 'src').resolve()
+print(f"Adding {src_path} to sys.path")
 if str(src_path) not in sys.path:
     sys.path.append(str(src_path))
 
@@ -11,8 +12,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import streamlit as st
 
-# Local imports
-import src.base.connect_to_database as ctd
 
 # Constants
 PATH_MAIN_FOLDER = "/data/ATM/data_1/aerial/TMA"  # images in this folder and sub-folders will be checked
@@ -97,7 +96,5 @@ def plot_results():
 
 if __name__ == "__main__":
 
-    ret = verify_image_sizes()
-    print(ret)
 
-    #plot_results()
+    plot_results()

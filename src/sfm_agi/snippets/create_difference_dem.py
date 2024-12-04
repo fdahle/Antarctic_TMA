@@ -1,17 +1,42 @@
-import numpy as np
+"""" create a difference array between two DEMs"""
 
+# Library imports
+import numpy as np
 from scipy.ndimage import convolve
 
-
+# Local imports
 import src.base.resize_image as ri
 import src.load.load_rema as lr
 
-def create_difference_dem(historic_dem, modern_dem=None,
-                          historic_bounds=None,
-                          modern_source="REMA32",
-                          dem_nodata=-9999,
-                          absolute=False):
-
+def create_difference_dem(historic_dem: np.ndarray,
+                          modern_dem: np.ndarray | None = None,
+                          historic_bounds: tuple[float, float, float, float] | None = None,
+                          modern_source: str = "REMA32",
+                          dem_nodata: float = -9999,
+                          absolute: bool = False):
+    """
+        Create a difference DEM by subtracting a historic DEM from a modern DEM.
+        Args:
+            historic_dem (np.ndarray): The historic DEM as a NumPy array.
+            modern_dem (Optional[np.ndarray]): The modern DEM as a NumPy array.
+                If None, the modern DEM will be loaded using the historic bounds.
+            historic_bounds (Optional[Tuple[float, float, float, float]]): The
+                bounding box of the historic DEM (min_x, min_y, max_x, max_y). Required
+                if `modern_dem` is not provided.
+            modern_source (str): The source of the modern DEM
+                ("REMA2", "REMA10", "REMA32"). Defaults to "REMA32".
+            dem_nodata (float): The value used to indicate no data in the DEM.
+                Defaults to -9999.
+            absolute (bool): If True, returns the absolute difference.
+                Defaults to False.
+        Returns:
+            np.ndarray: The difference DEM with the same shape as
+                the historic DEM.
+        Raises:
+            ValueError: If `historic_bounds` is not provided when `modern_dem`
+                is None.
+            ValueError: If an unsupported `modern_source` is provided.
+        """
 
     # load the modern dem if not provided
     if modern_dem is None:
@@ -37,8 +62,11 @@ def create_difference_dem(historic_dem, modern_dem=None,
     # calculate the difference
     difference = modern_dem - temp_dem
 
+    # get the shape of the historic dem
+    historic_shape = (historic_dem.shape[0], historic_dem.shape[1])
+
     # resize back to the original size
-    difference = ri.resize_image(difference, historic_dem.shape)
+    difference = ri.resize_image(difference, historic_shape)
 
     # set nodata values to nan
     difference[historic_dem == dem_nodata] = np.nan

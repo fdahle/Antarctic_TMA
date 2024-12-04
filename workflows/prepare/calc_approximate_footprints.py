@@ -137,8 +137,7 @@ def calc_approximate_footprints():
 
         # update the database
         sql_string = f"UPDATE images_extracted SET " \
-                     f"footprint_approx=ST_GeomFromText('{footprint}'), " \
-                     f"position_approx=ST_GeomFromText('{center}') " \
+                     f"footprint_approx=ST_GeomFromText('{footprint}') " \
                      f"WHERE image_id='{image_id}'"
         ctd.execute_sql(sql_string, conn)
 

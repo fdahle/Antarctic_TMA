@@ -1,43 +1,82 @@
+"""find tie points in a set of images that can be used for sfm"""
+
+# Python imports
 import copy
 import os
+
+# Library imports
 import psutil
-
 import numpy as np
-
-
 from pathlib import Path
 from tqdm import tqdm
 
-import src.base.find_overlapping_images as foi
+# Local imports
+import src.base.find_overlapping_images_geom as foi
 import src.base.find_tie_points as ftp
 import src.display.display_images as di
 import src.load.load_image as li
-
 import src.base.rotate_image as ri
 import src.base.rotate_points as rp
 
-debug_show_intermediate_steps = False
-debug_show_final_tps = False
-debug_min_tps = 0
-
+# Constants
 TPS_TXT_FLD = "/data/ATM/data_1/sfm/agi_data/tie_points"
 
+# debug settings
+debug_show_intermediate_steps = False
+debug_show_final_tps = False
+debug_min_tps = 0  # can be used together with min_tps
 
-def find_tie_points_for_sfm(img_folder,
-                            image_dims,
-                            mask_folder=None,
-                            footprint_dict=None,
-                            rotation_dict=None,
-                            matching_method='all',
-                            tp_type=float,
-                            min_overlap=0.25,
-                            step_range=1,
-                            max_step_range=10,
-                            min_conf=0.7,
-                            min_tps=25, max_tps=4000,
-                            use_cached_tps=False,
-                            save_tps=False):
 
+def find_tie_points_for_sfm(img_folder: str,
+                            image_dims: dict[str, tuple[int, int]],
+                            mask_folder: str | None =None,
+                            footprint_dict: dict[str, np.ndarray] | None =None,
+                            rotation_dict: dict[str, tuple[float, float]] | None = None,
+                            matching_method: str = 'all',
+                            tp_type: type = float,
+                            min_overlap: float = 0.25,
+                            step_range: int = 1,
+                            max_step_range: int = 10,
+                            min_conf: float = 0.7,
+                            min_tps: int = 25,
+                            max_tps: int = 4000,
+                            use_cached_tps: bool = False,
+                            save_tps: bool = False
+                            ) -> (dict[tuple[str, str], np.ndarray], dict[tuple[str, str], np.ndarray]):
+    """
+        Find tie points between images for Structure-from-Motion (SfM) processing.
+
+        Args:
+            img_folder (str): Path to the folder containing the images.
+            image_dims (Dict[str, Tuple[int, int]]): Dictionary mapping image IDs to
+                their dimensions.
+            mask_folder (Optional[str]): Path to the folder containing masks for the images.
+                Defaults to None.
+            footprint_dict (Optional[Dict[str, np.ndarray]]): Dictionary mapping image IDs to footprint arrays.
+                Defaults to None.
+            rotation_dict (Optional[Dict[str, Tuple[float, float]]]): Dictionary mapping image IDs to rotation angles.
+                Defaults to None.
+            matching_method (str): Method to use for matching images ("all",
+                "sequential", "overlap", "combined"). Defaults to "all".
+            tp_type (type): Data type for tie points. Defaults to float.
+            min_overlap (float): Minimum overlap ratio between images for matching.
+                Defaults to 0.25.
+            step_range (int): Range of sequential steps for image matching.
+                Defaults to 1.
+            max_step_range (int): Maximum range of steps for sequential matching.
+                Defaults to 10.
+            min_conf (float): Minimum confidence for tie points. Defaults to 0.7.
+            min_tps (int): Minimum number of tie points required between image pairs.
+                Defaults to 25.
+            max_tps (int): Maximum number of tie points to retain per image pair.
+                Defaults to 4000.
+            use_cached_tps (bool): Whether to use cached tie points if available.
+                Defaults to False.
+            save_tps (bool): Whether to save tie points to cache files.
+                Defaults to False.
+    """
+
+    # get all cached tps
     if use_cached_tps:
         cached_tps = [file.stem for file in Path(TPS_TXT_FLD).glob("*.txt")]
     else:
@@ -58,7 +97,7 @@ def find_tie_points_for_sfm(img_folder,
 
     # init tie-point detector
     tpd = ftp.TiePointDetector('lightglue', verbose=True,
-                               min_conf_value=min_conf, tp_type=tp_type,
+                               min_conf=min_conf, tp_type=tp_type,
                                display=debug_show_intermediate_steps)
 
     # dict for the tie points & confidence values
@@ -67,6 +106,8 @@ def find_tie_points_for_sfm(img_folder,
 
     # keep the latest image1 and mask1 in memory (need to keep track of the id)
     old_img_1_id = None
+    orig_image1 = None
+    orig_mask1 = None
     image1 = None
     mask1 = None
 
@@ -372,7 +413,7 @@ def _create_combinations(image_ids, matching_method,
 
         # Find overlapping image pairs
         footprints_lst = [footprint_dict[image_id] for image_id in image_ids]
-        overlap_dict = foi.find_overlapping_images(image_ids, footprints_lst, min_overlap=min_overlap)
+        overlap_dict = foi.find_overlapping_images_geom(image_ids, footprints_lst, min_overlap=min_overlap)
 
         for img_id, overlap_lst in overlap_dict.items():
             for overlap_id in overlap_lst:
@@ -406,7 +447,7 @@ def _create_combinations(image_ids, matching_method,
 
         # 2. Add overlapping combinations
         footprints_lst = [footprint_dict[image_id] for image_id in image_ids]
-        overlap_dict = foi.find_overlapping_images(image_ids, footprints_lst, min_overlap=min_overlap)
+        overlap_dict = foi.find_overlapping_images_geom(image_ids, footprints_lst, min_overlap=min_overlap)
         for img_id, overlap_lst in overlap_dict.items():
             for overlap_id in overlap_lst:
                 if img_id != overlap_id and (overlap_id, img_id) not in combinations:
@@ -490,7 +531,9 @@ def _load_cached_tps(tps_fld, img_1_id, img_2_id, cached_tps):
             # check the file size
             if os.stat(file_path).st_size > 0:
                 data = np.atleast_2d(np.loadtxt(file_path))
-                tps, conf = (data[:, 2:], data[:, :2]) if file_name == f"{img_2_id}_{img_1_id}" else (data[:, :4], data[:, 4])
+                tps, conf = (data[:, 2:], data[:, :2]) \
+                    if file_name == f"{img_2_id}_{img_1_id}" \
+                    else (data[:, :4], data[:, 4])
             else:
                 tps, conf = np.zeros((0, 4)), np.zeros(0)
             break

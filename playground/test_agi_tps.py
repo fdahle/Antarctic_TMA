@@ -78,7 +78,7 @@ else:
 
 # init tie-point detector
 tpd = ftp.TiePointDetector('lightglue', verbose=True,
-                           min_conf_value=min_conf, tp_type=tp_type,
+                           min_conf=min_conf, tp_type=tp_type,
                            display=debug_show_intermediate_steps)
 
 if rot1 != rot2:

@@ -7,6 +7,7 @@ import numpy as np
 import rasterio
 import shapely
 from rasterio import mask, merge
+from skimage.transform import resize
 from typing import Tuple, Optional
 
 import src.other.misc.download_rema_data as drd
@@ -49,6 +50,14 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     if zoom_level not in [2, 10, 32]:
         raise ValueError("Zoom level not supported")
 
+    # check if the output resolution fits the bounding box
+    width = bounds[2] - bounds[0]
+    height = bounds[3] - bounds[1]
+    if width % zoom_level != 0 or height % zoom_level != 0:
+        print(bounds)
+        print(width, height, zoom_level)
+        raise ValueError("Zoom level does not fit the bounding box")
+
     # check if we have the right folder
     if os.path.isdir(rema_folder) is False:
         raise FileNotFoundError(f"'{rema_folder}' is not a valid folder")
@@ -56,6 +65,7 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     # convert bounds to shapely polygon if not already polygon
     if isinstance(bounds, shapely.geometry.base.BaseGeometry) is False:
         bounds = shapely.geometry.box(*bounds)
+        print("shapely bounds", bounds)
 
     # load the mosaic tiles from shape file
     mosaic_data = gpd.read_file(rema_shape_file + f"_{str(zoom_level)}m.shp")
@@ -141,3 +151,4 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
         return cropped, transform_cropped
     else:
         return cropped
+

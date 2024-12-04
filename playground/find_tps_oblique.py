@@ -33,7 +33,7 @@ sql_string = "SELECT image_id, sky_is_correct FROM images WHERE image_id IN ('" 
 sky_data = ctd.execute_sql(sql_string, conn)
 
 # init tie-point detector
-tpd = ftp.TiePointDetector('lightglue', min_conf_value=0.8)
+tpd = ftp.TiePointDetector('lightglue', min_conf=0.8)
 
 # Load the image
 img = li.load_image(id_img)

@@ -7,7 +7,8 @@ import pandas as pd
 import src.base.connect_to_database as ctd
 
 
-def export_cameras(image_ids: list[str], csv_path: str, extension="tif", conn=None) -> None:
+def export_cameras(image_ids: list[str], csv_path: str,
+                   extension="tif", conn=None) -> None:
     """
     Exports camera positions and heights to a CSV file that can be used in Agisoft Metashape.
 

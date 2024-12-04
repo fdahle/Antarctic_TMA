@@ -49,7 +49,7 @@ def georef_center(georef_type):
             continue
 
         # calculate center
-        center = ccp.calc_camera_position(shp_row["geometry"])
+        center = ccp.calc_camera_position(image_id, shp_row["geometry"])
 
         # save new entry
         new_entries['image_id'].append(image_id)

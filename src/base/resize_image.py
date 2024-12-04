@@ -33,12 +33,21 @@ def resize_image(input_img: np.ndarray,
 
         # check if new size has 3 dimension
         if len(new_size) == 3:
-            # remove dimension with the smallest value
-            new_size = np.delete(new_size, np.argmin(new_size))
+            # Remove the dimension with the smallest value
+            new_size = [dim for dim in new_size if dim != min(new_size)]
+
+            # Ensure new_size has exactly two dimensions
+        if len(new_size) != 2:
+            raise ValueError("After processing, new_size must have exactly two dimensions.")
+
         height, width = new_size
 
-        scale_x = width / input_img.shape[1]
-        scale_y = height / input_img.shape[0]
+        if len(input_img.shape) == 2:
+            scale_x = width / input_img.shape[1]
+            scale_y = height / input_img.shape[0]
+        else:
+            scale_x = width / input_img.shape[2]
+            scale_y = height / input_img.shape[1]
 
     elif size == "proportion":
         height = int(input_img.shape[0] * new_size)

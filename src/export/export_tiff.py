@@ -61,6 +61,8 @@ def export_tiff(img: np.ndarray, output_path: LiteralString | str | bytes,
     if no_data is not None:
         metadata['nodata'] = no_data
 
+    metadata['BIGTIFF'] = 'YES'  # Enable BigTIFF
+
     # Export the image to a TIFF file using Rasterio
     with rasterio.open(output_path, 'w', **metadata) as dst:
         if len(img.shape) == 2:  # Single band

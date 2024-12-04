@@ -24,7 +24,7 @@ def remove_outliers(point_cloud: o3d.geometry.PointCloud | np.ndarray) -> o3d.ge
         pcd = point_cloud
 
     # Outlier removal using PCA and distance thresholding
-    pca = PCA(n_components=3)
+    pca = PCA(n_components=3, svd_solver='full')
     points = np.asarray(pcd.points)  # Extract points as numpy array for PCA
     pca.fit(points)
     plane_normal = pca.components_[2]  # Normal vector of the main plane
@@ -32,6 +32,7 @@ def remove_outliers(point_cloud: o3d.geometry.PointCloud | np.ndarray) -> o3d.ge
 
     # Calculate distances of each point to the plane
     distances = np.abs((points - plane_point).dot(plane_normal)) / np.linalg.norm(plane_normal)
+    distances = np.round(distances, decimals=8)
 
     # Find statistical outliers based on distance from the plane
     mean_distance = np.mean(distances)

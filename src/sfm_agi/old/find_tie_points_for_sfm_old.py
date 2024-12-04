@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 
-import src.base.find_overlapping_images as foi
+import src.base.find_overlapping_images_geom as foi
 import src.base.find_tie_points as ftp
 import src.display.display_images as di
 import src.load.load_image as li
@@ -82,8 +82,8 @@ def find_tie_points_for_sfm(img_folder,
         footprints_lst = [footprint_dict[image_id] for image_id in image_ids]
 
         # get the overlapping images
-        overlap_dict = foi.find_overlapping_images(image_ids, footprints_lst,
-                                                   min_overlap=min_overlap)
+        overlap_dict = foi.find_overlapping_images_geom(image_ids, footprints_lst,
+                                                        min_overlap=min_overlap)
 
         # create a list with all combinations of images
         for img_id, overlap_lst in overlap_dict.items():
@@ -106,7 +106,7 @@ def find_tie_points_for_sfm(img_folder,
 
     # init tie-point detector
     tpd = ftp.TiePointDetector('lightglue', verbose=True,
-                               min_conf_value=min_conf, tp_type=tp_type,
+                               min_conf=min_conf, tp_type=tp_type,
                                display=debug_show_intermediate_steps)
 
     # dict for the tie points & confidence values

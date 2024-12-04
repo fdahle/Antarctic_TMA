@@ -1,175 +1,242 @@
-from tkinter import image_types
-
+# Library imports
 import numpy as np
-from scipy.ndimage import gaussian_filter
-from skimage.feature import match_template
-import src.display.display_images as di
+import xdem
+from affine import Affine
+
+# Local imports
+import src.base.resize_image as ri
 
 
-def correct_dem(historic_dem, modern_dem, mode='nuth', remove_outliers=True, max_offset=100,
-                max_dz=100, slope_lim=(0.1, 40), max_iter=30, tol=0.02, plot=False, mask=None):
-    """
-    Perform DEM co-registration using numpy arrays for historic and modern DEMs.
+def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
+                historic_ortho=None, modern_ortho=None,
+                mask=None, max_slope=None, no_data_val=-9999, print_values=True):
 
-    Parameters:
-    - historic_dem (numpy array): Reference DEM.
-    - modern_dem (numpy array): Source DEM to be aligned.
-    - mode (str): Mode of co-registration, choices: 'ncc', 'sad', 'nuth', 'none'.
-    - remove_outliers (bool): Whether to apply outlier filtering.
-    - max_offset (float): Maximum expected horizontal offset in pixels.
-    - max_dz (float): Maximum allowed elevation difference for outlier filtering.
-    - slope_lim (tuple): Slope limits for filtering surfaces (min, max).
-    - max_iter (int): Maximum number of iterations for refinement.
-    - tol (float): Tolerance to stop iteration when shift magnitude falls below.
-    - plot (bool): Whether to plot final results (requires matplotlib).
+    # check if the DEMs have the same shape
+    if historic_dem.shape != modern_dem.shape:
+        raise ValueError("The two DEMs have different shapes")
 
-    Returns:
-    - dx_total, dy_total, dz_total (floats): Total computed shifts in x, y, and z.
-    - final_diff (numpy array): Final difference map after alignment.
-    """
-
-    # Apply mask to exclude invalid areas if provided
+    # update mask with no data values
     if mask is not None:
-        historic_dem = np.where(mask, historic_dem, np.nan)
-        modern_dem = np.where(mask, modern_dem, np.nan)
+        mask[historic_dem == no_data_val] = 0
 
-    # Initialize shifts
-    dx_total, dy_total, dz_total = 0, 0, 0
+    # set no data values to nan
+    historic_dem[historic_dem == no_data_val] = np.nan
 
-    # Iteratively compute shifts until tolerance or max_iter is reached
-    for n in range(max_iter):
-        diff = modern_dem - historic_dem
+    #import matplotlib.pyplot as plt
+    #fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    #axes[0].imshow(historic_dem)
+    #axes[1].imshow(mask)
+    #plt.title("mask")
+    #plt.tight_layout()
+    #plt.show()
 
-        if remove_outliers:
-            diff = _outlier_filter(diff, max_dz=max_dz)
+    # get mask as numpy array and resize to modern dem shape
+    if mask is not None:
+        mask = ri.resize_image(mask, modern_dem.shape)
 
-        # Check if diff is all NaNs; if so, skip this iteration
-        if np.isnan(diff).all():
-            print("All values in diff are NaN, skipping iteration.")
-            continue
+    # modern_ortho = ri.resize_image(modern_ortho, modern_dem.shape)
 
-        # Slope filtering
-        slope = _get_filtered_slope(historic_dem, slope_lim=slope_lim)
+    print(modern_dem.shape, modern_ortho.shape, mask.shape)
 
-        # Check if slope is all NaNs; if so, skip this iteration
-        if np.isnan(slope).all():
-            print("All values in slope are NaN, skipping iteration.")
-            continue
+    # make sure that mask is similar to the dems
+    if mask is not None:
+        if mask.shape != modern_dem.shape:
+            raise ValueError("The mask has a different shape than the DEMs")
 
-        aspect = np.arctan2(*np.gradient(historic_dem))
 
-        # Compute shift based on the selected mode
-        dx, dy = 0, 0
-        if mode == 'ncc':
-            result = match_template(historic_dem, modern_dem, pad_input=True)
-            y_offset, x_offset = np.unravel_index(np.argmax(result), result.shape)
-            dy, dx = y_offset - historic_dem.shape[0] // 2, x_offset - historic_dem.shape[1] // 2
-        elif mode == 'nuth':
-            dx, dy = _compute_nuth_shift(diff, slope, aspect)
+    # convert the dems to xdem.DEM
+    historic_dem = xdem.DEM.from_array(historic_dem, transform=hist_transform,
+                                       crs=3031, nodata=np.nan)
+    modern_dem = xdem.DEM.from_array(modern_dem, transform=modern_transform,
+                                     crs=3031, nodata=np.nan)
 
-        # If dx or dy is NaN, set them to zero to avoid errors in np.roll
-        dx = 0 if np.isnan(dx) else dx
-        dy = 0 if np.isnan(dy) else dy
+    # calculate the difference between the two DEMs
+    print("Calc diff before")
+    diff_before = modern_dem - historic_dem
 
-        # Apply shifts
-        dx_total += dx
-        dy_total += dy
-        dz_total += np.nanmedian(diff) if not np.isnan(np.nanmedian(diff)) else 0
+    # calculate the slope of the modern DEM
+    print("Calculating slope")
+    slope = xdem.terrain.slope(modern_dem)
 
-        print(f"Iteration {n}: dx={dx}, dy={dy}, dz_total={dz_total}")
+    # init the deramp & Nuth Kaab classes
+    deramp = xdem.coreg.Deramp()
+    nuth_kaab = xdem.coreg.NuthKaab()
 
-        # Update modern_dem by shifting in x, y, and z
-        shifted_x = np.roll(historic_dem, int(round(dx)), axis=1)  # Ensure dx is an integer
-        shifted_xy = np.roll(shifted_x, int(round(dy)), axis=0)  # Ensure dy is an integer
-        historic_dem = shifted_xy + dz_total  # Update historic_dem with cumulative z-shift
+    while True:
+        try:
+            # create a slope mask based on max_slope threshold
+            if max_slope is None:
+                slope_mask = np.ones_like(modern_dem.data, dtype=bool)
+            else:
+                slope_mask = slope < max_slope  # Convert max_slope to radians
+                slope_mask = slope_mask.data
+                slope_mask = np.ma.getdata(slope_mask)
 
-        style_config = {
-            "title": f"{np.nanmean(diff):.2f} m",
-        }
-        #di.display_images([historic_dem, modern_dem, diff], image_types=["DEM", "DEM", "difference"],
-                          #style_config=style_config)
+            # create a mask for the stable ground
+            if mask is not None:
+                inlier_mask = mask & slope_mask
+            else:
+                inlier_mask = slope_mask
 
-        # Check for convergence
-        print(np.sqrt(dx**2 + dy**2 + dz_total**2), tol)
-        if np.sqrt(dx**2 + dy**2 + dz_total**2) < tol:
+            # invert mask
+            inlier_mask = inlier_mask.astype(bool)
+
+            #import matplotlib.pyplot as plt
+            #plt.imshow(inlier_mask)
+            #plt.title("Inlier mask")
+            #plt.show()
+
+            print("Fit deramp")
+            deramp.fit(modern_dem, historic_dem, inlier_mask, verbose=True)
+
+            #print("Apply deramp")
+            aligned_dem = deramp.apply(historic_dem)
+
+            # fit the co-registration
+            print("Fit Nuth Kääb")
+            nuth_kaab.fit(modern_dem, aligned_dem, inlier_mask, verbose=True)
+
+            # apply the co-registration
+            print("Apply Nuth Kääb")
+            aligned_dem = nuth_kaab.apply(aligned_dem)
+            aligned_matrix = nuth_kaab.to_matrix()  # noqa
+
+            # get the difference after the co-registration
+            print("Calc diff")
+            diff_after = modern_dem - aligned_dem
+
             break
 
-    # Compute final difference after alignment
-    final_diff = modern_dem - historic_dem
+        except ValueError as e:
 
-    # Optional plot of final alignment
-    if plot:
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(10, 5))
-        plt.subplot(1, 2, 1)
-        plt.imshow(historic_dem, cmap='gray')
-        plt.title("Aligned Historic DEM")
-        plt.subplot(1, 2, 2)
-        plt.imshow(final_diff, cmap='RdBu', vmin=-max_dz, vmax=max_dz)
-        plt.title("Final Elevation Difference (After Alignment)")
-        plt.colorbar(label="Elevation Difference (m)")
-        plt.show()
+            if "Less than 10 different cells exist" in str(e):
+                max_slope = max_slope + 5
+                print(f"Coreg failed. Max slope increased to {max_slope}")
+            else:
+                raise e
+            if max_slope == 90:
+                raise ValueError("Max slope reached 90. Coreg failed.")
 
-    return dx_total, dy_total, dz_total, final_diff
+    import matplotlib.pyplot as plt
+    vmin, vmax= -50, 50
+    alpha = 0.2
+    # Create a figure and two subplots
+    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
+    # Create a figure and two subplots
+    im1 = axes[0].imshow(diff_before.data, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
+    axes[0].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    axes[0].set_title("Difference Before")
+    plt.colorbar(im1, ax=axes[0], label="Elevation change (m)")
 
+    # Plot diff_after on the second subplot
+    im2 = axes[1].imshow(diff_after.data, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
+    axes[1].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    axes[1].set_title("Difference After")
+    plt.colorbar(im2, ax=axes[1], label="Elevation change (m)")
 
-def _outlier_filter(diff, max_dz=100):
-    diff = np.where(np.abs(diff) > max_dz, np.nan, diff)
-    mad = np.nanmedian(np.abs(diff - np.nanmedian(diff)))
-    threshold = 3 * mad
-    return np.where(np.abs(diff - np.nanmedian(diff)) > threshold, np.nan, diff)
+    # put first axis of modern ortho in the last
+    modern_ortho = np.moveaxis(modern_ortho, 0, 2)
+    im3 = axes[2].imshow(modern_ortho)
+    axes[2].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    axes[2].set_title("Modern Ortho")
 
-def _get_filtered_slope(dem, slope_lim=(0.1, 40)):
-    gradient_x, gradient_y = np.gradient(dem)
-    slope = np.sqrt(gradient_x**2 + gradient_y**2)
-    return np.where((slope >= slope_lim[0]) & (slope <= slope_lim[1]), slope, np.nan)
+    # Add a common title and adjust layout
+    fig.suptitle("Elevation Differences Before and After Alignment", fontsize=16)
+    plt.tight_layout()
+    plt.show()
 
-def _compute_nuth_shift(diff, slope, aspect):
-    fit_param = np.nanmedian(diff) / np.tan(np.nanmedian(slope))
-    dx = fit_param * np.sin(aspect)
-    dy = fit_param * np.cos(aspect)
-    # Calculate the mean dx and dy to get a single global shift
-    return np.nanmean(dx), np.nanmean(dy)  # Now returns scalar values
+    # create new transform
+    aligned_transform = Affine(
+        hist_transform.a,
+        hist_transform.b,
+        hist_transform.c + aligned_matrix[0, 3],
+        hist_transform.d,
+        hist_transform.e,
+        hist_transform.f + aligned_matrix[1, 3],
+    )
 
+    print(hist_transform)
+    print(aligned_transform)
 
-if __name__ == "__main__":
+    if print_values:
+        avg_before = np.ma.mean(diff_before.data)
+        med_before = np.ma.median(diff_before.data)
+        nmad_before = xdem.spatialstats.nmad(diff_before)
 
-    project_fld = "/data/ATM/data_1/sfm/agi_projects/"
-    project_name = "new_tst8"
+        avg_after = np.ma.mean(diff_after.data)
+        med_after = np.ma.median(diff_after.data)
+        nmad_after = xdem.spatialstats.nmad(diff_after)
+
+        print(f"Error before (all) - "
+              f"mean: {avg_before:.2f}, "
+              f"median: {med_before:.2f},"
+              f"NMAD = {nmad_before:.2f}")
+        print(f"Error after (all) - "
+              f"mean: {avg_after:.2f}, "
+              f"median:{med_after:.2f}, "
+              f"NMAD = {nmad_after:.2f}")
+
+        if inlier_mask is not None:
+            inliers_before = diff_before[inlier_mask]
+            inliers_avg_before = float(np.ma.mean(inliers_before))
+            inliers_med_before = float(np.ma.median(inliers_before))
+            inliers_nmad_before = xdem.spatialstats.nmad(inliers_before)
+
+            inliers_after = diff_after[inlier_mask]
+            inliers_avg_after = float(np.ma.mean(inliers_after))
+            inliers_med_after = float(np.ma.median(inliers_after))
+            inliers_nmad_after = xdem.spatialstats.nmad(inliers_after)
+
+            print("--")
+            print(f"Error before (inliers) - "
+                  f"mean: {inliers_avg_before:.2f}, "
+                  f"median = {inliers_med_before:.2f}, "
+                  f"NMAD = {inliers_nmad_before:.2f}")
+            print(f"Error after (inliers) - "
+                  f"mean: {inliers_avg_after:.2f}, "
+                  f"median = {inliers_med_after:.2f}, "
+                  f"NMAD = {inliers_nmad_after:.2f}")
+
+    output_arr = aligned_dem.data
+    output_arr[historic_dem.data == no_data_val] = no_data_val
+
+    return output_arr, aligned_transform, max_slope
+
+"""if __name__ == "__main__":
+
+    project_name = "test3"
 
     import os
-    project_path = os.path.join(project_fld, project_name)
-    dem_path = os.path.join(project_path, "output", f"{project_name}_dem_absolute.tif")
+    project_folder = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
+    output_fld = os.path.join(project_folder, "output")
+    path_hist_dem = os.path.join(output_fld, project_name + "_dem_absolute.tif")
 
     import src.load.load_image as li
-    import src.load.load_rema as lr
+    dem_abs, transform_abs = li.load_image(path_hist_dem,
+                                           return_transform=True)
 
-    # load the historic DEM
-    hist_dem, hist_transform = li.load_image(dem_path, return_transform=True)
-
-    # get bounds from the transform and the shape of the image
     import src.base.calc_bounds as cb
-    bounds = cb.calc_bounds(hist_transform, hist_dem.shape)
+    bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
 
-    modern_dem, modern_transform = lr.load_rema(bounds)
+    import src.load.load_rema as lr
+    print(bounds)
+    dem_modern, transform_rema = lr.load_rema(bounds,
+                                              output_resolution=2,
+                                              auto_download=True,
+                                              return_transform=True)
 
-    # resize the modern DEM to the same size as the historic DEM
-    import src.base.resize_image as ri
-    modern_dem = ri.resize_image(modern_dem, hist_dem.shape)
+    #import src.load.load_rock_mask as lrm
+    #mask_resolution = 10
+    #rock_mask = lrm.load_rock_mask(bounds, mask_resolution)
 
-    hist_dem[hist_dem == hist_dem.min()] = np.nan
+    print(dem_abs.shape, dem_modern.shape)
+    print(transform_abs, transform_rema)
 
-    print("TEMP")
-    hist_dem[hist_dem > 1000] = np.nan
+    import src
+    exit()
 
-    mask = np.invert(np.isnan(hist_dem) | np.isnan(modern_dem))
-
-    _, _, _, corrected_dem = correct_dem(hist_dem, modern_dem, mask=mask)
-    diff_hist = np.abs(hist_dem - modern_dem)
-    diff_corrected = np.abs(corrected_dem - modern_dem)
-    placeholder = np.zeros_like(diff_hist)
-
-    di.display_images([hist_dem, corrected_dem, modern_dem,
-                        diff_hist, diff_corrected, placeholder],
-                      image_types=["DEM", "DEM", "DEM",
-                                   "difference", "difference", "difference"],)
+    dem_corrected = correct_dem(dem_abs, dem_modern,
+                                   transform_abs, transform_rema,
+                                   mask=rock_mask,
+                                   max_slope=20)
+"""

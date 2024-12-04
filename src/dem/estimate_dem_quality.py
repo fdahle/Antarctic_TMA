@@ -11,69 +11,20 @@ PATH_ROCK_MASK = "/data/ATM/data_1/quantarctica/Quantarctica3/Geology/ADD/ADD_Ro
 
 
 def estimate_dem_quality(dem_abs, modern_dem=None,
-                         conf_dem=None,
-                         abs_bounds=None,
-                         modern_source="REMA32",
-                         use_rock_mask=False):
-
-    # load the modern dem if not provided
-    if modern_dem is None:
-
-        # historic bounds are required to load the modern dem
-        if abs_bounds is None:
-            raise ValueError("historic_bounds must be provided if modern_dem is not provided")
-
-        if modern_source == "REMA2":
-            zoom_level = 2
-        elif modern_source == "REMA10":
-            zoom_level = 10
-        elif modern_source == "REMA32":
-            zoom_level = 32
-        else:
-            raise ValueError("modern source not supported")
-
-        modern_dem, _ = lr.load_rema(abs_bounds, zoom_level=zoom_level)
+                         mask=None):
 
     # resize the historic dem to the modern dem
     dem_abs = ri.resize_image(dem_abs, modern_dem.shape)
 
-    # load the rock-mask
-    if use_rock_mask:
-
-        # get the rock shapes
-        rock_shapes = lsd.load_shape_data(PATH_ROCK_MASK)
-
-        # create polygon from bounds
-        min_x, min_y, max_x, max_y = abs_bounds
-        bounds_polygon = box(min_x, min_y, max_x, max_y)
-
-        # Filter out rock shapes that are outside the bounds
-        rock_shapes = rock_shapes[rock_shapes.geometry.intersects(bounds_polygon)]
-
-        # Calculate the resolution of the DEM
-        x_res = (max_x - min_x) / dem_abs.shape[1]
-        y_res = (max_y - min_y) / dem_abs.shape[0]
-
-        # Create an affine transformation (mapping pixels to coordinates)
-        transform = features.Affine.translation(min_x, max_y) * features.Affine.scale(x_res, -y_res)
-
-        # Rasterize the rock polygons onto the DEM grid
-        rock_mask = features.rasterize(
-            ((geom, 1) for geom in rock_shapes.geometry),
-            out_shape=dem_abs.shape,
-            transform=transform,
-            fill=0,
-            dtype=np.uint8
-        )
-    else:
-        rock_mask = None
-
+    # init quality dict
     quality_dict = {}
 
+    # get the quality of the whole dem
     quality_dict = _calc_stats("all", modern_dem, dem_abs, quality_dict)
 
-    if use_rock_mask:
-        modern_dem[rock_mask == 0] = np.nan
+    # apply the mask
+    if mask is not None:
+        modern_dem[mask == 0] = np.nan
         quality_dict = _calc_stats("rock", modern_dem, dem_abs, quality_dict)
 
     # Convert all numpy float32 values in quality_dict to standard Python float

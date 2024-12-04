@@ -4,6 +4,7 @@
 import os
 
 import numpy as np
+from fontTools.subset import subset
 
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
@@ -14,11 +15,12 @@ import src.load.load_shape_data as lsd
 
 # CONSTANTS
 PATH_QUANTARTICA = "/data/ATM/data_1/quantarctica/Quantarctica3"  # noqa
-PATH_ROCK_MASK = os.path.join(PATH_QUANTARTICA, "Basemap/ADD_Rock_outcrop_?QUALITY?_res_polygon.shp")
+PATH_ROCK_MASK = os.path.join(PATH_QUANTARTICA, "Geology/ADD/ADD_RockOutcrops_Landsat8.shp")
 
-def load_rock_mask(bounds: list, resolution: int | float,
-                   quality: str = "high",
-                   mask_buffer: int = 0) -> np.ndarray:
+def load_rock_mask(bounds: list,
+                   resolution: int | float | None = None,
+                   mask_buffer: int = 0,
+                   return_shapes=False) -> np.ndarray:
     """
     Use the absolute bounds to load the rock mask from Quantarctica. The shape file
     will be limited to the bounds and rasterized with the given resolution.
@@ -32,29 +34,49 @@ def load_rock_mask(bounds: list, resolution: int | float,
 
     """
 
-    # Check the quality
-    if quality not in ["low", "medium", "high"]:
-        raise ValueError("quality must be one of 'low', 'medium', 'high'")
-
     # Check the resolution
-    if resolution < 1:
-        raise Warning(f"Resolution is very low ({resolution})")
-
-    # update path with quality
-    path = PATH_ROCK_MASK.replace("?QUALITY?", quality)
+    if return_shapes is False:
+        if resolution is None:
+            raise ValueError("resolution must be provided if return_shapes is False")
+        if resolution < 1:
+            raise Warning(f"Resolution is very low ({resolution})")
 
     # Load the shape data
-    rock_shape_data = lsd.load_shape_data(path)
+    rock_shape_data = lsd.load_shape_data(PATH_ROCK_MASK)
 
     # Unpack bounds and calculate grid dimensions
-    minx, min_y, max_x, maxy = bounds
+    min_x, min_y, max_x, max_y = bounds
+
+    # adjust bounds to resolution
+    if resolution is not None:
+        min_x = np.floor(min_x / resolution) * resolution
+        min_y = np.floor(min_y / resolution) * resolution
+        max_x = np.ceil(max_x / resolution) * resolution
+        max_y = np.ceil(max_y / resolution) * resolution
 
     # Create a Shapely geometry for the bounding box
-    bounding_box = (minx, min_y, max_x, maxy)
+    bounding_box = (min_x, min_y, max_x, max_y)
     bbox_geom = box(*bounding_box)
 
-    # Clip the GeoDataFrame using the bounding box
+    # select intersecting shapes
     subset_gdf = rock_shape_data[rock_shape_data.intersects(bbox_geom)]
+
+    # Clip the geometries to the bounding box
+    subset_gdf = subset_gdf.copy()  # To avoid potential SettingWithCopyWarning
+    subset_gdf["geometry"] = subset_gdf["geometry"].intersection(bbox_geom)
+
+    import src.display.display_shapes as ds
+    ds.display_shapes(subset_gdf)
+
+    if return_shapes:
+
+        subset_gdf = subset_gdf.copy()  # To avoid SettingWithCopyWarning
+        subset_gdf["geometry"] = subset_gdf.intersection(bbox_geom)
+
+        if subset_gdf.crs is None:
+            subset_gdf.set_crs(epsg=3031, inplace=True)
+
+        return subset_gdf
 
     # Calculate the bounds of the subset (to fit within the bbox)
     minx, min_y, max_x, maxy = bbox_geom.bounds

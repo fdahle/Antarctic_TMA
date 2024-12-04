@@ -1,8 +1,12 @@
+# Python imports
 import os
+
+# Library imports
 import numpy as np
 import zipfile
 from plyfile import PlyData
 
+# Local imports
 import src.load.load_image as li
 import src.display.display_images as di
 

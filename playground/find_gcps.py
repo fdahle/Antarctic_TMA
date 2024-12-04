@@ -21,7 +21,7 @@ hist_dem, transform = li.load_image(path_hist_dem, return_transform=True)
 bounds = cb.calc_bounds(transform, hist_dem.shape)
 
 # load modern dem
-modern_dem, _ = lr.load_rema(bounds)
+modern_dem = lr.load_rema(bounds)
 
 orig = copy.deepcopy(hist_dem)
 

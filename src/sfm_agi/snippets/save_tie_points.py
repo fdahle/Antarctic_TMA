@@ -1,12 +1,30 @@
+"""save tie-points from Metashape as images"""
+
+# Python imports
 import itertools
+
+# Library imports
 import numpy as np
+import Metashape
 from tqdm.auto import tqdm
 
+# Local imports
 import src.display.display_images as di
 import src.load.load_image as li
 
 
-def save_tie_points(chunk, save_path):
+def save_tie_points(chunk: Metashape.Chunk, save_path:str):
+    """
+    Saves tie points for camera pairs of a chunk as an image,
+    displaying valid and invalid matches.
+    Args:
+        chunk (Metashape.Chunk): The chunk object containing cameras and tie points.
+        save_path (str): The path to save the visualized tie points.
+    Returns:
+        None
+    Raises:
+        Exception: If no tie points are available in the chunk.
+    """
 
     # get data from the chunk
     cameras = chunk.cameras
@@ -18,10 +36,9 @@ def save_tie_points(chunk, save_path):
 
     if points is None:
         raise Exception("No tie points available")
-        return
 
-    point_ids = [-1] * len(point_cloud.tracks)
-    for point_id in range(0, len(points)):
+    point_ids = [-1] * len(point_cloud.tracks)  # noqa
+    for point_id in range(0, len(points)):  # noqa
         point_ids[points[point_id].track_id] = point_id
     camera_matches_valid = dict()
 
@@ -45,7 +62,7 @@ def save_tie_points(chunk, save_path):
         # Get valid matches for each camera
         for camera in [camera1, camera2]:
             valid_matches = set()
-            for proj in projections[camera]:
+            for proj in projections[camera]:  # noqa
 
                 # get the track id
                 track_id = proj.track_id
@@ -66,11 +83,12 @@ def save_tie_points(chunk, save_path):
             camera_matches_valid[camera] = valid_matches
 
         # Get valid matches
-        valid = camera_matches_valid[camera1].intersection(camera_matches_valid[camera2])
+        valid = camera_matches_valid[camera1].intersection(
+            camera_matches_valid[camera2])
 
         # Get total number of matches
-        total = set([p.track_id for p in projections[camera1]]).intersection(
-            set([p.track_id for p in projections[camera2]]))
+        total = set([p.track_id for p in projections[camera1]]).intersection(  # noqa
+            set([p.track_id for p in projections[camera2]]))  # noqa
 
         pbar.set_postfix_str(f"Valid/Total matches: {len(valid), len(total)}")
 
@@ -81,8 +99,10 @@ def save_tie_points(chunk, save_path):
         # Collect coordinates for valid matches
         for track_id in valid:
             try:
-                proj1 = next(p for p in projections[camera1] if p.track_id == track_id)
-                proj2 = next(p for p in projections[camera2] if p.track_id == track_id)
+                proj1 = next(p for p in projections[camera1]  # noqa
+                             if p.track_id == track_id)
+                proj2 = next(p for p in projections[camera2]  # noqa
+                             if p.track_id == track_id)
                 valid_matches_array.append([proj1.coord.x, proj1.coord.y, proj2.coord.x, proj2.coord.y])
             except StopIteration:
                 continue
@@ -90,8 +110,10 @@ def save_tie_points(chunk, save_path):
         # Collect coordinates for invalid matches
         for track_id in total - valid:
             try:
-                proj1 = next(p for p in projections[camera1] if p.track_id == track_id)
-                proj2 = next(p for p in projections[camera2] if p.track_id == track_id)
+                proj1 = next(p for p in projections[camera1]  # noqa
+                             if p.track_id == track_id)
+                proj2 = next(p for p in projections[camera2]  # noqa
+                             if p.track_id == track_id)
                 invalid_matches_array.append([proj1.coord.x, proj1.coord.y, proj2.coord.x, proj2.coord.y])
             except StopIteration:
                 continue

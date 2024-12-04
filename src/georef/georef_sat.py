@@ -140,7 +140,8 @@ class GeorefSatellite:
 
         # load the initial satellite image and transform
         sat, sat_transform = ls.load_satellite(image_bounds, month=month,
-                                               return_empty_sat=True)
+                                               return_empty_sat=True,
+                                               return_transform=True)
 
         # get the initial sat bounds
         sat_bounds = list(approx_footprint.bounds)
@@ -148,8 +149,12 @@ class GeorefSatellite:
 
         # if we don't have a satellite image, we cannot geo-reference
         if sat is None:
-            print("No satellite is available for this image")
-            return None, None, None, None
+            # try again without month
+            sat, sat_transform = ls.load_satellite(image_bounds, return_empty_sat=True,
+                                                    return_transform=True)
+            if sat is None:
+                print(f"No satellite is available for this bounds ({sat_bounds})")
+                return None, None, None, None
 
         # rotate image (and mask)
         image, rotation_matrix = ri.rotate_image(image, angle, return_rot_matrix=True)
@@ -414,7 +419,8 @@ class GeorefSatellite:
 
                 # get the satellite image
                 sat_tile, sat_transform_tile = ls.load_satellite(sat_bounds_tile,
-                                                                 return_empty_sat=True)
+                                                                 return_empty_sat=True,
+                                                                 return_transform=True)
 
                 if sat_tile is None:
                     print("  No satellite image could be found for this tile")
@@ -550,7 +556,8 @@ class GeorefSatellite:
 
             # get the tweaked satellite image
             tweaked_sat, tweaked_sat_transform = ls.load_satellite(tweaked_sat_bounds,
-                                                                   return_empty_sat=True)
+                                                                   return_empty_sat=True,
+                                                                   return_transform=True)
 
             if tweaked_sat is None:
                 print("  Tweaked satellite image is not available")

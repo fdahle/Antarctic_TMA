@@ -1,5 +1,9 @@
 """calc some stats for each image in an agisoft metashape project"""
+
+# Local imports
 import math
+
+# Library imports
 import Metashape
 
 

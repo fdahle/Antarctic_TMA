@@ -50,7 +50,7 @@ def export_pointcloud(input_data: np.ndarray | o3d.t.geometry.PointCloud | pd.Da
 
         # Assign colors if columns red, green, blue are present
         if {'red', 'green', 'blue'}.issubset(input_data.columns):
-            colors = input_data[['red', 'green', 'blue']].to_numpy(dtype=np.float32) / 255.0  # Normalize to [0, 1]
+            colors = input_data[['red', 'green', 'blue']].to_numpy(dtype=np.uint8)
             point_cloud.point['colors'] = o3d.core.Tensor(colors)
 
         # assign custom attributes
@@ -58,7 +58,7 @@ def export_pointcloud(input_data: np.ndarray | o3d.t.geometry.PointCloud | pd.Da
             if col in {'x', 'y', 'z', 'nx', 'ny', 'nz', 'red', 'green', 'blue'}:
                 continue
 
-            custom_attribute = input_data[col].to_numpy(dtype=np.float32).reshape(-1, 1)
+            custom_attribute = input_data[col].to_numpy(dtype=np.uint8).reshape(-1, 1)
             point_cloud.point[col] = o3d.core.Tensor(custom_attribute)
 
     elif isinstance(input_data, np.ndarray):
@@ -75,7 +75,7 @@ def export_pointcloud(input_data: np.ndarray | o3d.t.geometry.PointCloud | pd.Da
 
         # add optional colors
         if input_data.shape[1] > 6:
-            colors = input_data[:, 3:6].astype(np.float32)
+            colors = input_data[:, 3:6].astype(np.uint8)
             point_cloud.point['colors'] = o3d.utility.Vector3dVector(colors)
 
     # Check if the input data is already a PointCloud object

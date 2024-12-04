@@ -10,7 +10,7 @@ import src.display.display_shapes as ds
 debug_show_overlap = False
 debug_only_matches = False
 
-def find_overlapping_images(
+def find_overlapping_images_geom(
         image_ids: list[str],
         footprints: Optional[list[Polygon]] = None,
         important_id: Optional[str] = None,

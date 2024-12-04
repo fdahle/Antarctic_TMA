@@ -10,7 +10,7 @@ from io import StringIO
 
 import src.load.load_image as li
 import src.export.export_ply as ep
-import src.sfm_agi.snippets.adapt_frame as af
+import src.sfm_agi.snippets.old.adapt_frame as af
 import src.sfm_agi.snippets.zip_folder as zp
 
 debug_delete_files = False

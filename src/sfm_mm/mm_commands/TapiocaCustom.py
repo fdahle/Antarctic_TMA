@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 # Local imports
-import src.base.find_overlapping_images as foi
+import src.base.find_overlapping_images_geom as foi
 import src.base.find_tie_points as ftp
 import src.load.load_image as li
 from src.sfm_mm.mm_commands._base_command import BaseCommand
@@ -226,8 +226,8 @@ class TapiocaCustom(BaseCommand):
 
         # find overlapping images
         # todo: add support for footprints
-        short_overlap_dict = foi.find_overlapping_images(short_file_names, working_modes=["ids"],
-                                                         max_id_range=self.mm_args["max_id_range"])
+        short_overlap_dict = foi.find_overlapping_images_geom(short_file_names, working_modes=["ids"],
+                                                              max_id_range=self.mm_args["max_id_range"])
 
         # convert the short names to the full names again
         overlap_dict = {prefix + key: [prefix + value for value in values] for

@@ -19,13 +19,22 @@ import src.georef.snippets.calc_azimuth as ca  # noqa
 import src.load.load_military_focal_length as lmfl  # noqa
 import src.other.extract.extract_ids_by_area as eia  # noqa
 
+glacier_name = None
+
+"""
 # define the image ids
-#image_ids = ["CA214732V0045", "CA214732V0046", "CA214732V0047", "CA214732V0048"]
+image_ids = ["CA214732V0045", "CA214732V0046", "CA214732V0047", "CA214732V0048"]
 image_ids = ['CA214831L0071', 'CA214831L0072', 'CA214831L0073', 'CA214831L0074', 'CA214832V0070', 'CA214832V0071', 'CA214832V0072', 'CA214832V0073', 'CA214832V0074', 'CA214931L0155', 'CA214931L0156', 'CA214931L0157', 'CA214931L0158', 'CA214931L0159', 'CA214932V0155', 'CA214932V0156', 'CA214932V0157', 'CA214932V0158', 'CA215031L0251', 'CA215031L0252', 'CA215031L0253', 'CA215031L0254', 'CA215032V0251', 'CA215032V0252', 'CA215032V0253', 'CA215131L0296', 'CA215131L0297', 'CA215131L0298', 'CA215131L0299', 'CA215132V0295', 'CA215132V0296', 'CA215132V0297', 'CA215132V0298', 'CA215132V0299', 'CA215132V0300', 'CA215133R0296', 'CA215133R0297', 'CA215133R0298', 'CA215133R0299', 'CA215733R0041']
 image_ids = ["CA216632V0280", "CA216632V0281", "CA216632V0282", "CA216632V0283",
              "CA216632V0284", "CA216632V0285", "CA216632V0286", "CA216632V0287"]
+"""
+image_ids = ["CA214732V0029", "CA214732V0030", "CA214732V0031", "CA214732V0032",
+             "CA214732V0033", "CA214732V0034", "CA214732V0035", "CA214732V0036",
+             "CA214732V0037"]
 bounds = None
 
+
+"""
 project_source = "crane"
 path_project_csv = f"/data/ATM/data_1/sfm/agi_data/research_areas/{project_source}.csv"
 # read the csv
@@ -34,19 +43,27 @@ df = pd.read_csv(path_project_csv)
 image_ids = df["'image_id'"].tolist()
 # remove all ' from every string
 image_ids = [image_id.replace("'", "") for image_id in image_ids]
+"""
 
+"""
+import src.sfm_agi.other.get_images_for_glacier as gifg
+glacier_name = "pequod"
+image_ids, bounds = gifg.get_images_for_glacier(glacier_name,
+                                                return_bounds=True)
+print(bounds)
+"""
 
 # project settings
-project_name = "crane"
+project_name = "test3"
 overwrite = False
 resume = True
 
-if project_source != project_name:
+if glacier_name is not None and glacier_name != project_name:
     raise ValueError("Project name and project source are not the same")
 
 # accuracy settings (None means not using it)
 camera_accuracy = (100, 100, 100)  # x, y, z in m
-gcp_accuracy = (5, 5, 10)
+gcp_accuracy = (20, 20, 10)
 
 # input settings
 limit_images = 0  # 0 means no limit

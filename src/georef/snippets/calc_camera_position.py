@@ -3,7 +3,8 @@
 from shapely.geometry import Polygon, Point
 
 
-def calc_camera_position(polygon: Polygon, catch: bool = True) ->\
+def calc_camera_position(image_id: str,
+                         polygon: Polygon,) ->\
         Point | None:
     """
     Calculates the camera position in x, y as the centroid of a polygon.
@@ -15,17 +16,11 @@ def calc_camera_position(polygon: Polygon, catch: bool = True) ->\
         Point: The centroid of the polygon as a Point object if successful, None otherwise.
     """
 
-    try:
-        # calculate the camera position (just by taking the centroid)
-        centroid = polygon.centroid
-        x, y = centroid.coords[0]
+    if "32V" not in image_id:
+        raise ValueError("Only nadir images are supported.")
 
-    except (Exception,) as e:
-        if catch:
-            return None
-        else:
-            raise e
-
+    centroid = polygon.centroid
+    x, y = centroid.coords[0]
     point = Point(x, y)
 
     return point

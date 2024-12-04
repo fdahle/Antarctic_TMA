@@ -3,8 +3,10 @@
 # Library imports
 import copy
 import cv2
+import gc
 import math
 import numpy as np
+import random
 import torch
 import warnings
 from scipy.spatial.distance import cdist
@@ -29,7 +31,7 @@ class TiePointDetector:
 
     def __init__(self, matching_method: str, matching_additional: bool = True, matching_extra: bool = True,
                  keep_resized_points: bool = False, min_resized_points: int = 10, num_transform_points: int = 25,
-                 min_conf_value: float = 0.0, ransac_value: float = 5.0, average_threshold: float = 10.0,
+                 min_conf: float = 0.0, ransac_value: float = 5.0, average_threshold: float = 10.0,
                  tp_type=int, display: bool = False, display_level=1, catch=False, verbose: bool = False):
         """
         Initializes the TiePointDetector with specified configuration for tie-point detection and matching.
@@ -47,18 +49,24 @@ class TiePointDetector:
                 additional matching. Defaults to 10.
             num_transform_points (int, optional): The number of points to use when calculating transformations for extra
                 matching .Defaults to 25.
-            min_conf_value (float, optional): The minimum confidence value for considering a match. Defaults to 0.0.
+            min_conf (float, optional): The minimum confidence value for considering a match. Defaults to 0.0.
             ransac_value (float, optional): The RANSAC re-projection threshold. Defaults to 5.0.
             average_threshold (float, optional): The threshold for averaging tie points. Defaults to 10.0.
             verbose (bool, optional): If True, print detailed messages during processing. Defaults to True.
         """
+
+        random.seed(42)
+        np.random.seed(42)
+        torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
 
         self.average_threshold = average_threshold
         self.keep_resized_points = keep_resized_points
         self.matching_method = matching_method.lower()
         self.matching_additional = matching_additional
         self.matching_extra = matching_extra
-        self.min_conf_value = min_conf_value
+        self.min_conf_value = min_conf
         self.min_resized_points = min_resized_points
         self.num_transform_points = num_transform_points
         self.ransac_value = ransac_value
@@ -109,7 +117,9 @@ class TiePointDetector:
             ValueError: If the dimensions of the masks do not match their corresponding images.
         """
 
-        # TODO: add rotation
+        # free memory to find more tie-points
+        gc.collect()
+        torch.cuda.empty_cache()
 
         if mask1 is not None:
 

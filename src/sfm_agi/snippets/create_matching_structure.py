@@ -1,13 +1,16 @@
+# Python imports
 import os
+import xml.etree.ElementTree as Element_tree
+from io import StringIO
 
+# Library imports
 import numpy as np
 import pandas as pd
-import xml.etree.ElementTree as Element_tree
 from numba import njit
 from sklearn.neighbors import KDTree
 from tqdm import tqdm
-from io import StringIO
 
+# Local imports
 import src.load.load_image as li
 
 debug_delete_files = False

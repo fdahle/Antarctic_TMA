@@ -1,7 +1,10 @@
+
+# Python imports
 import os
 import xml.etree.ElementTree as ET
 import zipfile
 
+# Local imports
 import src.sfm_agi.snippets.zip_folder as zp
 
 

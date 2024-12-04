@@ -213,9 +213,10 @@ def display_images(images: np.ndarray | list[np.ndarray],
 
         # Optionally draw overlay image
         if overlays is not None and idx < len(overlays):
-            overlay_img = overlays[idx]
-            ax.imshow(overlay_img, cmap=cmap_red_green,
-                      alpha=style_config['overlay_alpha'])
+            if overlays[idx] is not None:
+                overlay_img = overlays[idx]
+                ax.imshow(overlay_img, cmap=cmap_red_green,
+                          alpha=style_config['overlay_alpha'])
 
         # Optionally draw tie-points
         if tie_points is not None and idx == 0:  # Draw tie-points only from the context of the first image

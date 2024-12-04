@@ -1,5 +1,5 @@
 """run the complete process to create a DEM from images with Agisoft"""
-
+import copy
 # Python imports
 import json
 import os
@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 import src.base.calc_bounds as cb
 import src.base.check_sky as cs
 import src.base.enhance_image as ei
-import src.base.find_overlapping_images as foi
+import src.base.find_overlapping_images_geom as foi
 import src.base.load_credentials as lc
 import src.base.resize_image as rei
 import src.base.rotate_image as ri
@@ -39,11 +39,13 @@ import src.load.load_satellite as ls
 import src.pointclouds.remove_outliers as ro
 import src.sfm_agi.other.create_tps_frame as ctf
 import src.sfm_agi.snippets.add_gcp_markers as agm
+import src.sfm_agi.snippets.align_images as ai
 import src.sfm_agi.snippets.create_adapted_mask as cam
 import src.sfm_agi.snippets.create_confidence_array as cca
 import src.sfm_agi.snippets.create_difference_dem as cdd
 import src.sfm_agi.snippets.create_matching_structure as cms  # noqa: SpellingInspection
 import src.sfm_agi.snippets.convert_ply_files as cpf
+import src.sfm_agi.snippets.extract_camera_params as ecp
 import src.sfm_agi.snippets.find_gcps as fg
 import src.sfm_agi.snippets.find_tie_points_for_sfm as ftp
 import src.sfm_agi.snippets.georef_ortho as go
@@ -76,13 +78,15 @@ tp_tolerance = 0.5
 custom_markers = False  # if True, custom markers support the matching of Agisoft
 zoom_level_dem = 10  # in m
 use_gcp_mask = True  # filter ground control points with a mask
-mask_type = ["rock"] # , "confidence"]  # "confidence" or "rock"
+mask_type = ["rock"]  # , "confidence"]  # "confidence" or "rock"
+rock_mask_type = "REMA"
 mask_resolution = 10
 min_gcp_confidence = 0.8
 max_gcp_error_px = 1
-max_gcp_error_m = 500
+max_gcp_error_m = 100
 mask_buffer = 10  # in pixels
 no_data_value = -9999
+interpolate = True  # intepolate values in MESH and DEM
 
 # Other variables
 save_text_output = True  # if True, the output will be saved in a text file
@@ -112,16 +116,18 @@ STEPS = {
     "build_dem_relative": False,
     "build_orthomosaic_relative": False,
     "build_confidence_relative": False,
-    "georef_output_images": True,
-    "create_gcps": True,
-    "load_gcps": True,
-    "build_depth_maps_absolute": True,
-    "build_mesh_absolute": True,
-    "build_pointcloud_absolute": True,
-    "clean_pointcloud_absolute": True,
-    "build_dem_absolute": True,
-    "build_orthomosaic_absolute": True,
-    "export_alignment": True,
+    "georef_ortho": False,
+    "create_gcps": False,
+    "load_gcps": False,
+    "check_gcps": False,
+    "build_depth_maps_absolute": False,
+    "save_camera_params": False,
+    "build_mesh_absolute": False,
+    "build_pointcloud_absolute": False,
+    "clean_pointcloud_absolute": False,
+    "build_dem_absolute": False,
+    "build_orthomosaic_absolute": False,
+    "export_alignment": False,
     "build_confidence_absolute": False,
     "build_difference_dem": True,
     "correct_dem": True,
@@ -150,6 +156,8 @@ CACHE_STEPS = {
     'use_masks': True,
     'save_tps': True,
     'use_tps': True,
+    'save_bundler': True,
+    'use_bundler': True,
     'save_rock_mask': True,
     'use_rock_mask': True,
 }
@@ -252,6 +260,12 @@ def run_agi(project_name: str, images_paths: list,
         for key in CACHE_STEPS:
             CACHE_STEPS[key] = False
 
+    # TEMP: set some steps to false
+    print("TEMP: Disable 'save_tie_points")
+    DISPLAY_STEPS["save_tie_points"] = False
+    STEPS["build_confidence_relative"] = False
+    STEPS["build_confidence_absolute"] = False
+
     # check if we have image
     if len(images_paths) == 0:
         raise ValueError("No images were provided")
@@ -335,18 +349,26 @@ def run_agi(project_name: str, images_paths: list,
         dem_abs = None  # absolute dem
         dem_corr = None  # corrected (absolute) dem
         dem_modern = None  # modern dem from rema
-        ortho_rel = None
-        ortho_modern = None
-        point_cloud_rel = None
-        point_cloud_abs = None
-        conf_arr_rel = None
-        conf_arr_abs = None
+        ortho_rel = None  # relative ortho
+        ortho_modern = None  # modern ortho from rema
+        point_cloud_rel = None  # relative point cloud
+        point_cloud_abs = None  # absolute point cloud
+        conf_arr_rel = None  # relative confidence array
+        conf_arr_abs = None  # absolute confidence array
         transform_rel = None  # the initial transform for relative mode
         transform_abs = None  # the final transform for absolute mode (improved with gcps)
-        transform_modern = None
+        transform_modern = None  # the transform for the modern dem
+        best_rot = None  # best rotation of georef
+        rock_mask = None  # rock mask for gcps
+        bounding_box_rel = None  # relative bounding box
 
         # create the metashape project
         doc = Metashape.Document(read_only=False)  # noqa
+
+        # create compression object
+        compression = Metashape.ImageCompression()
+        compression.tiff_compression = Metashape.ImageCompression.TiffCompressionLZW
+        compression.tiff_big = True
 
         # check if the project already exists
         if os.path.exists(project_psx_path):
@@ -396,9 +418,9 @@ def run_agi(project_name: str, images_paths: list,
         output_path_dem_rel = os.path.join(output_fld,
                                            project_name + "_dem_relative.tif")
         output_path_dem_abs = os.path.join(output_fld,
-                                           project_name + "dem_absolute.tif")
+                                           project_name + "_dem_absolute.tif")
         output_path_dem_corr = os.path.join(output_fld,
-                                             project_name + "_dem_corrected.tif")
+                                            project_name + "_dem_corrected.tif")
         output_path_conf_rel = os.path.join(output_fld,
                                             project_name + "_confidence_relative.tif")
         output_path_conf_abs = os.path.join(output_fld,
@@ -411,19 +433,23 @@ def run_agi(project_name: str, images_paths: list,
                                           project_name + "_pointcloud_relative.ply")
         output_path_pc_abs = os.path.join(output_fld,
                                           project_name + "_pointcloud_absolute.ply")
-        output_path_pc_rel_c  = os.path.join(output_fld,
-                                            project_name + "_pointcloud_relative_cleaned.ply")
-        output_path_pc_abs_c  = os.path.join(output_fld,
+        output_path_pc_abs_c = os.path.join(output_fld,
                                             project_name + "_pointcloud_absolute_cleaned.ply")
         output_path_diff_rela = os.path.join(output_fld,
-                                         project_name + "_diff_rel.tif")
+                                             project_name + "_diff_rel.tif")
         output_path_diff_abs = os.path.join(output_fld,
-                                         project_name + "_diff_abs.tif")
+                                            project_name + "_diff_abs.tif")
         output_path_diff_rela_c = os.path.join(output_fld,
                                                project_name + "_diff_rel_corrected.tif")
         output_path_diff_abs_c = os.path.join(output_fld,
-                                         project_name + "_diff_abs_corrected.tif")
+                                              project_name + "_diff_abs_corrected.tif")
         transform_path = os.path.join(data_fld, "georef", "transform.txt")
+
+        # create Interpolation object
+        if interpolate:
+            interpolation = Metashape.Interpolation.EnabledInterpolation
+        else:
+            interpolation = Metashape.Interpolation.DisabledInterpolation
 
         # save which images are rotated
         rotated_images = []
@@ -468,7 +494,8 @@ def run_agi(project_name: str, images_paths: list,
                         img = ri.rotate_image(img, 180)
 
                         # save the rotated image
-                        eti.export_tiff(img, output_path, overwrite=True)
+                        eti.export_tiff(img, output_path, overwrite=True,
+                                        use_lzw=True)
 
                         rotated_images.append(file_name[:-4])
 
@@ -545,171 +572,173 @@ def run_agi(project_name: str, images_paths: list,
             exec_time = finish_time - start_time
             print(f"Save Thumbnails - finished ({exec_time:.4f} s)")
 
-        # get the image dimensions
-        image_dims = {}
-        for camera in chunk.cameras:
-
-            # skip disabled cameras
-            if camera.enabled is False:
-                continue
-
+        # only required for the first run
+        if 'Local Coordinates' in str(chunk.crs):
             # get the image dimensions
-            image_dims[camera.label] = [camera.calibration.width, camera.calibration.height]
+            image_dims = {}
+            for camera in chunk.cameras:
 
-        # add focal length to the images
-        if focal_lengths is not None:
-
-            start_time = time.time()
-
-            # set focal length if given
-            for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
-
-                pbar.set_description("Set Focal length")
-                pbar.set_postfix_str(f"{camera.label}")
-
+                # skip disabled cameras
                 if camera.enabled is False:
                     continue
 
-                # check if focal length is given
-                if camera.label in focal_lengths:
+                # get the image dimensions
+                image_dims[camera.label] = [camera.calibration.width, camera.calibration.height]
 
-                    # get the focal length
-                    focal_length = focal_lengths[camera.label]
+            # add focal length to the images
+            if focal_lengths is not None:
 
-                    # check validity of focal length
-                    if np.isnan(focal_length):
-                        print(f"WARNING: Focal length is NaN for {camera.label}")
+                start_time = time.time()
+
+                # set focal length if given
+                for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
+
+                    pbar.set_description("Set Focal length")
+                    pbar.set_postfix_str(f"{camera.label}")
+
+                    if camera.enabled is False:
                         continue
 
-                    # set the focal length of the camera
-                    camera.sensor.focal_length = focal_length
-                    camera.sensor.pixel_size = (pixel_size, pixel_size)
+                    # check if focal length is given
+                    if camera.label in focal_lengths:
 
-                    # set the fixed parameters
-                    if fixed_focal_length:
-                        camera.sensor.fixed_params = ['f']
-                else:
-                    print(f"WARNING: Focal length not given for {camera.label}")
+                        # get the focal length
+                        focal_length = focal_lengths[camera.label]
 
-                # update progressbar in last loop
-                if idx == len(chunk.cameras) - 1:
-                    pbar.set_postfix_str("Finished!")
+                        # check validity of focal length
+                        if np.isnan(focal_length):
+                            print(f"WARNING: Focal length is NaN for {camera.label}")
+                            continue
 
-            finish_time = time.time()
-            exec_time = finish_time - start_time
-            print(f"Set Focal length - finished ({exec_time:.4f} s)")
+                        # set the focal length of the camera
+                        camera.sensor.focal_length = focal_length
+                        camera.sensor.pixel_size = (pixel_size, pixel_size)
 
-            doc.save()
+                        # set the fixed parameters
+                        if fixed_focal_length:
+                            camera.sensor.fixed_params = ['f']
+                    else:
+                        print(f"WARNING: Focal length not given for {camera.label}")
 
-        # add camera positions to the images
-        if camera_positions is not None:
+                    # update progressbar in last loop
+                    if idx == len(chunk.cameras) - 1:
+                        pbar.set_postfix_str("Finished!")
 
-            print("Set Camera positions")
-            start_time = time.time()
+                finish_time = time.time()
+                exec_time = finish_time - start_time
+                print(f"Set Focal length - finished ({exec_time:.4f} s)")
 
-            # if camera positions are given, we need to set the crs
-            chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
+                doc.save()
 
-            # iterate over the cameras
-            for camera in chunk.cameras:
+            # add camera positions to the images
+            if camera_positions is not None:
 
-                if camera.enabled is False:
-                    continue
+                print("Set Camera positions")
+                start_time = time.time()
 
-                # check if camera position is given
-                if camera.label in camera_positions:
+                # if camera positions are given, we need to set the crs
+                chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
 
-                    # get the camera position values
-                    camera_entry = camera_positions[camera.label]
-                    x, y, z = camera_entry[0], camera_entry[1], camera_entry[2]
+                # iterate over the cameras
+                for camera in chunk.cameras:
 
-                    print(f" - Set camera position for {camera.label} to ({x}, {y}, {z})")
+                    if camera.enabled is False:
+                        continue
 
-                    # set the position of the camera
-                    camera.reference.location = Metashape.Vector([x, y, z])  # noqa
-                else:
-                    print(f"WARNING: Camera position not given for {camera.label}")
+                    # check if camera position is given
+                    if camera.label in camera_positions:
 
-            finish_time = time.time()
-            exec_time = finish_time - start_time
-            print(f"Set Camera positions - finished ({exec_time:.4f} s)")
+                        # get the camera position values
+                        camera_entry = camera_positions[camera.label]
+                        x, y, z = camera_entry[0], camera_entry[1], camera_entry[2]
 
-            # check for the other dicts
-            if camera_accuracies is None:
-                print("WARNING: Camera accuracies are not given")
-            if camera_rotations is None:
-                print("WARNING: Camera rotations are not given")
+                        print(f" - Set camera position for {camera.label} to ({x}, {y}, {z})")
 
-            doc.save()
+                        # set the position of the camera
+                        camera.reference.location = Metashape.Vector([x, y, z])  # noqa
+                    else:
+                        print(f"WARNING: Camera position not given for {camera.label}")
 
-        # add camera accuracies to the images
-        if camera_accuracies is not None:
+                finish_time = time.time()
+                exec_time = finish_time - start_time
+                print(f"Set Camera positions - finished ({exec_time:.4f} s)")
 
-            if camera_positions is None:
-                raise ValueError("Camera positions must be given if camera accuracies are given.")
+                # check for the other dicts
+                if camera_accuracies is None:
+                    print("WARNING: Camera accuracies are not given")
+                if camera_rotations is None:
+                    print("WARNING: Camera rotations are not given")
 
-            print("Set Camera accuracies")
-            start_time = time.time()
+                doc.save()
 
-            # iterate over the cameras
-            for camera in chunk.cameras:
+            # add camera accuracies to the images
+            if camera_accuracies is not None:
 
-                if camera.enabled is False:
-                    continue
+                if camera_positions is None:
+                    raise ValueError("Camera positions must be given if camera accuracies are given.")
 
-                # check if camera accuracy is given
-                if camera.label in camera_accuracies:
+                print("Set Camera accuracies")
+                start_time = time.time()
 
-                    # get the camera position values
-                    camera_entry = camera_accuracies[camera.label]
-                    acc_x, acc_y, acc_z = camera_entry[0], camera_entry[1], camera_entry[2]
+                # iterate over the cameras
+                for camera in chunk.cameras:
 
-                    print(f" - Set camera accuracy for {camera.label} to ({acc_x}, {acc_y}, {acc_z})")
+                    if camera.enabled is False:
+                        continue
 
-                    # set the accuracy of the camera
-                    camera.reference.accuracy = Metashape.Vector([acc_x, acc_y, acc_z])  # noqa
+                    # check if camera accuracy is given
+                    if camera.label in camera_accuracies:
 
-                else:
-                    print(f"WARNING: Camera accuracy not given for {camera.label}")
+                        # get the camera position values
+                        camera_entry = camera_accuracies[camera.label]
+                        acc_x, acc_y, acc_z = camera_entry[0], camera_entry[1], camera_entry[2]
 
-            finish_time = time.time()
-            exec_time = finish_time - start_time
-            print(f"Set Camera accuracies - finished ({exec_time:.4f} s)")
+                        print(f" - Set camera accuracy for {camera.label} to ({acc_x}, {acc_y}, {acc_z})")
 
-            doc.save()
+                        # set the accuracy of the camera
+                        camera.reference.accuracy = Metashape.Vector([acc_x, acc_y, acc_z])  # noqa
 
-        # add camera rotations to the images
-        if camera_rotations is not None and use_rotations_only_for_tps is False:
+                    else:
+                        print(f"WARNING: Camera accuracy not given for {camera.label}")
 
-            print("Set Camera rotations")
-            start_time = time.time()
+                finish_time = time.time()
+                exec_time = finish_time - start_time
+                print(f"Set Camera accuracies - finished ({exec_time:.4f} s)")
 
-            # iterate over the cameras
-            for camera in chunk.cameras:
+                doc.save()
 
-                if camera.enabled is False:
-                    continue
+            # add camera rotations to the images
+            if camera_rotations is not None and use_rotations_only_for_tps is False:
 
-                # check if camera rotation is given
-                if camera.label in camera_rotations:
+                print("Set Camera rotations")
+                start_time = time.time()
 
-                    # get the camera rotation values
-                    entry = camera_rotations[camera.label]
-                    yaw, pitch, roll = entry[0], entry[1], entry[2]
+                # iterate over the cameras
+                for camera in chunk.cameras:
 
-                    print(f" - Set camera rotation for {camera.label} to ({yaw}, {pitch}, {roll})")
+                    if camera.enabled is False:
+                        continue
 
-                    # set the rotation of camera if given
-                    camera.reference.rotation = Metashape.Vector([yaw, pitch, roll])  # noqa
+                    # check if camera rotation is given
+                    if camera.label in camera_rotations:
 
-                else:
-                    print(f"WARNING: Camera rotation not given for {camera.label}")
+                        # get the camera rotation values
+                        entry = camera_rotations[camera.label]
+                        yaw, pitch, roll = entry[0], entry[1], entry[2]
 
-            finish_time = time.time()
-            exec_time = finish_time - start_time
-            print(f"Set Camera rotations - finished ({exec_time:.4f} s)")
+                        print(f" - Set camera rotation for {camera.label} to ({yaw}, {pitch}, {roll})")
 
-            doc.save()
+                        # set the rotation of camera if given
+                        camera.reference.rotation = Metashape.Vector([yaw, pitch, roll])  # noqa
+
+                    else:
+                        print(f"WARNING: Camera rotation not given for {camera.label}")
+
+                finish_time = time.time()
+                exec_time = finish_time - start_time
+                print(f"Set Camera rotations - finished ({exec_time:.4f} s)")
+
+                doc.save()
 
         if STEPS["create_masks"]:
 
@@ -945,10 +974,12 @@ def run_agi(project_name: str, images_paths: list,
 
                 # save the enhanced image to the cache folder
                 if CACHE_STEPS['save_enhanced'] and not os.path.exists(enhanced_cache_pth):
-                    eti.export_tiff(enhanced_image, enhanced_cache_pth, overwrite=True)
+                    eti.export_tiff(enhanced_image, enhanced_cache_pth,
+                                    overwrite=True, use_lzw=True)
 
                 # save the enhanced image to the enhanced folder as well
-                eti.export_tiff(enhanced_image, e_image_pth, overwrite=True)
+                eti.export_tiff(enhanced_image, e_image_pth,
+                                overwrite=True, use_lzw=True)
 
                 # update the image in the chunk
                 photo = camera.photo.copy()
@@ -1008,45 +1039,96 @@ def run_agi(project_name: str, images_paths: list,
 
             if custom_matching:
 
-                # check if the mask folder is existing
-                mask_folder = os.path.join(data_fld, "masks_adapted")
-                if not os.path.exists(mask_folder):
-                    mask_folder = None
+                bundler_folder_path = os.path.join(data_fld, "bundler")
+                if not os.path.exists(bundler_folder_path):
+                    os.mkdir(bundler_folder_path)
 
-                # check if there is a folder with enhanced images
-                if os.path.exists(enhanced_folder):
-                    tp_img_folder = enhanced_folder
-                else:
-                    tp_img_folder = img_folder
+                # define path to the bundler file
+                bundler_path = os.path.join(bundler_folder_path, "bundler.out")
 
-                # find the tie points between images
-                tp_dict, conf_dict = ftp.find_tie_points_for_sfm(tp_img_folder,
-                                                                 image_dims,
-                                                                 mask_folder=mask_folder,
-                                                                 matching_method=matching_method,
-                                                                 footprint_dict=camera_footprints,
-                                                                 rotation_dict=camera_rotations,
-                                                                 tp_type=tp_type,
-                                                                 min_overlap=min_overlap,
-                                                                 step_range=step_range,
-                                                                 min_conf=min_tp_confidence,
-                                                                 min_tps=min_tps,
-                                                                 max_tps=max_tps,
-                                                                 use_cached_tps=CACHE_STEPS['use_tps'],
-                                                                 save_tps=CACHE_STEPS['save_tps'])
+                # per default, we calculate the bundler file new
+                used_cached_bundler = False
 
-                # create the ply files for the custom matching
-                cms.create_matching_structure(tp_dict, conf_dict,
-                                              project_files_path,
-                                              img_folder,
-                                              tolerance=tp_tolerance)
+                if CACHE_STEPS['use_bundler']:
 
-                # for bundler some extra steps are required
-                bundler_path = os.path.join(data_fld, "bundler", "bundler.out")
+                    # define path for existing bundler files and the txt files
+                    new_bundler_fld = "/data/ATM/data_1/sfm/agi_data/bundler_files/"
+                    new_bundler_path = os.path.join(new_bundler_fld,
+                                                    f"{project_name}_{len(chunk.cameras)}.out")
+                    new_bundler_txt_path = os.path.join(new_bundler_fld,
+                                                        f"{project_name}_{len(chunk.cameras)}_cameras.txt")
+
+                    # check if the bundler file is existing
+                    if os.path.exists(new_bundler_path):
+
+                        # read the txt file and check if the cameras and chunk are identical
+                        with open(new_bundler_txt_path, "r") as f:
+                            new_camera_names = f.readlines()
+                            new_camera_names = [name.strip() for name in new_camera_names]
+
+                        # get all camera names
+                        camera_names = [camera.label for camera in chunk.cameras if camera.enabled]
+                        camera_names.sort()
+
+                        # check if the camera names are identical
+                        if camera_names == new_camera_names:
+                            print(new_bundler_path, bundler_path)
+                            shutil.copy(new_bundler_path, bundler_path)
+                            used_cached_bundler = True
+
+                # we need to calculate the bundler file new
+                if used_cached_bundler is False:
+                    # check if the mask folder is existing
+                    mask_folder = os.path.join(data_fld, "masks_adapted")
+                    if not os.path.exists(mask_folder):
+                        mask_folder = None
+
+                    # check if there is a folder with enhanced images
+                    if os.path.exists(enhanced_folder):
+                        tp_img_folder = enhanced_folder
+                    else:
+                        tp_img_folder = img_folder
+
+                    # find the tie points between images
+                    tp_dict, conf_dict = ftp.find_tie_points_for_sfm(tp_img_folder,
+                                                                     image_dims,
+                                                                     mask_folder=mask_folder,
+                                                                     matching_method=matching_method,
+                                                                     footprint_dict=camera_footprints,
+                                                                     rotation_dict=camera_rotations,
+                                                                     tp_type=tp_type,
+                                                                     min_overlap=min_overlap,
+                                                                     step_range=step_range,
+                                                                     min_conf=min_tp_confidence,
+                                                                     min_tps=min_tps,
+                                                                     max_tps=max_tps,
+                                                                     use_cached_tps=CACHE_STEPS['use_tps'],
+                                                                     save_tps=CACHE_STEPS['save_tps'])
+
+                    # create the ply files for the custom matching
+                    cms.create_matching_structure(tp_dict, conf_dict,
+                                                  project_files_path,
+                                                  img_folder,
+                                                  tolerance=tp_tolerance)
+
+                    if CACHE_STEPS['save_bundler']:
+                        # define new path for bundler file
+                        new_bundler_fld = "/data/ATM/data_1/sfm/agi_data/bundler_files/"
+                        new_bundler_path = os.path.join(new_bundler_fld,
+                                                        f"{project_name}_{len(chunk.cameras)}.out")
+                        # copy the bundler file to the new folder
+                        shutil.copy(bundler_path, new_bundler_path)
+
+                        # create a txt file with the camera names alphabetically sorted
+                        camera_names = [camera.label for camera in chunk.cameras if camera.enabled]
+                        camera_names.sort()
+                        with open(os.path.join(new_bundler_fld,
+                                               f"{project_name}_{len(chunk.cameras)}_cameras.txt"), "w") as f:
+                            for name in camera_names:
+                                f.write(f"{name}\n")
+
+                # import the bundler file
                 chunk.importCameras(bundler_path, format=Metashape.CamerasFormatBundler)
-
-                import src.sfm_agi.snippets.get_image_stats as gis
-                #gis.get_image_stats(chunk)
 
             else:
 
@@ -1081,8 +1163,8 @@ def run_agi(project_name: str, images_paths: list,
                     # get the footprints as lst
                     footprints_lst = [camera_footprints[image_id] for image_id in image_ids]
 
-                    overlap_dict = foi.find_overlapping_images(image_ids,
-                                                               footprints_lst)
+                    overlap_dict = foi.find_overlapping_images_geom(image_ids,
+                                                                    footprints_lst)
                     pairs = []
                     # create a list with all combinations of images
                     for img_id, overlap_lst in overlap_dict.items():
@@ -1264,7 +1346,6 @@ def run_agi(project_name: str, images_paths: list,
                 # convert ply files to txt files
                 cpf.convert_ply_files(point_cloud_fld, True)
 
-
             # create the dataframe with tie_point/tracks
             path_fld_points = os.path.join(point_cloud_fld, "point_cloud")
             tps_df = ctf.create_tps_frame(path_fld_points)
@@ -1307,63 +1388,60 @@ def run_agi(project_name: str, images_paths: list,
             # save the project
             doc.save()
 
-        print("Create relative bounding box")
-        start_time = time.time()
+        # relative bounding box only required for local crs
+        if 'Local Coordinates' in str(chunk.crs) or STEPS["create_gcps"]:
+            print("Create relative bounding box")
+            start_time = time.time()
 
-        # update alignment and transform
-        if camera_positions is not None:
-            chunk.optimizeCameras()
-            chunk.updateTransform()
+            # get center and size of the chunk
+            center = chunk.region.center
+            size = chunk.region.size
 
-        # update projection
-        if camera_positions is not None:
-            projection_abs = Metashape.OrthoProjection()
-            projection_abs.crs = chunk.crs
+            # Calculate the minimum and maximum corners of the bounding box
+            min_corner = Metashape.Vector([center.x - size.x / 2,  # noqa
+                                           center.y - size.y / 2,
+                                           center.z - size.z / 2])
+            max_corner = Metashape.Vector([center.x + size.x / 2,  # noqa
+                                           center.y + size.y / 2,
+                                           center.z + size.z / 2])
 
-        # get center and size of the chunk
-        center = chunk.region.center
-        size = chunk.region.size
+            # define a bounding box for the relative coords
+            if camera_positions is not None:
+                min_corner = chunk.crs.project(chunk.transform.matrix.mulp(min_corner))
+                max_corner = chunk.crs.project(chunk.transform.matrix.mulp(max_corner))
 
-        # Calculate the minimum and maximum corners of the bounding box
-        min_corner = Metashape.Vector([center.x - size.x / 2,  # noqa
-                                       center.y - size.y / 2,
-                                       center.z - size.z / 2])
-        max_corner = Metashape.Vector([center.x + size.x / 2,  # noqa
-                                       center.y + size.y / 2,
-                                       center.z + size.z / 2])
+            # get height and width of the bounding box area
+            print("Size of the bounding box:")
+            print(f"Width: {max_corner.x - min_corner.x}")
+            print(f"Height: {max_corner.y - min_corner.y}")
 
-        # define a bounding box for the relative coords
-        if camera_positions is not None:
-            min_corner = chunk.crs.project(chunk.transform.matrix.mulp(min_corner))
-            max_corner = chunk.crs.project(chunk.transform.matrix.mulp(max_corner))
+            # restrain the bounding box to the absolute bounds if given
+            if camera_positions is not None and absolute_bounds is not None:
+                min_corner.x = max(min_corner.x, absolute_bounds[0])
+                min_corner.y = max(min_corner.y, absolute_bounds[1])
+                max_corner.x = min(max_corner.x, absolute_bounds[2])
+                max_corner.y = min(max_corner.y, absolute_bounds[3])
 
-        # restrain the bounding box to the absolute bounds if given
-        if camera_positions is not None and absolute_bounds is not None:
-            min_corner.x = max(min_corner.x, absolute_bounds[0])
-            min_corner.y = max(min_corner.y, absolute_bounds[1])
-            max_corner.x = min(max_corner.x, absolute_bounds[2])
-            max_corner.y = min(max_corner.y, absolute_bounds[3])
+            # create 2d versions of the corners
+            min_corner_2d = Metashape.Vector([min_corner.x, min_corner.y])  # noqa
+            max_corner_2d = Metashape.Vector([max_corner.x, max_corner.y])  # noqa
 
-        # create 2d versions of the corners
-        min_corner_2d = Metashape.Vector([min_corner.x, min_corner.y])  # noqa
-        max_corner_2d = Metashape.Vector([max_corner.x, max_corner.y])  # noqa
+            # Create the bounding box
+            bounding_box_rel = Metashape.BBox(min_corner_2d, max_corner_2d)  # noqa
 
-        # Create the bounding box
-        bounding_box_rel = Metashape.BBox(min_corner_2d, max_corner_2d)  # noqa
+            # intermediate check for the bounding box (raise error if all values are 0)
+            if (min_corner.x == 0 and min_corner.y == 0 and
+                    max_corner.x == 0 and max_corner.y == 0):
+                raise ValueError("Bounding box is empty. Check the previous steps for completeness.")
 
-        # intermediate check for the bounding box (raise error if all values are 0)
-        if (min_corner.x == 0 and min_corner.y == 0 and
-                max_corner.x == 0 and max_corner.y == 0):
-            raise ValueError("Bounding box is empty. Check the previous steps for completeness.")
+            print("Corners of the relative bounding box:")
+            print(f"Min: {min_corner}")
+            print(f"Max: {max_corner}")
 
-        print("Corners of the relative bounding box:")
-        print(f"Min: {min_corner}")
-        print(f"Max: {max_corner}")
+            finish_time = time.time()
+            exec_time = finish_time - start_time
 
-        finish_time = time.time()
-        exec_time = finish_time - start_time
-
-        print(f"Create relative bounding box - finished ({exec_time:.4f} s)")
+            print(f"Create relative bounding box - finished ({exec_time:.4f} s)")
 
         # build mesh
         if STEPS["build_mesh_relative"]:
@@ -1372,12 +1450,15 @@ def run_agi(project_name: str, images_paths: list,
             start_time = time.time()
 
             arguments = {
-                'surface_type': Metashape.Arbitrary
+                'surface_type': Metashape.Arbitrary,
+                'interpolation': Metashape.EnabledInterpolation,
             }
 
             # build mesh
             chunk.buildModel(**arguments)
             doc.save()
+
+            print(" Export mesh to file")
 
             # define output path for the model
             output_model_path = os.path.join(output_fld, project_name + "_model_relative.obj")
@@ -1419,6 +1500,8 @@ def run_agi(project_name: str, images_paths: list,
             # save the project
             doc.save()
 
+            print(" Export point cloud to file")
+
             # export parameters for the point cloud
             arguments = {
                 'path': output_path_pc_rel,
@@ -1438,81 +1521,15 @@ def run_agi(project_name: str, images_paths: list,
             exec_time = finish_time - start_time
             print(f"Build relative point cloud - finished ({exec_time:.4f} s)")
 
-        # clean the point cloud
-        if STEPS["clean_pointcloud_relative"]:
-
-            # only continue if the point clouds is not already cleaned
-            if os.path.exists(output_path_pc_rel) is False:
-                print("Relative point cloud is already cleaned.")
-
-                # replace the point cloud path with the cleaned one
-                output_path_pc_rel = output_path_pc_rel_c
-
-                doc.save()
-
-            else:
-                print("Clean relative point cloud")
-                start_time = time.time()
-
-                # load the point cloud
-                if point_cloud_rel is None:
-                    point_cloud_rel = lpl.load_ply(output_path_pc_rel)
-
-                # remove outliers
-                point_cloud_rel_cleaned = ro.remove_outliers(point_cloud_rel)
-
-                # convert numpy array to pandas dataframe
-                cols = ['x', 'y', 'z', 'nx', 'ny', 'nz',
-                        'red', 'green', 'blue', 'class', 'confidence']
-                point_cloud_rel_cleaned = pd.DataFrame(point_cloud_rel_cleaned,
-                                                         columns=cols)
-
-                # save the point cloud again
-                epc.export_pointcloud(point_cloud_rel_cleaned,
-                               output_path_pc_rel_c,
-                               overwrite=True)
-
-                # arguments for importing the point cloud
-                arguments = {
-                    'path': output_path_pc_rel_c,
-                    'crs': chunk.crs,
-                    'replace_asset': True
-                }
-
-                # import the point cloud into the chunk
-                chunk.importPointCloud(**arguments)
-
-                # delete the old point cloud
-                os.remove(output_path_pc_rel)
-
-                # replace the point cloud path with the cleaned one
-                output_path_pc_rel = output_path_pc_rel_c
-
-                doc.save()
-
-                finish_time = time.time()
-                exec_time = finish_time - start_time
-                print(f"Clean relative point cloud - finished ({exec_time:.4f} s)")
-
-        # set correct path for point cloud after cleaning
-        if os.path.exists(output_path_pc_rel_c):
-            output_path_pc_rel = output_path_pc_rel_c
-
         # build DEM
         if STEPS["build_dem_relative"]:
 
             print("Build relative DEM")
             start_time = time.time()
 
-            # define projection
-            projection = Metashape.OrthoProjection()
-            projection.crs = chunk.crs
-
-            # arguments for building the DEM
             arguments = {
                 'source_data': Metashape.DataSource.PointCloudData,
                 'interpolation': Metashape.Interpolation.EnabledInterpolation,
-                'projection': projection,
             }
 
             # add region to build parameters
@@ -1536,6 +1553,8 @@ def run_agi(project_name: str, images_paths: list,
             # save the project
             doc.save()
 
+            print(" Export DEM to file")
+
             # set export parameters for the DEM
             arguments = {
                 'path': output_path_dem_rel,
@@ -1543,6 +1562,8 @@ def run_agi(project_name: str, images_paths: list,
                 'image_format': Metashape.ImageFormatTIFF,
                 'raster_transform': Metashape.RasterTransformNone,
                 'nodata_value': no_data_value,
+                'image_compression': compression,
+                'clip_to_boundary': True,
             }
 
             # add region to export parameters
@@ -1551,9 +1572,11 @@ def run_agi(project_name: str, images_paths: list,
 
             # add resolution to build parameters dependent on camera positions
             if camera_positions is None:
-                arguments['resolution'] = resolution_rel  # noqa
+                arguments['resolution_x'] = resolution_rel  # noqa
+                arguments['resolution_y'] = resolution_rel  # noqa
             else:
-                arguments['resolution'] = resolution_abs
+                arguments['resolution_x'] = resolution_abs
+                arguments['resolution_y'] = resolution_abs
 
             # export the DEM
             chunk.exportRaster(**arguments)
@@ -1573,15 +1596,10 @@ def run_agi(project_name: str, images_paths: list,
             print("Build relative orthomosaic")
             start_time = time.time()
 
-            # define projection
-            projection = Metashape.OrthoProjection()
-            projection.crs = chunk.crs
-
             # arguments for building the orthomosaic
             arguments = {
                 'surface_data': Metashape.ModelData,
                 'blending_mode': Metashape.MosaicBlending,
-                'projection': projection,
             }
 
             # add region to build parameters
@@ -1590,9 +1608,11 @@ def run_agi(project_name: str, images_paths: list,
 
             # add resolution to build parameters dependent on camera positions
             if camera_positions is None:
-                arguments['resolution'] = resolution_rel  # noqa
+                arguments['resolution_x'] = resolution_rel  # noqa
+                arguments['resolution_y'] = resolution_rel  # noqa
             else:
-                arguments['resolution'] = resolution_abs
+                arguments['resolution_x'] = resolution_abs
+                arguments['resolution_y'] = resolution_abs
 
             # build the orthomosaic
             chunk.buildOrthomosaic(**arguments)
@@ -1605,13 +1625,17 @@ def run_agi(project_name: str, images_paths: list,
             # save the project
             doc.save()
 
+            print(" Export orthomosaic to file")
+
             # set export parameters for the orthomosaic
             arguments = {
                 'path': output_path_ortho_rel,
                 'source_data': Metashape.OrthomosaicData,
                 'image_format': Metashape.ImageFormatTIFF,
                 'raster_transform': Metashape.RasterTransformNone,
-                'nodata_value': no_data_value,
+                # 'nodata_value': no_data_value, only for DEMs
+                'image_compression': compression,
+                'clip_to_boundary': True,
             }
 
             # add region to export parameters
@@ -1644,7 +1668,7 @@ def run_agi(project_name: str, images_paths: list,
             # load the dem
             if dem_rel is None:
                 dem_rel, transform_rel = li.load_image(output_path_dem_rel,
-                                                   return_transform=True)
+                                                       return_transform=True)
 
             # load the point cloud
             if point_cloud_rel is None:
@@ -1659,7 +1683,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # export the confidence array
             eti.export_tiff(conf_arr_rel, output_path_conf_rel,
-                            transform=transform_rel, overwrite=True)
+                            transform=transform_rel, overwrite=True, use_lzw=True)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -1671,9 +1695,9 @@ def run_agi(project_name: str, images_paths: list,
             return
 
         # georeference the ortho
-        if STEPS["georef_output_images"]:
+        if STEPS["georef_ortho"]:
 
-            print("Georeference output images")
+            print("Georeference ortho-photo")
             start_time = time.time()
 
             if os.path.exists(output_path_dem_rel) is False:
@@ -1701,8 +1725,11 @@ def run_agi(project_name: str, images_paths: list,
                 raise ValueError("DEM and ortho should have the same shape")
 
             # check which cameras are aligned
+            image_ids = []
             aligned = []
             for camera in chunk.cameras:
+
+                image_ids.append(camera.label)
 
                 if camera.enabled is False:
                     continue
@@ -1717,74 +1744,138 @@ def run_agi(project_name: str, images_paths: list,
             if os.path.isdir(georef_data_fld) is False:
                 os.makedirs(georef_data_fld)
 
+            # create path for the tps
+            ortho_tps_path = os.path.join(georef_data_fld,
+                                          "ortho_tps.csv")
+
             # create path for the ortho
             ortho_georef_path = os.path.join(georef_data_fld,
                                              "ortho_georeferenced.tif")
 
+            # create path for best rotation
+            rot_path = os.path.join(georef_data_fld, "best_rot.txt")
+
             # get the transform of dem/ortho (identical for both)
             transform_georef, bounds_georef, best_rot = go.georef_ortho(ortho_rel,
-                                                     list(camera_footprints.values()),
-                                                     aligned,
-                                                     azimuth=azimuth,
-                                                     auto_rotate=True,
-                                                     trim_image=True,
-                                                     tp_type=tp_type,
-                                                     save_path_ortho=ortho_georef_path,
-                                                     save_path_transform=transform_path)
+                                                                        image_ids,
+                                                                        list(camera_footprints.values()),
+                                                                        aligned,
+                                                                        azimuth=azimuth,
+                                                                        auto_rotate=True,
+                                                                        trim_image=True,
+                                                                        tp_type=tp_type,
+                                                                        only_vertical_footprints = True,
+                                                                        save_path_tps=ortho_tps_path,
+                                                                        save_path_ortho=ortho_georef_path,
+                                                                        save_path_rot=rot_path,
+                                                                        save_path_transform=transform_path)
 
             # try again with complete autorotate
             if transform_georef is None and azimuth is not None:
                 print("Try georef ortho again with complete autorotate")
-                transform_georef, bounds_georef = go.georef_ortho(ortho_rel,
-                                                         list(camera_footprints.values()),
-                                                         aligned,
-                                                         azimuth=None, auto_rotate=True,
-                                                         trim_image=True,
-                                                         tp_type=tp_type,
-                                                         save_path_ortho=ortho_georef_path,
-                                                         save_path_transform=transform_path)
+                tpl = go.georef_ortho(ortho_rel,
+                                      image_ids,
+                                      list(camera_footprints.values()),
+                                      aligned,
+                                      azimuth=None, auto_rotate=True,
+                                      trim_image=True,
+                                      tp_type=tp_type,
+                                      only_vertical_footprints=True,
+                                      save_path_tps=ortho_tps_path,
+                                      save_path_ortho=ortho_georef_path,
+                                      save_path_rot=rot_path,
+                                      save_path_transform=transform_path)
+
+                transform_georef = tpl[0]
+                bounds_georef = tpl[1]
+                best_rot = tpl[2]
+
             if transform_georef is None:
                 raise ValueError("Transform is not defined. Check the georef_ortho function.")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            print(f"Georeference output images - finished ({exec_time:.4f} s)")
+            print(f"Georeference ortho-photo - finished ({exec_time:.4f} s)")
 
         if STEPS["create_gcps"]:
 
             print("Create GCPs")
             start_time = time.time()
 
+            # define output path in which gcp files are saved
+            georef_fld = os.path.join(data_fld, "georef")
+            if not os.path.exists(georef_fld):
+                os.makedirs(georef_fld)
+
             # load dem if not loaded yet
             if dem_rel is None:
+                print("  Load DEM")
                 dem_rel = li.load_image(output_path_dem_rel)
 
             # load ortho if not loaded yet
             if ortho_rel is None:
+                print("  Load Ortho")
                 ortho_rel = li.load_image(output_path_ortho_rel)
                 # remove alpha channel
                 if len(ortho_rel.shape) == 3:
                     ortho_rel = ortho_rel[0, :, :]
 
+            if best_rot is None:
+                georef_data_fld = os.path.join(data_fld, "georef")
+                rot_path = os.path.join(georef_data_fld, "best_rot.txt")
+                best_rot = np.loadtxt(rot_path)
+                best_rot = float(best_rot)
+
             # load transform and bounds for geo-referencing
             transform_georef = lt.load_transform(transform_path, delimiter=",")
-            bounds_georef = cb.calc_bounds(transform_georef, dem_rel.shape)
+            bounds_georef_old = cb.calc_bounds(transform_georef, dem_rel.shape)
 
-            # load modern dem if not loaded yet
-            if dem_modern is None:
-                dem_modern = lr.load_rema(bounds_georef,
-                                          auto_download=True)
+            min_x = bounds_georef_old[0]
+            min_y = bounds_georef_old[1]
+            max_x = bounds_georef_old[2]
+            max_y = bounds_georef_old[3]
 
-            # loder modern ortho if not loaded yet
-            if ortho_modern is None:
-                ortho_modern, transform_modern = ls.load_satellite(bounds_georef,
-                                                                   return_transform=True)
+            # round values to the next step of 10
+            min_x = math.ceil(min_x / 10) * 10
+            min_y = math.ceil(min_y / 10) * 10
+            max_x = math.floor(max_x / 10) * 10
+            max_y = math.floor(max_y / 10) * 10
 
-            # define output path in which gcp files are saved
-            gcp_fld = os.path.join(data_fld, "georef")
-            if not os.path.exists(gcp_fld):
-                os.makedirs(gcp_fld)
-            gcp_path = os.path.join(gcp_fld, "gcps.csv")
+            # set bounding box to int values
+            min_x = int(min_x)
+            min_y = int(min_y)
+            max_x = int(max_x)
+            max_y = int(max_y)
+
+            # calculate new bounds
+            bounds_georef = [min_x, min_y, max_x, max_y]
+
+            # get difference in min_x and min_y
+            diff_x = min_x - bounds_georef_old[0]
+            diff_y = min_y - bounds_georef_old[1]
+
+            print("Old bounds:", bounds_georef_old)
+            print("New bounds:", bounds_georef)
+            print("Difference in x:", diff_x)
+            print("Difference in y:", diff_y)
+
+            # load modern dem
+            print("  Load modern DEM")
+            dem_modern, transform_rema = lr.load_rema(bounds_georef,
+                                                      auto_download=True,
+                                                      return_transform=True)
+
+            # load modern ortho
+            print("  Load modern Ortho")
+            ortho_modern, transform_modern = ls.load_satellite(bounds_georef,
+                                                               return_transform=True)
+
+            # assure that the transforms are identical
+            if transform_rema != transform_modern:
+                raise ValueError("Transforms of DEM and Ortho are not identical")
+
+            # set path to gpcs
+            gcp_path = os.path.join(georef_fld, "gcps.csv")
 
             if bounding_box_rel is None:
                 raise ValueError("Bounding box is not defined. "
@@ -1805,9 +1896,9 @@ def run_agi(project_name: str, images_paths: list,
                 # add rock mask
                 if "rock" in mask_type:
 
-                    print("Load rock mask for", bounds_georef)
+                    print("  Load rock mask for", bounds_georef)
 
-                    path_cached_rock_mask = os.path.join(gcp_fld, "rock_mask.tif")
+                    path_cached_rock_mask = os.path.join(georef_fld, "rock_mask.tif")
 
                     if CACHE_STEPS["use_rock_mask"]:
                         if os.path.isfile(path_cached_rock_mask):
@@ -1819,10 +1910,11 @@ def run_agi(project_name: str, images_paths: list,
                     if rock_mask is None:
                         rock_mask = lrm.load_rock_mask(bounds_georef,
                                                        mask_resolution,
-                                                       mask_buffer=100)
+                                                       mask_buffer=0)
 
                     if CACHE_STEPS["save_rock_mask"] and rock_mask is not None:
-                        eti.export_tiff(rock_mask, path_cached_rock_mask, overwrite=True)
+                        eti.export_tiff(rock_mask, path_cached_rock_mask,
+                                        overwrite=True, use_lzw=True)
 
                     # give a warning if no rocks are existing in the mask
                     if np.sum(rock_mask) == 0:
@@ -1861,11 +1953,11 @@ def run_agi(project_name: str, images_paths: list,
                                   ortho_rel, ortho_modern,
                                   transform_modern,
                                   resolution, bounding_box_rel,
-                                  best_rot,
+                                  rotation=best_rot,
                                   mask=gcp_mask, no_data_value=no_data_value)
 
             if gcp_df.shape[0] == 0:
-                raise ValueError("No GCPs are found. Please check the orthophotos or "
+                raise ValueError("No GCPs are found. Please check the orthophoto or "
                                  "increase the mask buffer.")
 
             # Create labels (n x 1 array)
@@ -1936,115 +2028,138 @@ def run_agi(project_name: str, images_paths: list,
             exec_time = finish_time - start_time
             print(f"Export alignment - finished ({exec_time:.4f} s)")
 
-        print("Set to absolute mode")
-        start_time = time.time()
+        # check if chunk is already in absolute mode
+        if 'Local Coordinates' in str(chunk.crs):
+            print("Set to absolute mode")
+            start_time = time.time()
 
-        # set to absolute mode
-        chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
+            # set chunk crs to absolute mode
+            chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
+            chunk.camera_crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
 
-        # update alignment and transform
-        chunk.optimizeCameras()
-        chunk.updateTransform()
-
-        projection_abs = Metashape.OrthoProjection()
-        projection_abs.crs = chunk.crs
-
-        finish_time = time.time()
-        exec_time = finish_time - start_time
-        print(f"Set to absolute mode - finished ({exec_time:.4f} s)")
-
-        while True:
-
-            # init variables for the loop
-            all_markers_valid = True
-            valid_markers = 0
-
-            # get the errors of the gcps
-            for marker in chunk.markers:
-
-                # check if the marker is enabled
-                if marker.enabled is False:
-                    continue
-                else:
-                    valid_markers += 1
-
-                # check if marker is defined in 3D
-                if not marker.position:
-                    print(marker.label + " is not defined in 3D, skipping...")
-                    continue
-
-                # get the position of the marker
-                position = marker.position
-
-                # define variables for projection error
-                proj_error_px = list()
-                proj_error_m = list()
-                proj_sq_sum_px = 0
-                proj_sq_sum_m = 0
-
-                # iterate over all cameras
-                for camera in marker.projections.keys():
-                    if not camera.transform:
-                        continue  # skipping not aligned cameras
-
-                    # get marker name
-                    # image_name = camera.label
-
-                    # get real and estimate position (relative)
-                    proj = marker.projections[camera].coord  # noqa
-                    reproj = camera.project(position)
-
-                    # remove z coordinate from proj
-                    proj = Metashape.Vector([proj.x, proj.y])  # noqa
-
-                    # get real and estimate position (absolute)
-                    est = chunk.crs.project(
-                        chunk.transform.matrix.mulp(marker.position))
-                    ref = marker.reference.location
-
-                    # calculate px error
-                    error_norm_px = (reproj - proj).norm()
-                    proj_error_px.append(error_norm_px)
-                    proj_sq_sum_px += error_norm_px ** 2
-
-                    # calculate m error
-                    # .norm() method gives total error. Removing it gives X/Y/Z error
-                    error_norm_m = (est - ref).norm()  # noqa
-                    proj_error_m.append(error_norm_m)
-                    proj_sq_sum_m += error_norm_m ** 2
-
-                if len(proj_error_px):
-                    error_px = math.sqrt(proj_sq_sum_px / len(proj_error_px))
-                    error_m = math.sqrt(proj_sq_sum_m / len(proj_error_m))
-                    # print(f"{marker.label} projection error: {error_px:.2f} px, {error_m:.2f} m")
-                else:
-                    continue
-
-                if error_px > max_gcp_error_px or error_m > max_gcp_error_m:
-                    marker.enabled = False
-                    all_markers_valid = False
+            # save the project
+            doc.save()
 
             # update alignment and transform
             chunk.optimizeCameras()
             chunk.updateTransform()
 
-            if valid_markers == 0:
-                raise Exception("No valid markers found. "
-                                "Check the previous steps for completeness.")
+            # save the project
+            doc.save()
 
-            if all_markers_valid:
-                print(f"All markers are valid ({valid_markers}/{len(chunk.markers)}).")
-                break
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Set to absolute mode - finished ({exec_time:.4f} s)")
 
-        # remove all markers that are not enabled
-        for marker in chunk.markers:
-            if marker.enabled is False:
-                chunk.remove(marker)  # noqa
+        # set the projection to the crs
+        projection_abs = Metashape.OrthoProjection()
+        projection_abs.crs = chunk.crs
+
+        # remove some markers
+        if STEPS["check_gcps"]:
+            while True:
+
+                # init variables for the loop
+                all_markers_valid = True
+                valid_markers = 0
+
+                # get the errors of the gcps
+                for marker in chunk.markers:
+
+                    # check if the marker is enabled
+                    if marker.enabled is False:
+                        continue
+                    else:
+                        valid_markers += 1
+
+                    # check if marker is defined in 3D
+                    if not marker.position:
+                        print(marker.label + " is not defined in 3D, skipping...")
+                        continue
+
+                    # get the position of the marker
+                    position = marker.position
+
+                    # define variables for projection error
+                    proj_error_px = list()
+                    proj_error_m = list()
+                    proj_sq_sum_px = 0
+                    proj_sq_sum_m = 0
+
+                    # iterate over all cameras
+                    for camera in marker.projections.keys():
+                        if not camera.transform:
+                            continue  # skipping not aligned cameras
+
+                        # get marker name
+                        # image_name = camera.label
+
+                        # get real and estimate position (relative)
+                        proj = marker.projections[camera].coord  # noqa
+                        reproj = camera.project(position)
+
+                        # remove z coordinate from proj
+                        proj = Metashape.Vector([proj.x, proj.y])  # noqa
+
+                        # get real and estimate position (absolute)
+                        est = chunk.crs.project(
+                            chunk.transform.matrix.mulp(marker.position))
+                        ref = marker.reference.location
+
+                        if reproj is None or proj is None:
+                            continue
+
+                        # calculate px error
+                        error_norm_px = (reproj - proj).norm()
+                        proj_error_px.append(error_norm_px)
+                        proj_sq_sum_px += error_norm_px ** 2
+
+                        # calculate m error
+                        # .norm() method gives total error. Removing it gives X/Y/Z error
+                        error_norm_m = (est - ref).norm()  # noqa
+                        proj_error_m.append(error_norm_m)
+                        proj_sq_sum_m += error_norm_m ** 2
+
+                    if len(proj_error_px):
+                        error_px = math.sqrt(proj_sq_sum_px / len(proj_error_px))
+                        error_m = math.sqrt(proj_sq_sum_m / len(proj_error_m))
+                        # print(f"{marker.label} projection error: {error_px:.2f} px, {error_m:.2f} m")
+                    else:
+                        continue
+
+                    if error_px > max_gcp_error_px or error_m > max_gcp_error_m:
+                        marker.enabled = False
+                        all_markers_valid = False
+
+                if valid_markers == 0:
+                    raise Exception("No valid markers found. "
+                                    "Check the previous steps for completeness.")
+
+                if all_markers_valid:
+                    print(f"All markers are valid ({valid_markers}/{len(chunk.markers)}).")
+                    break
+                else:
+                    # update alignment and transform
+                    chunk.optimizeCameras()
+                    chunk.updateTransform()
+
+            # remove all markers that are not enabled
+            for marker in chunk.markers:
+                if marker.enabled is False:
+                    chunk.remove(marker)  # noqa
+
+            # save the project
+            doc.save()
 
         if STEPS["build_depth_maps_absolute"]:
 
             print("Build absolute depth maps")
             start_time = time.time()
+
+            # delete all existing depth maps
+            for dm in chunk.depth_maps_sets:
+                chunk.remove(dm)
+            doc.save()
 
             # arguments for building the depth maps
             arguments = {}
@@ -2064,45 +2179,107 @@ def run_agi(project_name: str, images_paths: list,
             exec_time = finish_time - start_time
             print(f"Build absolute depth maps - finished ({exec_time:.4f} s)")
 
-        print("Create absolute bounding box")
-        start_time = time.time()
+        # just to have a block for "build absolute bounding box"
+        if True:
+            print("Create absolute bounding box")
+            start_time = time.time()
 
-        # get center and size of the chunk
-        center = chunk.region.center
-        size = chunk.region.size
+            # get attributes of the chunk
+            center = chunk.region.center
+            size = chunk.region.size
+            rotate = chunk.region.rot
+            T = chunk.transform.matrix
 
-        # Calculate the minimum and maximum corners of the bounding box
-        min_corner_abs = Metashape.Vector([center.x - size.x / 2,  # noqa
-                                       center.y - size.y / 2,
-                                       center.z - size.z / 2])
-        max_corner_abs = Metashape.Vector([center.x + size.x / 2,  # noqa
-                                       center.y + size.y / 2,
-                                       center.z + size.z / 2])
+            # Calculate corners of the bounding box
+            corners = [T.mulp(center + rotate * Metashape.Vector(  # noqa
+                [size[0] * ((i & 1) - 0.5), 0.5 * size[1] * ((i & 2) - 1),  # noqa
+                 0.25 * size[2] * ((i & 4) - 2)])) for i in  # noqa
+                       range(8)]  # noqa
 
-        min_corner_abs = chunk.crs.project(chunk.transform.matrix.mulp(min_corner_abs))
-        max_corner_abs = chunk.crs.project(chunk.transform.matrix.mulp(max_corner_abs))
+            # make corners absolute
+            if chunk.crs:
+                corners = [chunk.crs.project(x) for x in corners]
 
-        # restrain the bounding box to the absolute bounds if given
-        if camera_positions is not None and absolute_bounds is not None:
-            min_corner_abs.x = min(min_corner_abs.x, absolute_bounds[0])
-            min_corner_abs.y = min(min_corner_abs.y, absolute_bounds[1])
-            max_corner_abs.x = max(max_corner_abs.x, absolute_bounds[2])
-            max_corner_abs.y = max(max_corner_abs.y, absolute_bounds[3])
+            min_x = min(corners, key=lambda x: x[0])[0]  # noqa
+            max_x = max(corners, key=lambda x: x[0])[0]  # noqa
+            min_y = min(corners, key=lambda x: x[1])[1]  # noqa
+            max_y = max(corners, key=lambda x: x[1])[1]  # noqa
 
-        # create 2d vectors
-        min_corner_2d = Metashape.Vector([min_corner_abs.x, min_corner_abs.y])  # noqa
-        max_corner_2d = Metashape.Vector([max_corner_abs.x, max_corner_abs.y])  # noqa
+            print("Absolute bounds", absolute_bounds)
 
-        # Create the bounding box
-        bounding_box_abs = Metashape.BBox(min_corner_2d, max_corner_2d)  # noqa
+            # restrain the bounding box to the absolute bounds if given
+            if absolute_bounds is not None:
+                min_x = min(min_x, absolute_bounds[0])
+                min_y = min(min_y, absolute_bounds[1])
+                max_x = max(max_x, absolute_bounds[2])
+                max_y = max(max_y, absolute_bounds[3])
 
-        print("Corners of the absolute bounding box:")
-        print(f"Min: {min_corner_2d}")
-        print(f"Max: {max_corner_2d}")
+            # round values to the next step of 10
+            min_x = math.ceil(min_x / 10) * 10
+            min_y = math.ceil(min_y / 10) * 10
+            max_x = math.floor(max_x / 10) * 10
+            max_y = math.floor(max_y / 10) * 10
 
-        finish_time = time.time()
-        exec_time = finish_time - start_time
-        print(f"Create absolute bounding box - finished ({exec_time:.4f} s)")
+            # set bounding box to int values
+            min_x = int(min_x)
+            min_y = int(min_y)
+            max_x = int(max_x)
+            max_y = int(max_y)
+
+            # get height and width of the bounding box
+            width = np.abs(max_x - min_x)
+            height = np.abs(max_y - min_y)
+
+            # check if the resolution fits in the bounding box
+            if width % resolution_abs != 0:
+                width = width - (width % resolution_abs)
+                max_x = min_x + width
+            if height % resolution_abs != 0:
+                height = height - (height % resolution_abs)
+                max_y = min_y + height
+
+            # create 2d vectors
+            min_corner_2d = Metashape.Vector([min_x, min_y])  # noqa
+            max_corner_2d = Metashape.Vector([max_x, max_y])  # noqa
+
+            # Create the bounding box
+            bounding_box_abs = Metashape.BBox(min_corner_2d, max_corner_2d)  # noqa
+
+            # get corners of the bounding box
+            print("Corners of the absolute bounding box:")
+            print(f"Min: {min_corner_2d}")
+            print(f"Max: {max_corner_2d}")
+
+            # get height and width of the bounding box area
+            print("Size of the bounding box:")
+            bbox_width = max_corner_2d.x - min_corner_2d.x
+            bbox_height = max_corner_2d.y - min_corner_2d.y
+            print(f"Width: {bbox_width}")
+            print(f"Height: {bbox_height}")
+            print(f"Ratio: {bbox_width/bbox_height}")
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Create absolute bounding box - finished ({exec_time:.4f} s)")
+
+        # save the camera parameters to a csv file
+        if STEPS["save_camera_params"]:
+
+            print("Save camera parameters")
+            start_time = time.time()
+
+            # get the camera params
+            camera_params = ecp.extract_camera_params(chunk)
+
+            # define safe path
+            camera_params_path = os.path.join(project_fld, "camera_params.csv")
+
+            # save to csv
+            camera_params.to_csv(camera_params_path, index=False)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Save camera parameters - finished ({exec_time:.4f} s)")
 
         if DISPLAY_STEPS["save_aoi"]:
             print("Save AOI")
@@ -2114,11 +2291,6 @@ def run_agi(project_name: str, images_paths: list,
 
             # define path to save the aoi
             aoi_path = os.path.join(aoi_folder, "aoi.shp")
-
-            min_x = min_corner_abs.x  # noqa
-            min_y = min_corner_abs.y
-            max_x = max_corner_abs.x  # noqa
-            max_y = max_corner_abs.y
 
             # create shapely polygon from bounding box
             aoi = Polygon([(min_x, min_y), (min_x, max_y),
@@ -2144,9 +2316,15 @@ def run_agi(project_name: str, images_paths: list,
             print("Build absolute mesh")
             start_time = time.time()
 
+            # delete all existing meshes
+            for model in chunk.models:
+                chunk.remove(model)
+            doc.save()
+
             # arguments for building the mesh
             arguments = {
                 'surface_type': Metashape.Arbitrary,
+                'interpolation': interpolation,
                 'replace_asset': True
             }
 
@@ -2160,6 +2338,8 @@ def run_agi(project_name: str, images_paths: list,
 
             # save the project
             doc.save()
+
+            print(" Export model to file")
 
             # define output path for the model
             output_model_path = os.path.join(output_fld, project_name + "_model_absolute.obj")
@@ -2194,6 +2374,8 @@ def run_agi(project_name: str, images_paths: list,
                 'replace_asset': True
             }
 
+            print("Arguments:", arguments)
+
             # build dense cloud
             chunk.buildPointCloud(**arguments)
 
@@ -2205,6 +2387,8 @@ def run_agi(project_name: str, images_paths: list,
             # save the project
             doc.save()
 
+            print(" Export point cloud to file")
+
             # export parameters for the point cloud
             arguments = {
                 'path': output_path_pc_abs,
@@ -2212,6 +2396,9 @@ def run_agi(project_name: str, images_paths: list,
                 'save_point_color': True,
                 'save_point_confidence': True
             }
+
+            print("Arguments:")
+            print(arguments)
 
             # export the point cloud
             chunk.exportPointCloud(**arguments)
@@ -2228,20 +2415,8 @@ def run_agi(project_name: str, images_paths: list,
         # clean absolute point cloud
         if STEPS["clean_pointcloud_absolute"]:
 
-            # only continue if the point clouds is not already cleaned
+            # only clean the pc if the original point cloud is still existing
             if os.path.exists(output_path_pc_abs) is False:
-
-                # arguments for importing the point cloud
-                arguments = {
-                    'path': output_path_pc_abs_c,
-                    'crs': chunk.crs,
-                    'replace_asset': True
-                }
-
-                print(arguments)
-
-                # import the point cloud into the chunk
-                chunk.importPointCloud(**arguments)
 
                 # replace the point cloud path with the cleaned one
                 output_path_pc_abs = output_path_pc_abs_c
@@ -2263,12 +2438,17 @@ def run_agi(project_name: str, images_paths: list,
                 cols = ['x', 'y', 'z', 'nx', 'ny', 'nz',
                         'red', 'green', 'blue', 'class', 'confidence']
                 point_cloud_abs_cleaned = pd.DataFrame(point_cloud_abs_cleaned,
-                                                         columns=cols)
+                                                       columns=cols)
 
-                # save the point cloud again
+                # save the cleaned point cloud
                 epc.export_pointcloud(point_cloud_abs_cleaned,
                                       output_path_pc_abs_c,
                                       overwrite=True)
+
+                # delete all existing point clouds
+                for pc in chunk.point_clouds:
+                    chunk.remove(pc)
+                doc.save()
 
                 # arguments for importing the point cloud
                 arguments = {
@@ -2280,7 +2460,10 @@ def run_agi(project_name: str, images_paths: list,
                 # import the point cloud into the chunk
                 chunk.importPointCloud(**arguments)
 
-                # delete the old point cloud
+                # rename the imported point cloud
+                chunk.point_clouds[0].label = ''
+
+                # delete the old point cloud from output
                 os.remove(output_path_pc_abs)
 
                 # replace the point cloud path with the cleaned one
@@ -2302,15 +2485,16 @@ def run_agi(project_name: str, images_paths: list,
             print("Build absolute DEM")
             start_time = time.time()
 
-            # define projection
-            projection = Metashape.OrthoProjection()
-            projection.crs = chunk.crs
+            # delete all existing DEMs
+            for elev in chunk.elevations:
+                chunk.remove(elev)
+            doc.save()
 
             # set build parameters for the DEM
             arguments = {
                 'source_data': Metashape.DataSource.PointCloudData,
-                'interpolation': Metashape.Interpolation.EnabledInterpolation,
-                'projection': projection,
+                'interpolation': interpolation,
+                'projection': projection_abs,
                 'resolution': resolution_abs,
                 'replace_asset': True
             }
@@ -2319,8 +2503,6 @@ def run_agi(project_name: str, images_paths: list,
             if bounding_box_abs is not None:
                 arguments['region'] = bounding_box_abs
 
-            print(arguments)
-
             # build the DEM
             chunk.buildDem(**arguments)
 
@@ -2328,7 +2510,7 @@ def run_agi(project_name: str, images_paths: list,
             if save_commands:
                 _save_command_args("buildDem_absolute", arguments,
                                    argument_fld)
-
+    
             # save the project
             doc.save()
 
@@ -2340,12 +2522,17 @@ def run_agi(project_name: str, images_paths: list,
                 'raster_transform': Metashape.RasterTransformNone,
                 'nodata_value': no_data_value,
                 'projection': projection_abs,
-                'resolution': resolution_abs
+                'clip_to_boundary': True,
+                'resolution_x': resolution_abs,
+                'resolution_y': resolution_abs,
+                'image_compression': compression
             }
 
             # add region to export parameters
             if bounding_box_abs is not None:
                 arguments['region'] = bounding_box_abs
+
+            print(arguments)
 
             # export the DEM
             chunk.exportRaster(**arguments)
@@ -2364,6 +2551,11 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute orthomosaic")
             start_time = time.time()
+
+            # delete all existing ortho-photos
+            for ortho in chunk.orthomosaics:
+                chunk.remove(ortho)
+            doc.save()
 
             # arguments for building the orthomosaic
             arguments = {
@@ -2395,8 +2587,12 @@ def run_agi(project_name: str, images_paths: list,
                 'source_data': Metashape.OrthomosaicData,
                 'image_format': Metashape.ImageFormatTIFF,
                 'raster_transform': Metashape.RasterTransformNone,
-                'nodata_value': no_data_value,
-                'resolution': resolution_abs
+                # 'nodata_value': no_data_value, only for DEMs
+                'projection': projection_abs,
+                'clip_to_boundary': True,
+                'resolution_x': resolution_abs,
+                'resolution_y': resolution_abs,
+                'image_compression': compression
             }
 
             # add region to export parameters
@@ -2413,6 +2609,18 @@ def run_agi(project_name: str, images_paths: list,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute orthomosaic - finished ({exec_time:.4f} s)")
+
+        # align both images together (same size and same start point)
+        if STEPS["build_dem_absolute"] and STEPS["build_orthomosaic_absolute"]:
+            print("Align DEM and Ortho")
+
+            # align the images
+            ai.align_images(output_path_ortho_abs, output_path_dem_abs,
+                            output_path_ortho_abs, output_path_dem_abs)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Align DEM and Ortho - finished ({exec_time:.4f} s)")
 
         # build confidence array
         if STEPS["build_confidence_absolute"]:
@@ -2436,15 +2644,14 @@ def run_agi(project_name: str, images_paths: list,
 
             # save the confidence array
             eti.export_tiff(conf_arr_abs, output_path_conf_abs,
-                            transform=transform_abs, overwrite=True)
+                            transform=transform_abs, overwrite=True,
+                            use_lzw=True)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute confidence array - finished ({exec_time:.4f} s)")
 
-        # init empty quality dict
-        quality_dict = None
-
+        # build the difference DEM
         if STEPS["build_difference_dem"]:
 
             print("Build absolute difference DEM")
@@ -2470,7 +2677,8 @@ def run_agi(project_name: str, images_paths: list,
                                                            "REMA10")
             # export the relative dem
             eti.export_tiff(difference_dem_rel, output_path_diff_rela,
-                            transform=transform_abs, overwrite=True, no_data=np.nan)
+                            transform=transform_abs, overwrite=True,
+                            no_data=np.nan, use_lzw=True)
 
             # make relative dem absolute
             difference_dem_abs = np.abs(difference_dem_rel)
@@ -2478,12 +2686,13 @@ def run_agi(project_name: str, images_paths: list,
             # export the absolute dem
             eti.export_tiff(difference_dem_abs, output_path_diff_abs,
                             transform=transform_abs, overwrite=True,
-                            no_data=np.nan)
+                            no_data=np.nan, use_lzw=True)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute difference dem - finished ({exec_time:.4f} s)")
 
+        # estimate the quality of the uncorrected DEM
         if STEPS["evaluate_dem"]:
             print("Evaluate dem")
             start_time = time.time()
@@ -2497,18 +2706,8 @@ def run_agi(project_name: str, images_paths: list,
                 bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
                 dem_modern = lr.load_rema(bounds, auto_download=True)
 
-            # get the bounds of the absolute dem
-            bounds_abs = cb.calc_bounds(transform_abs, dem_abs.shape)
-
-            # load the confidence dem
-            if conf_arr_abs is None:
-                conf_arr_abs = li.load_image(output_path_conf_abs)
-
             # estimate the quality of the DEM
-            quality_dict = edq.estimate_dem_quality(dem_abs, dem_modern,
-                                                    conf_arr_abs,
-                                                    abs_bounds=bounds_abs,
-                                                    modern_source="REMA10")
+            quality_dict = edq.estimate_dem_quality(dem_abs, dem_modern)
 
             print(quality_dict)
 
@@ -2518,12 +2717,13 @@ def run_agi(project_name: str, images_paths: list,
 
             # export the quality dict to a json file
             with open(quality_path, 'w') as f:
-                json.dump(quality_dict, f, indent=4)   # noqa
+                json.dump(quality_dict, f, indent=4)  # noqa
 
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Evaluate dem - finished ({exec_time:.4f} s)")
 
+        # correct DEM by coregistration
         if STEPS["correct_dem"]:
             print("Correct DEM")
             start_time = time.time()
@@ -2534,98 +2734,140 @@ def run_agi(project_name: str, images_paths: list,
                                                        return_transform=True)
 
             # load the modern dem
-            if dem_modern is None:
-                bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
-                dem_modern = lr.load_rema(bounds, auto_download=True)
+            bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
+            dem_modern, transform_rema = lr.load_rema(bounds, auto_download=True, return_transform=True)
 
-            # resize the modern DEM to the same size as the absolute DEM
-            if dem_modern.shape != dem_abs.shape:
-                # resize the modern DEM to the same size as the absolute DEM
-                dem_modern = rei.resize_image(dem_modern, dem_abs.shape)
+            # load the modern ortho
+            ortho_modern = ls.load_satellite(bounds, return_transform=False)
+
+            old_shape = dem_abs.shape
+
+            # resize the old dem to the modern dem shape
+            dem_abs_resized = rei.resize_image(dem_abs, dem_modern.shape)
+
+            # update the transform as well
+            from affine import Affine
+            transform_abs_resized = Affine(
+                transform_rema.a,  # New x-scale
+                transform_abs.b,  # Original x-skew
+                transform_abs.c,  # Original x-offset
+                transform_abs.d,  # Original y-skew
+                transform_rema.e,  # New y-scale
+                transform_abs.f  # Original y-offset
+            )
+
+            # create mask for the DEM
+            if rock_mask_type == "REMA":
+                rock_mask = lrm.load_rock_mask(bounds, mask_resolution)
+            elif rock_mask_type == "pixels":
+                rock_mask = np.zeros_like(ortho_modern[0, :, :])
+                condition = np.all((ortho_modern >= 40) & (ortho_modern <= 90), axis=0)
+                rock_mask[condition] = 1
+            else:
+                raise ValueError("Rock mask type not defined.")
+
+            # display the images
+            import src.display.display_images as di
+            di.display_images([ortho_modern, dem_modern], overlays=[rock_mask, rock_mask])
 
             # correct the dem
-            _, _, _, dem_corrected = cd.correct_dem(dem_abs, dem_modern)
+            dem_corrected, transform_corrected, max_slope = cd.correct_dem(
+                dem_abs_resized, dem_modern,
+                transform_abs_resized, transform_rema,
+                modern_ortho=ortho_modern,
+                mask=rock_mask,
+                max_slope=30)
+
+            # resize back to the original shape
+            dem_corrected = rei.resize_image(dem_corrected, old_shape)
+
+            # adapt transform to reflect original pixel size
+            transform_corrected = Affine(
+                transform_abs.a,
+                transform_corrected.b,
+                transform_corrected.c,
+                transform_corrected.d,
+                transform_abs.e,
+                transform_corrected.f
+            )
+
+            # adapt output path
+            output_path_dem_corr = output_path_dem_abs.replace(".tif",
+                                                               f"_{max_slope}.tif")
 
             # save the corrected dem
             eti.export_tiff(dem_corrected, output_path_dem_corr,
-                            overwrite=True)
+                            transform=transform_corrected, overwrite=True,
+                            use_lzw=True, no_data=-9999)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Correct DEM - finished ({exec_time:.4f} s)")
 
+        # build the difference DEM (corrected)
         if STEPS["build_difference_dem"] and STEPS["correct_dem"]:
 
             print("Build absolute difference DEM (corrected)")
             start_time = time.time()
 
             # load the corrected dem
-            if dem_corr is None:
-                dem_corr = li.load_image(output_path_dem_corr)
-
-            # load the transform
-            if transform_abs is None:
-                transform_abs = lt.load_transform(transform_path, delimiter=",")
+            if dem_corrected is None:
+                dem_corrected, transform_corrected = li.load_image(output_path_dem_corr,
+                                                                   return_transform=True)
 
             # get the bounds of the corrected dem
-            bounds_abs = cb.calc_bounds(transform_abs, dem_corr.shape)
+            bounds_corrected = cb.calc_bounds(transform_corrected,
+                                              dem_corrected.shape)
 
-            # load the modern dem
-            if dem_modern is None:
-                dem_modern = lr.load_rema(bounds_abs, auto_download=True)
+            # load the modern dem again (for corrected values)
+            dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
 
             # get relative dem and define the output path
-            difference_dem_rela_c = cdd.create_difference_dem(dem_corr,
-                                                             dem_modern,
-                                                             bounds_abs,
-                                                             "REMA10")
+            difference_dem_rela_c = cdd.create_difference_dem(dem_corrected,
+                                                              dem_modern,
+                                                              bounds_corrected,
+                                                              "REMA10")
 
             # export the relative dem
             eti.export_tiff(difference_dem_rela_c, output_path_diff_rela_c,
-                            transform=transform_abs,
-                            overwrite=True, no_data=np.nan)
+                            transform=transform_corrected,
+                            overwrite=True, no_data=np.nan,
+                            use_lzw=True)
 
             # make relative dem absolute
             difference_dem_abs_c = np.abs(difference_dem_rela_c)
 
             # export the absolute dem
             eti.export_tiff(difference_dem_abs_c, output_path_diff_abs_c,
-                            transform=transform_abs,
-                            overwrite=True, no_data=np.nan)
+                            transform=transform_corrected,
+                            overwrite=True, no_data=np.nan,
+                            use_lzw=True)
 
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute difference dem (corrected) - finished ({exec_time:.4f} s)")
 
+        # estimate the quality of the corrected DEM
         if STEPS["evaluate_dem"] and STEPS["correct_dem"]:
 
             print("Evaluate corrected dem")
             start_time = time.time()
 
             # load the corrected dem
-            if dem_corr is None:
-                dem_corr = li.load_image(output_path_dem_corr)
+            if dem_corrected is None:
+                dem_corrected, transform_corrected = li.load_image(output_path_dem_corr,
+                                              return_transform=True)
 
-            if transform_abs is None:
-                transform_abs = lt.load_transform(transform_path, delimiter=",")
+            bounds_corrected = cb.calc_bounds(transform_corrected,
+                                              dem_corrected.shape)
 
-            bounds_abs = cb.calc_bounds(transform_abs, dem_corr.shape)
-
-            if dem_modern is None:
-                dem_modern = lr.load_rema(bounds_abs, auto_download=True)
-
-            # get the bounds of the corrected dem
-            bounds_corr = cb.calc_bounds(transform_abs, dem_corr.shape)
-
-            # load the confidence dem
-            if conf_arr_abs is None:
-                conf_arr_abs = li.load_image(output_path_conf_abs)
+            dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
 
             # estimate the quality of the DEM
-            quality_dict = edq.estimate_dem_quality(dem_corr, dem_modern,
-                                                    conf_arr_abs,
-                                                    abs_bounds=bounds_corr,
-                                                    modern_source="REMA10")
+            quality_dict = edq.estimate_dem_quality(dem_corrected, dem_modern,
+                                                    rock_mask)
+
+            print(quality_dict)
 
             # define the output path for the quality dict
             quality_path = os.path.join(output_fld,
@@ -2639,12 +2881,16 @@ def run_agi(project_name: str, images_paths: list,
             exec_time = finish_time - start_time
             print(f"Evaluate corrected dem - finished ({exec_time:.4f} s)")
 
+        # save project attributes to psql
         if STEPS["save_to_psql"]:
+            # if quality_dict is None:
+            #     raise ValueError("Quality dict must be created before saving to psql.")
 
-            if quality_dict is None:
-                raise ValueError("Quality dict must be created before saving to psql.")
+            # sstd.save_sfm_to_db(project_name, quality_dict, images_paths)  # noqa
 
-            sstd.save_sfm_to_db(project_name, quality_dict, images_paths)
+            raise ValueError("Saving to psql is not implemented yet.")
+
+
 
     except Exception as e:
         print("!!ERROR!!")
@@ -2696,6 +2942,8 @@ def _save_command_args(method, args, output_fld):
         args['blending_mode'] = str(args['blending_mode']).split('.')[-1]
     if 'crs' in args:
         args['crs'] = str(args['crs']).split(':')[-1][:-3]
+    if 'image_compression' in args:
+        args['image_compression'] = "<TO BE DONE>"
     if 'image_format' in args:
         args['image_format'] = str(args['image_format']).split('.')[-1]
     if 'interpolation' in args:

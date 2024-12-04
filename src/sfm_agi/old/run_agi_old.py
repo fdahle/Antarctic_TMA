@@ -12,7 +12,6 @@ import geopandas as gpd
 import Metashape
 import numpy as np
 import pandas as pd
-from fontTools.varLib.interpolatableHelpers import transform_from_stats
 from pyproj import CRS
 from scipy.ndimage import binary_dilation
 from shapely.geometry import Polygon
@@ -22,7 +21,7 @@ from tqdm import tqdm
 import src.base.calc_bounds as cb
 import src.base.check_sky as cs
 import src.base.enhance_image as ei
-import src.base.find_overlapping_images as foi
+import src.base.find_overlapping_images_geom as foi
 import src.base.load_credentials as lc
 import src.base.rotate_image as ri
 import src.base.resize_image as rei
@@ -37,7 +36,7 @@ import src.load.load_rock_mask as lrm
 import src.load.load_transform as lt
 import src.sfm_agi.other.create_tps_frame as ctf
 import src.sfm_agi.snippets.add_gcp_markers as agm
-import src.sfm_agi.snippets.add_tp_markers as atm
+import src.sfm_agi.snippets.old.add_tp_markers as atm
 import src.sfm_agi.snippets.create_adapted_mask as cam
 import src.sfm_agi.snippets.create_confidence_array as cca
 import src.sfm_agi.snippets.create_difference_dem as cdd
@@ -1078,8 +1077,8 @@ def run_agi(project_name: str, images_paths: list,
                     # get the footprints as lst
                     footprints_lst = [camera_footprints[image_id] for image_id in image_ids]
 
-                    overlap_dict = foi.find_overlapping_images(image_ids,
-                                                               footprints_lst)
+                    overlap_dict = foi.find_overlapping_images_geom(image_ids,
+                                                                    footprints_lst)
                     pairs = []
                     # create a list with all combinations of images
                     for img_id, overlap_lst in overlap_dict.items():

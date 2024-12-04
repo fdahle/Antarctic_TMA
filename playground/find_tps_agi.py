@@ -30,7 +30,7 @@ mask_2 = ri.rotate_image(mask_2, 180)
 
 # init tie point detector
 tpd = ftp.TiePointDetector('lightglue', verbose=True,
-                           min_conf_value=min_conf, tp_type=tp_type,
+                           min_conf=min_conf, tp_type=tp_type,
                            display=debug_show_intermediate_steps)
 
 tps, conf = tpd.find_tie_points(image_1, image_2, mask_1, mask_2)

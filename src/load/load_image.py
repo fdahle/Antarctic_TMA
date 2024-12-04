@@ -97,8 +97,12 @@ def _read_image(absolute_image_path: str, driver: str) -> tuple[np.ndarray, Unio
     if driver == "rasterio":
 
         # read image
-        ds = rasterio.open(absolute_image_path, 'r')
-        img = ds.read()
+        try:
+            ds = rasterio.open(absolute_image_path, 'r')
+            img = ds.read()
+        except Exception as e:
+            print(absolute_image_path)
+            raise e
 
         # get transform from image
         transform = ds.transform

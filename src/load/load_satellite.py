@@ -20,8 +20,7 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
                    satellite_crs: int = 3031,
                    month: int = 0,
                    return_empty_sat: bool = False,
-                   return_transform: bool= False) -> (
-        Tuple)[Optional[np.ndarray], Optional[Affine]]:
+                   return_transform: bool= False):
     """
     Loads satellite images from a specified folder, merges them based on a bounding box,
     and crops the merged image to the given bounds. Optionally returns an empty dataset

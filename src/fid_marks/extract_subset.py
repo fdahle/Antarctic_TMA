@@ -6,6 +6,8 @@ import dlib
 import numpy as np
 from typing import Optional
 
+import src.display.display_images as di
+
 # Constants
 DETECTOR_PATH = "/data/ATM/data_1/machine_learning/dlib/subsets"
 MODEL_NAME = "detector"
@@ -13,10 +15,14 @@ FID_TYPE = 1
 CROP_FACTOR = 0.1
 
 
+DEBUG_SHOW_MULTI_DETECTIONS = False
+
 def extract_subset(image: np.ndarray, key: str,
                    detector_path: Optional[str] = None, model_name: Optional[str] = None,
                    fid_type: Optional[str] = None, crop_factor: Optional[float] = None,
-                   binarize_crop: bool = False) -> Optional[list[int]]:
+                   refine_multiple: bool = False,
+                   binarize_crop: bool = False,
+                   catch=True) -> Optional[list[int]]:
     """
     Extracts a subset of an image in which a fid mark for a key direction ('n', 'e', 's', 'w')
     is located. The detection is using a pre-trained model. The bounding box of the subset
@@ -71,6 +77,8 @@ def extract_subset(image: np.ndarray, key: str,
     # binarize crop
     if binarize_crop:
 
+        print("WARNING: NOT WORKING WITH DLIB")
+
         window_size = 25
         k = -0.2
 
@@ -102,22 +110,42 @@ def extract_subset(image: np.ndarray, key: str,
     # get difference in x and y for crop and resized crop
     y_scale = orig_shape[0] / crop.shape[0]
     x_scale = orig_shape[1] / crop.shape[1]
+    catch = False
 
     try:
         # try to find the position of the fid marker
-        detection = model(crop)
-    except (Exception,):
+        detections = model(crop)
+
+    except (Exception,) as e:
+        if catch:
+            return None
+        else:
+            raise e
+
+    # if no detection -> continue
+    if len(detections) == 0:
         return None
 
-    # if no detection or multiple detections -> continue
-    if len(detection) != 1:
-        return None
+    # if multiple detections -> continue
+    if len(detections) > 1:
+
+        if DEBUG_SHOW_MULTI_DETECTIONS:
+            # convert detection to list of coords
+            bboxes = [[d.left(), d.top(), d.right(), d.bottom()] for d in detections]
+            di.display_images([crop], bounding_boxes=[bboxes])
+
+        if refine_multiple is False:
+                return None
+        else:
+            # get the largest detection
+            ld = max(detections, key=lambda d: (d.right() - d.left()) * (d.bottom() - d.top()))
+            detections = [ld]
 
     # adapt the position back to the original image
-    x_left = int(detection[0].left() * x_scale)
-    y_top = int(detection[0].top() * y_scale)
-    x_right = int(detection[0].right() * x_scale)
-    y_bottom = int(detection[0].bottom() * y_scale)
+    x_left = int(detections[0].left() * x_scale)
+    y_top = int(detections[0].top() * y_scale)
+    x_right = int(detections[0].right() * x_scale)
+    y_bottom = int(detections[0].bottom() * y_scale)
 
     # translate the coordinates back from crop coordinates to the image coordinates
     if key == "n":

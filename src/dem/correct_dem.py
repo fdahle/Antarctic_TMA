@@ -9,7 +9,8 @@ import src.base.resize_image as ri
 
 def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                 historic_ortho=None, modern_ortho=None,
-                mask=None, max_slope=None, no_data_val=-9999, print_values=True):
+                mask=None, adapt_mask=False,
+                max_slope=None, no_data_val=-9999, print_values=True):
 
     # check if the DEMs have the same shape
     if historic_dem.shape != modern_dem.shape:
@@ -22,21 +23,9 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
     # set no data values to nan
     historic_dem[historic_dem == no_data_val] = np.nan
 
-    #import matplotlib.pyplot as plt
-    #fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    #axes[0].imshow(historic_dem)
-    #axes[1].imshow(mask)
-    #plt.title("mask")
-    #plt.tight_layout()
-    #plt.show()
-
     # get mask as numpy array and resize to modern dem shape
     if mask is not None:
         mask = ri.resize_image(mask, modern_dem.shape)
-
-    # modern_ortho = ri.resize_image(modern_ortho, modern_dem.shape)
-
-    print(modern_dem.shape, modern_ortho.shape, mask.shape)
 
     # make sure that mask is similar to the dems
     if mask is not None:
@@ -78,13 +67,26 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
             else:
                 inlier_mask = slope_mask
 
-            # invert mask
+            # convert the mask to a boolean array
             inlier_mask = inlier_mask.astype(bool)
 
-            #import matplotlib.pyplot as plt
-            #plt.imshow(inlier_mask)
-            #plt.title("Inlier mask")
-            #plt.show()
+            if adapt_mask:
+                # get modern dem as numpy array
+                modern_data = modern_dem.data
+
+                # extract inlier heights
+                valid_heights = modern_data[inlier_mask]
+
+                # get median height
+                threshold_height = np.nanmedian(valid_heights)
+                print("Threshold height", threshold_height)
+
+                # update mask to only keep values above threshold
+                inlier_mask &= (modern_data > threshold_height)
+
+            import src.display.display_images as di
+            di.display_images([historic_dem.data, modern_dem.data],
+                              overlays=[inlier_mask, inlier_mask])
 
             print("Fit deramp")
             deramp.fit(modern_dem, historic_dem, inlier_mask, verbose=True)
@@ -118,31 +120,48 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                 raise ValueError("Max slope reached 90. Coreg failed.")
 
     import matplotlib.pyplot as plt
-    vmin, vmax= -50, 50
+
+    # get 75th percentile of the difference
+    vmin_before = np.percentile(diff_before.data.compressed(), 20)
+    vmax_before = np.percentile(diff_before.data.compressed(), 80)
+    vmin_after = np.percentile(diff_after.data.compressed(), 20)
+    vmax_after = np.percentile(diff_after.data.compressed(), 80)
+
+    # get absolute v_min and v_max
+    vmin = np.min([vmin_before, vmin_after])
+    vmax = np.max([vmax_before, vmax_after])
+
     alpha = 0.2
     # Create a figure and two subplots
-    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     # Create a figure and two subplots
     im1 = axes[0].imshow(diff_before.data, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
-    axes[0].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    #axes[0].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
     axes[0].set_title("Difference Before")
     plt.colorbar(im1, ax=axes[0], label="Elevation change (m)")
 
     # Plot diff_after on the second subplot
     im2 = axes[1].imshow(diff_after.data, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
-    axes[1].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    #axes[1].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
     axes[1].set_title("Difference After")
     plt.colorbar(im2, ax=axes[1], label="Elevation change (m)")
 
     # put first axis of modern ortho in the last
-    modern_ortho = np.moveaxis(modern_ortho, 0, 2)
-    im3 = axes[2].imshow(modern_ortho)
-    axes[2].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
-    axes[2].set_title("Modern Ortho")
+    #modern_ortho = np.moveaxis(modern_ortho, 0, 2)
+    #im3 = axes[2].imshow(modern_ortho)
+    #axes[2].imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    #axes[2].set_title("Modern Ortho")
 
     # Add a common title and adjust layout
     fig.suptitle("Elevation Differences Before and After Alignment", fontsize=16)
     plt.tight_layout()
+    plt.show()
+
+    fig, axes = plt.subplots(1, 1)
+    modern_ortho = np.moveaxis(modern_ortho, 0, 2)
+    im3 = axes.imshow(modern_ortho)
+    axes.imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
+    axes.set_title("Inlier Mask")
     plt.show()
 
     # create new transform

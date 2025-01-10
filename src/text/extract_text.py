@@ -453,7 +453,7 @@ def extract_text(
                 merged_text = merged_text[:-1]
 
             # skip empty or otherwise corrupted text
-            if len(merged_text) == 0 or np.mean(np.asarray(temp_confs) == np.nan):
+            if len(merged_text) == 0 or np.isnan(np.mean(np.asarray(temp_confs))):
                 continue
 
             final_text_content.append(merged_text)

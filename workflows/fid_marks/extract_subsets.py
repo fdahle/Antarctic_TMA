@@ -9,7 +9,8 @@ import src.fid_marks.extract_subset as es
 
 # Variables
 overwrite = False
-
+binarize=False
+refine_multiple=True
 
 def extract_subsets():
     # establish connection to psql
@@ -61,7 +62,8 @@ def extract_subsets():
                         continue
 
                 # extract the subset
-                bbox = es.extract_subset(image, key)
+                bbox = es.extract_subset(image, key,
+                                         binarize_crop=binarize, refine_multiple=refine_multiple)
 
                 # skip if no bbox is found
                 if bbox is None:

@@ -34,6 +34,7 @@ image_ids = ["CA214732V0029", "CA214732V0030", "CA214732V0031", "CA214732V0032",
 bounds = None
 
 
+
 """
 project_source = "crane"
 path_project_csv = f"/data/ATM/data_1/sfm/agi_data/research_areas/{project_source}.csv"
@@ -45,25 +46,23 @@ image_ids = df["'image_id'"].tolist()
 image_ids = [image_id.replace("'", "") for image_id in image_ids]
 """
 
-"""
 import src.sfm_agi.other.get_images_for_glacier as gifg
-glacier_name = "pequod"
+glacier_name = "mapple"
 image_ids, bounds = gifg.get_images_for_glacier(glacier_name,
                                                 return_bounds=True)
 print(bounds)
-"""
 
 # project settings
-project_name = "test3"
-overwrite = False
-resume = True
+project_name = "mapple"
+overwrite = True
+resume = False
 
 if glacier_name is not None and glacier_name != project_name:
     raise ValueError("Project name and project source are not the same")
 
 # accuracy settings (None means not using it)
 camera_accuracy = (100, 100, 100)  # x, y, z in m
-gcp_accuracy = (20, 20, 10)
+gcp_accuracy = (30, 30, 10)
 
 # input settings
 limit_images = 0  # 0 means no limit
@@ -126,6 +125,11 @@ data = data.dropna(subset=['position_exact', 'footprint_exact'])
 # get the focal length from the military calibration
 data['focal_length'] = data['image_id'].apply(lambda x: lmfl.load_military_focal_length(x, None, conn))
 
+# replace all values with focal length of 154.25
+data['focal_length'] = 154.25
+print(data['focal_length'])
+print("WAAAAAAAAAAAARNING")
+
 # print the number of images without focal length
 print(f"Number of images without focal length: {data['focal_length'].isnull().sum()}/{len(data)}")
 
@@ -133,7 +137,6 @@ print(f"Number of images without focal length: {data['focal_length'].isnull().su
 if data['focal_length'].isnull().sum() > 0:
     print("Using default value for focal length..")
     data['focal_length'] = data['focal_length'].fillna(154.43)
-
 
 # define function to extract z
 def _get_z(z_row):
@@ -217,6 +220,62 @@ accuracy_dict = None
 image_ids = data['image_id'].tolist()
 images_paths = [os.path.join(path_image_folder, image + ".tif") for image in image_ids]
 
+# get image shapes for each image
+import src.load.load_image_shape as lis
+shapes_dict = {}
+for image_id in image_ids:
+    image_shape = lis.load_image_shape(image_id)
+    shapes_dict[image_id] = image_shape
+
+# check if the shape of the images is correct
+def _validate_shapes(shapes_dict):
+    from collections import defaultdict
+
+    # Group shapes by flight path and direction
+    grouped_shapes = defaultdict(list)
+
+    for image_id, shape in shapes_dict.items():
+        # Extract flight path and direction from image_id
+        flight_path = image_id[2:6]  # Example: extract flight path as substring
+        direction = image_id[6:8]  # Example: extract direction as substring
+        key = (flight_path, direction)
+        grouped_shapes[key].append((image_id, shape))
+
+    # Validate shapes within each group
+    for key, images in grouped_shapes.items():
+        reference_shape = images[0][1]  # Use the shape of the first image as reference
+        ref_height, ref_width = reference_shape
+
+        for image_id, shape in images:
+            height, width = shape
+            if abs(ref_height - height) == 0 and abs(ref_width - width) == 0:
+                # do nothing
+                pass
+            elif abs(ref_height - height) < 5 and abs(ref_width - width) < 2:
+
+                # fix the image size
+                import src.load.load_image as li
+                img = li.load_image(image_id)
+                import src.base.resize_image as ri
+                new_shape = (ref_height, ref_width)
+                r_img = ri.resize_image(img, new_shape)
+                pth_img_folder = "/data/ATM/data_1/aerial/TMA/downloaded"
+                pth_img = os.path.join(pth_img_folder, image_id + ".tif")
+                import src.export.export_tiff as et
+                et.export_tiff(r_img, pth_img, overwrite=True, use_lzw=True)
+
+                sql_string = f"UPDATE images_fid_points SET image_width={ref_width}, " \
+                             f"image_height={ref_height} WHERE image_id='{image_id}'"
+                ctd.execute_sql(sql_string, conn)
+
+                print("Resized image", image_id, "from", shape, "to", reference_shape)
+
+            else:
+                raise ValueError(f"Shape mismatch in group {key}: {image_id} has shape {shape} "
+                                 f"but reference shape is {reference_shape}")
+
+_validate_shapes(shapes_dict)
+print("All shapes are correct")
 
 ra.run_agi(project_name, images_paths,
            focal_lengths=focal_length_dict, camera_footprints=footprint_dict,
@@ -224,3 +283,4 @@ ra.run_agi(project_name, images_paths,
            camera_accuracies=accuracy_dict, gcp_accuracy=gcp_accuracy,
            azimuth=azimuth, absolute_bounds=bounds,
            overwrite=overwrite, resume=resume)
+

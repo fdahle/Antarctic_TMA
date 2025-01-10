@@ -89,16 +89,22 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
             else:
                 raise ValueError("Invalid input shape type. Expected Shapely geometry, WKT string, or GeoDataFrame.")
 
-    # find global min_x and min_y
-    all_geoms = unary_union(geoms)
-    min_x, min_y, _, _ = all_geoms.bounds
+    # get the bounds of all shapes
+    min_x, min_y, max_x, max_y = unary_union(geoms).bounds
 
     # Normalize the geometries
     if normalize:
         gs_shapes = _normalize_geometries(gs_shapes, min_x, min_y)
 
+        # update bounds after normalization
+        min_x, min_y, max_x, max_y = unary_union(gs_shapes).bounds
+
     # create figure on which the shapes will be plotted
     fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Limit plot to the bounds of the polygons
+    ax.set_xlim(min_x, max_x)
+    ax.set_ylim(min_y, max_y)
 
     # Set the figure's main title if specified
     if style_config['title']:
@@ -116,7 +122,7 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
                     style_config['colors'] and i < len(style_config['colors'])) else 'lightgray'
 
         # plot the shape
-        shape.plot(ax=ax, facecolor=face_color, alpha=0.5)
+        shape.plot(ax=ax, facecolor=face_color, alpha=1)
 
         # add label to the shape
         if style_config['labels'] and style_config['labels'][i] is not None:
@@ -128,9 +134,6 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
                              textcoords="offset points", xytext=(0, 10),
                              ha='center', fontsize=10)
 
-    # Set equal scaling by changing axis limits
-    plt.axis('equal')
-
     if save_path:
         # Validate save_type
         if save_type not in ["png", "svg"]:
@@ -140,6 +143,7 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
         plt.savefig(f"{save_path}.{save_type}", format=save_type)
         plt.close()  # Close the plot explicitly after saving to avoid displaying it
     else:
+
         # If no save_path is provided, display the figure
         plt.show()
 

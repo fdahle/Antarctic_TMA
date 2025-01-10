@@ -4,10 +4,12 @@ import fiona
 import geopandas as gpd
 from shapely.geometry import shape
 from shapely.validation import explain_validity
+from tqdm import tqdm
 
 logging.getLogger('fiona').setLevel(logging.ERROR)
 
 def load_shape_data(path_to_file: str,
+                    bounding_box: tuple | list = None,
                     verbose: bool = False) -> gpd.GeoDataFrame:
     """
     Load shape data from a specified file path and return it as a GeoDataFrame.
@@ -20,7 +22,16 @@ def load_shape_data(path_to_file: str,
 
     # Open with fiona to filter invalid geometries
     with fiona.open(path_to_file) as src:
-        for feature in src:
+
+        if bounding_box:
+            if verbose:
+                print(f"Filtering by bounding box: {bounding_box}")
+            src = src.filter(bbox=bounding_box)
+
+        # Wrap the iterable in tqdm if verbose is True
+        iterable = tqdm(src, desc="Processing geometries", unit=" geom") if verbose else src
+
+        for feature in iterable:
             try:
                 # Ensure that the geometry has enough coordinates to form a valid polygon
                 geom = feature["geometry"]
@@ -48,9 +59,14 @@ def load_shape_data(path_to_file: str,
 
                 # Optionally check for validity
                 if not shapely_geom.is_valid:
-                    if verbose:
-                        print(f"Ignored invalid geometry: {explain_validity(shapely_geom)}")
-                    continue
+
+                    repaired_geom = shapely_geom.buffer(0)
+                    if repaired_geom.is_valid:
+                        feature["geometry"] = repaired_geom
+                    else:
+                        if verbose:
+                            print(f"Ignored invalid geometry: {explain_validity(shapely_geom)}")
+                        continue
 
                 valid_features.append(feature)
             except Exception as e:

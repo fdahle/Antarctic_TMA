@@ -17,19 +17,12 @@ def find_gcps(dem_old, dem_new,
               transform,
               resolution, bounding_box,
               rotation,
-              mask=None,
-              min_conf=0.75,
+              mask_old=None, mask_new=None,
+              min_conf=0.9,
               cell_size = 2500,
               no_data_value=-9999):
 
-    mask[ortho_old >= 254] = 0
-    mask[ortho_old == no_data_value] = 0
 
-    ortho_old[ortho_old == 255] = 0
-
-    if ortho_old.shape != mask.shape:
-        print(ortho_old.shape, mask.shape)
-        raise ValueError("Ortho and mask have different shapes")
     if dem_old.shape != ortho_old.shape:
         print(dem_old.shape, ortho_old.shape)
         raise ValueError("historic DEM and ortho have different shapes")
@@ -39,84 +32,162 @@ def find_gcps(dem_old, dem_new,
 
     # resize the old ortho
     ortho_old_resized, s_x_old, s_y_old = rm.resize_max(ortho_old, max_size=20000)
-    mask_resized, _, _ = rm.resize_max(mask, max_size=20000)
 
-    # rotate the old ortho
-    ortho_old_rotated, rot_mat = roi.rotate_image(ortho_old_resized, rotation,
-                                         return_rot_matrix=True)
-    mask_rotated = roi.rotate_image(mask_resized, rotation)
+    ortho_old_resized[ortho_old_resized == 255] = 0
 
-    # resize the other images
-    ortho_new_resized, s_x_new, s_y_new = ri.resize_image(ortho_new,
-                                                          ortho_old_rotated.shape,
-                                                          return_scale_factor=True)
+    # create lists that will contain tps and conf of each rotation
+    tps_per_rotation = []
+    conf_per_rotation = []
+    rot_mats = []
+    scale_factors = []
 
-    # find tie points
-    tpd = ftp.TiePointDetector('lightglue', min_conf=min_conf)
+    # we want to try out to nudge the rotation a bit
+    for nudge in [0, 10, -10]:
 
-    # find the number of cells in the x and y direction
-    n_x = int(np.ceil(ortho_old_rotated.shape[1] / cell_size))
-    n_y = int(np.ceil(ortho_old_rotated.shape[0] / cell_size))
+        # create adapted rotation
+        adapted_rotation = rotation + nudge
+        adapted_rotation = adapted_rotation % 360
 
-    all_tps = []
-    all_conf = []
+        # rotate the old ortho
+        ortho_old_rotated, rot_mat = roi.rotate_image(ortho_old_resized, adapted_rotation,
+                                             return_rot_matrix=True)
 
-    # iterate over the cells
-    for i in range(n_x):
-        for j in range(n_y):
-            # get the cell
-            x_min = i * cell_size
-            x_max = min((i + 1) * cell_size, ortho_old_rotated.shape[1])
-            y_min = j * cell_size
-            y_max = min((j + 1) * cell_size, ortho_old_rotated.shape[0])
+        # save rotation matrix
+        rot_mats.append(rot_mat)
 
-            # get the cell from the new ortho, old ortho and mask
-            cell_new = ortho_new_resized[:, y_min:y_max, x_min:x_max]
-            cell_old = ortho_old_rotated[y_min:y_max, x_min:x_max]
-            cell_mask = mask_rotated[y_min:y_max, x_min:x_max]
+        # resize and rotate mask
+        if mask_old is not None:
+            mask_old_resized, _, _ = rm.resize_max(mask_old, max_size=20000)
+            mask_old_rotated = roi.rotate_image(mask_old_resized, adapted_rotation)
+        else:
+            mask_old_rotated = None
 
-            # check if the cell is masked completely
-            if np.sum(cell_mask) == 0:
-                print("completely masked", i, j)
-                continue
+        # resize the other images
+        ortho_new_resized, s_x_new, s_y_new = ri.resize_image(ortho_new,
+                                                              ortho_old_rotated.shape,
+                                                              return_scale_factor=True)
+        scale_factors.append((s_x_new, s_y_new))
 
-            # check if the cell is empty
-            if np.sum(cell_old) == 0:
-                print("Empty cell", i, j)
-                continue
+        if mask_new is not None:
+            mask_new_resized = ri.resize_image(mask_new, ortho_old_rotated.shape)
+        else:
+            mask_new_resized = None
 
+        # find the number of cells in the x and y direction
+        n_x = int(np.ceil(ortho_old_rotated.shape[1] / cell_size))
+        n_y = int(np.ceil(ortho_old_rotated.shape[0] / cell_size))
 
-            # find the tie points
-            tpd = ftp.TiePointDetector('lightglue', min_conf=min_conf)
-            tps, conf = tpd.find_tie_points(cell_new, cell_old,
-                                            mask2=cell_mask)
+        all_tps = []
+        all_conf = []
 
-            print(f"Found {tps.shape[0]} tie points in cell {i}, {j}")
+        # new tie point detector with higher required confidence
+        tpd = ftp.TiePointDetector('lightglue', min_conf=min_conf, tp_type=float)
 
-            if False:
-                di.display_images([cell_new, cell_old],
-                              tie_points=tps, tie_points_conf=conf)
+        # iterate over the cells
+        for i in range(n_x):
+            for j in range(n_y):
+                # get initial cell boundaries
+                x_min = i * cell_size
+                x_max = min((i + 1) * cell_size, ortho_old_rotated.shape[1])
+                y_min = j * cell_size
+                y_max = min((j + 1) * cell_size, ortho_old_rotated.shape[0])
 
-            # add the cell offset
-            tps[:, 0] += x_min
-            tps[:, 1] += y_min
-            tps[:, 2] += x_min
-            tps[:, 3] += y_min
+                # get initial old cell
+                cell_old = ortho_old_rotated[y_min:y_max, x_min:x_max]
+                cell_mask_old = mask_old_rotated[y_min:y_max, x_min:x_max]
 
-            all_tps.append(tps)
-            all_conf.append(conf)
+                if np.sum(cell_mask_old) == 0:
+                    #print("Old cell completely masked", i, j)
+                    continue
 
-    # concatenate the tie points
-    tps = np.concatenate(all_tps)
-    conf = np.concatenate(all_conf)
+                if np.sum(cell_old) == 0:
+                    #print("Old cell empty", i, j)
+                    continue
 
-    print(tps.shape[0])
+                # Find the number of leading/trailing rows and columns that are zero
+                top_zeros = np.argmax(np.any(cell_old != 0, axis=1))  # First non-zero row
+                bottom_zeros = np.argmax(np.any(cell_old[::-1] != 0, axis=1))  # First non-zero row from the bottom
+                left_zeros = np.argmax(np.any(cell_old != 0, axis=0))  # First non-zero column
+                right_zeros = np.argmax(np.any(cell_old[:, ::-1] != 0, axis=0))  # First non-zero column from the right
 
-    # find tie points
-    tps, conf = tpd.find_tie_points(ortho_new_resized, ortho_old_rotated,
-                              mask2=mask_rotated)
+                if top_zeros > bottom_zeros:
+                    y_min += top_zeros
+                    y_max += top_zeros
+                elif bottom_zeros > top_zeros:
+                    y_min -= bottom_zeros
+                    y_max -= bottom_zeros
+                else:
+                    # do nothing
+                    pass
 
-    print(f"Found {tps.shape[0]} tie points")
+                if left_zeros > right_zeros:
+                    x_min += left_zeros
+                    x_max += left_zeros
+                elif right_zeros > left_zeros:
+                    x_min -= right_zeros
+                    x_max -= right_zeros
+                else:
+                    # do nothing
+                    pass
+
+                # get the new cells with adapted values
+                cell_old = ortho_old_rotated[y_min:y_max, x_min:x_max]
+                cell_mask_old = mask_old_rotated[y_min:y_max, x_min:x_max]
+                cell_new = ortho_new_resized[:, y_min:y_max, x_min:x_max]
+                cell_mask_new = mask_new_resized[y_min:y_max, x_min:x_max]
+
+                # check if the cell is masked completely
+                if np.sum(cell_mask_new) == 0:
+                    #print("New cell completely masked", i, j)
+                    continue
+
+                # find the tie points
+                tps, conf = tpd.find_tie_points(cell_new, cell_old,
+                                                mask1=cell_mask_new,
+                                                mask2=cell_mask_old,
+                                                mask_final_tps=True)
+
+                print(f"Found {tps.shape[0]} tie points in cell {i}, {j}")
+
+                if False:
+                    di.display_images([cell_new, cell_old],
+                                      overlays=[cell_mask_new, cell_mask_old],
+                                        tie_points=tps, tie_points_conf=conf)
+
+                # skip if no tie points were found
+                if tps.shape[0] == 0:
+                    continue
+
+                # add the cell offset
+                tps[:, 0] += x_min
+                tps[:, 1] += y_min
+                tps[:, 2] += x_min
+                tps[:, 3] += y_min
+
+                all_tps.append(tps)
+                all_conf.append(conf)
+
+        # concatenate the tie points
+        tps = np.concatenate(all_tps)
+        conf = np.concatenate(all_conf)
+
+        print(f"Found {tps.shape[0]} tie points for nudged rotation {adapted_rotation}")
+
+        if tps.shape[0] == 0:
+            tps_per_rotation.append(np.zeros((0, 4)))
+            conf_per_rotation.append(np.zeros(0))
+        else:
+            tps_per_rotation.append(tps)
+            conf_per_rotation.append(conf)
+
+    # get rotation with most tps
+    max_idx = np.argmax([tps.shape[0] for tps in tps_per_rotation])
+    tps = tps_per_rotation[max_idx]
+    conf = conf_per_rotation[max_idx]
+    rot_mat = rot_mats[max_idx]
+    s_x_new, s_y_new = scale_factors[max_idx]
+
+    print("Final tie points:", tps.shape[0])
 
     if tps.shape[0] == 0:
         raise ValueError("No tie points found")
@@ -132,11 +203,6 @@ def find_gcps(dem_old, dem_new,
     # scale old points back
     tps[:,2] /= s_x_old
     tps[:,3] /= s_y_old
-
-    print(np.amin(tps[:, 0]), np.amax(tps[:, 0]))
-    print(np.amin(tps[:, 1]), np.amax(tps[:, 1]))
-    print(np.amin(tps[:, 2]), np.amax(tps[:, 2]))
-    print(np.amin(tps[:, 3]), np.amax(tps[:, 3]))
 
     # init variables for tp selection
     selected_tps, selected_conf = [], []
@@ -198,9 +264,10 @@ def find_gcps(dem_old, dem_new,
     # create np array from list
     tps = np.array(selected_tps)
 
-    #di.display_images([ortho_new, ortho_old], tie_points=tps, tie_points_conf=selected_conf)
-
     print(tps.shape[0], "tie points left after filtering")
+
+    if tps.shape[0] == 0:
+        raise ValueError("No tie points left after filtering")
 
     # get the modern elevation for the tie points
     x_coords_new = tps[:, 0].astype(int)

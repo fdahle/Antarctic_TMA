@@ -97,6 +97,10 @@ class TiePointDetector:
                         input_img2: np.ndarray,
                         mask1: Optional[np.ndarray] = None,
                         mask2: Optional[np.ndarray] = None,
+                        mask_base_tps: bool = True,
+                        mask_additional_tps: bool = True,
+                        mask_extra_tps: bool = True,
+                        mask_final_tps: bool = False,
                         save_path: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
         """
         Finds tie points between two input images, optionally using masks to limit the search area.
@@ -130,7 +134,7 @@ class TiePointDetector:
                 mask1[mask1 < 1] = 0
                 mask1 = mask1.astype(int)
 
-            if mask1.shape != input_img1.shape:
+            if mask1.shape != input_img1.shape[-2:]:
                 raise ValueError("Mask1 must have the same dimensions as input_img1")
 
         if mask2 is not None:
@@ -142,7 +146,7 @@ class TiePointDetector:
                 mask2[mask2 < 1] = 0
                 mask2 = mask2.astype(int)
 
-            if mask2.shape != input_img2.shape:
+            if mask2.shape != input_img2.shape[-2:]:
                 raise ValueError("Mask2 must have the same dimensions as input_img2")
 
         try:
@@ -157,7 +161,8 @@ class TiePointDetector:
                 tps, conf = self._perform_initial_matching(img1, img2)
 
                 # mask initial tie-points
-                tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
+                if mask_base_tps:
+                    tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
 
                 # display the initial tie-points
                 if self.display:
@@ -175,8 +180,9 @@ class TiePointDetector:
                     tps_additional, conf_additional = self._perform_additional_matching(img1, img2, tps)
 
                     # mask additional tie-points
-                    tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional,
-                                                                            mask1, mask2)
+                    if mask_additional_tps:
+                        tps_additional, conf_additional = self._mask_tie_points(tps_additional, conf_additional,
+                                                                                mask1, mask2)
 
                     # display the additional tie-points
                     if self.display:
@@ -203,14 +209,10 @@ class TiePointDetector:
                     tps_extra, conf_extra = self._perform_extra_matching(img1, img2, mask1, mask2, tps, conf)
 
                     # mask extra tie-points
-                    tps_extra, conf_extra = self._mask_tie_points(tps_extra, conf_extra, mask1, mask2)
+                    if mask_extra_tps:
+                        tps_extra, conf_extra = self._mask_tie_points(tps_extra, conf_extra, mask1, mask2)
 
-                    # path_extra_tps = "/data/ATM/papers/georef_paper/revision/extra_tps.npy"
-                    # path_extra_conf = "/data/ATM/papers/georef_paper/revision/extra_conf.npy"
-                    # np.save(path_extra_tps, tps)
-                    # np.save(path_extra_conf, conf)
-
-                    # display the additional tie-points
+                    # display the extra tie-points
                     if self.display:
                         style_config = {"title": f"{len(conf_extra)} extra Tie-points"}
                         di.display_images([img1, img2],
@@ -235,6 +237,10 @@ class TiePointDetector:
 
                 # apply outlier filter
                 tps, conf = self._filter_outliers(tps, conf)
+
+                # apply final masking
+                if mask_final_tps:
+                    tps, conf = self._mask_tie_points(tps, conf, mask1, mask2)
 
                 # average the tie-points for logical consistency
                 # (same tie-points pointing to different other tie-points are removed)

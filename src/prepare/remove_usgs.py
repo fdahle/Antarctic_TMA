@@ -3,7 +3,7 @@
 # Library imports
 import copy
 import numpy as np
-from paddleocr import PaddleOCR
+#from paddleocr import PaddleOCR
 from typing import Optional
 
 # Constants
@@ -11,7 +11,7 @@ LOGO_HEIGHT = 350  # in px
 USE_GPU = False   # should the GPU used for OCR
 
 # variables
-check_logo = True  # should a check be applied before removing the logo
+check_logo = False  # should a check be applied before removing the logo
 
 
 def remove_usgs(image: np.ndarray) -> Optional[np.ndarray]:

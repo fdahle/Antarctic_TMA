@@ -1,5 +1,5 @@
 """run the complete process to create a DEM from images with Agisoft"""
-import copy
+
 # Python imports
 import json
 import os
@@ -13,6 +13,7 @@ import geopandas as gpd
 import Metashape
 import numpy as np
 import pandas as pd
+import xdem
 from pyproj import CRS
 from shapely.geometry import Polygon
 from tqdm.auto import tqdm
@@ -36,6 +37,7 @@ import src.load.load_rema as lr
 import src.load.load_rock_mask as lrm
 import src.load.load_transform as lt
 import src.load.load_satellite as ls
+import src.other.misc.compress_tif_files as cotf
 import src.pointclouds.remove_outliers as ro
 import src.sfm_agi.other.create_tps_frame as ctf
 import src.sfm_agi.snippets.add_gcp_markers as agm
@@ -46,6 +48,7 @@ import src.sfm_agi.snippets.create_difference_dem as cdd
 import src.sfm_agi.snippets.create_matching_structure as cms  # noqa: SpellingInspection
 import src.sfm_agi.snippets.convert_ply_files as cpf
 import src.sfm_agi.snippets.extract_camera_params as ecp
+import src.sfm_agi.snippets.filter_gcps as fgcp
 import src.sfm_agi.snippets.find_gcps as fg
 import src.sfm_agi.snippets.find_tie_points_for_sfm as ftp
 import src.sfm_agi.snippets.georef_ortho as go
@@ -78,15 +81,17 @@ tp_tolerance = 0.5
 custom_markers = False  # if True, custom markers support the matching of Agisoft
 zoom_level_dem = 10  # in m
 use_gcp_mask = True  # filter ground control points with a mask
-mask_type = ["rock"]  # , "confidence"]  # "confidence" or "rock"
+mask_type = ["rock", "confidence", "slope"]  # "confidence" or "rock"
 rock_mask_type = "REMA"
 mask_resolution = 10
-min_gcp_confidence = 0.8
-max_gcp_error_px = 1
-max_gcp_error_m = 100
+min_gcp_confidence = 0.9
+gcp_accuracy_px = 5 # in px
+max_gcp_error_px = 0.5 # in px
+max_gcp_error_m = 50
+max_slope = 25   # for gcp mask and for correcting the dem
 mask_buffer = 10  # in pixels
 no_data_value = -9999
-interpolate = True  # intepolate values in MESH and DEM
+interpolate = True  # interpolate values in MESH and DEM
 
 # Other variables
 save_text_output = True  # if True, the output will be saved in a text file
@@ -96,7 +101,7 @@ absolute_mode = True  # if False, the execution stops after the relative steps
 auto_true_for_new = True  # new projects will have all steps set to True
 auto_display_true_for_new = True  # new projects will have all display steps set to True
 auto_debug_true_for_new = True  # new projects will have all debug steps set to True
-auto_cache_true_for_new = True  # new projects will have all cache steps set to True
+auto_cache_true_for_new = False  # new projects will have all cache steps set to True
 
 flag_display_steps = True  # an additional flag to enable/disable the display steps
 flag_debug_steps = True  # an additional flag to enable/disable the debug steps
@@ -119,7 +124,7 @@ STEPS = {
     "georef_ortho": False,
     "create_gcps": False,
     "load_gcps": False,
-    "check_gcps": False,
+    "filter_gcps": False,
     "build_depth_maps_absolute": False,
     "save_camera_params": False,
     "build_mesh_absolute": False,
@@ -129,9 +134,11 @@ STEPS = {
     "build_orthomosaic_absolute": False,
     "export_alignment": False,
     "build_confidence_absolute": False,
-    "build_difference_dem": True,
-    "correct_dem": True,
+    "build_difference_dem": False,
     "evaluate_dem": True,
+    "correct_dem": True,
+    "create_report": False,
+    "compress_images": False,
     "save_to_psql": False,
 }
 
@@ -155,7 +162,7 @@ CACHE_STEPS = {
     'save_masks': True,
     'use_masks': True,
     'save_tps': True,
-    'use_tps': True,
+    'use_tps': False,
     'save_bundler': True,
     'use_bundler': True,
     'save_rock_mask': True,
@@ -263,8 +270,6 @@ def run_agi(project_name: str, images_paths: list,
     # TEMP: set some steps to false
     print("TEMP: Disable 'save_tie_points")
     DISPLAY_STEPS["save_tie_points"] = False
-    STEPS["build_confidence_relative"] = False
-    STEPS["build_confidence_absolute"] = False
 
     # check if we have image
     if len(images_paths) == 0:
@@ -347,10 +352,11 @@ def run_agi(project_name: str, images_paths: list,
 
         dem_rel = None  # relative dem
         dem_abs = None  # absolute dem
-        dem_corr = None  # corrected (absolute) dem
+        dem_corrected = None  # corrected (absolute) dem
         dem_modern = None  # modern dem from rema
         ortho_rel = None  # relative ortho
         ortho_modern = None  # modern ortho from rema
+        ortho_abs = None
         point_cloud_rel = None  # relative point cloud
         point_cloud_abs = None  # absolute point cloud
         conf_arr_rel = None  # relative confidence array
@@ -358,6 +364,7 @@ def run_agi(project_name: str, images_paths: list,
         transform_rel = None  # the initial transform for relative mode
         transform_abs = None  # the final transform for absolute mode (improved with gcps)
         transform_modern = None  # the transform for the modern dem
+        transform_corrected = None
         best_rot = None  # best rotation of georef
         rock_mask = None  # rock mask for gcps
         bounding_box_rel = None  # relative bounding box
@@ -754,7 +761,7 @@ def run_agi(project_name: str, images_paths: list,
             # add the images to the temporary chunk
             chunk_temp.addPhotos(images_paths, progress=_print_progress)
 
-            # set the images to film cameras
+            # set the images to film cameras (required for finding fiducials)
             for camera in chunk_temp.cameras:
                 if camera.enabled is False:
                     continue
@@ -1787,7 +1794,7 @@ def run_agi(project_name: str, images_paths: list,
                                       save_path_transform=transform_path)
 
                 transform_georef = tpl[0]
-                bounds_georef = tpl[1]
+                # bounds_georef = tpl[1]
                 best_rot = tpl[2]
 
             if transform_georef is None:
@@ -1801,6 +1808,9 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Create GCPs")
             start_time = time.time()
+
+            # set expected accuracy of the markers in px
+            chunk.marker_projection_accuracy = gcp_accuracy_px
 
             # define output path in which gcp files are saved
             georef_fld = os.path.join(data_fld, "georef")
@@ -1874,7 +1884,7 @@ def run_agi(project_name: str, images_paths: list,
             if transform_rema != transform_modern:
                 raise ValueError("Transforms of DEM and Ortho are not identical")
 
-            # set path to gpcs
+            # set path to gcps
             gcp_path = os.path.join(georef_fld, "gcps.csv")
 
             if bounding_box_rel is None:
@@ -1891,7 +1901,8 @@ def run_agi(project_name: str, images_paths: list,
             if use_gcp_mask:
 
                 # define base mask (where nothing is masked)
-                gcp_mask = np.ones_like(dem_rel)
+                mask_modern = np.ones(ortho_modern.shape[-2:])
+                mask_rel = np.ones(dem_rel.shape)
 
                 # add rock mask
                 if "rock" in mask_type:
@@ -1920,14 +1931,8 @@ def run_agi(project_name: str, images_paths: list,
                     if np.sum(rock_mask) == 0:
                         print("WARNING: No rocks found in the rock mask")
 
-                    # resize rock mask to the gcp mask
-                    if rock_mask.shape != gcp_mask.shape:
-                        rock_mask = rei.resize_image(rock_mask,
-                                                     (gcp_mask.shape[0],
-                                                      gcp_mask.shape[1]))
-
-                    # set the mask to 0 where the rock mask is zero as well
-                    gcp_mask[rock_mask == 0] = 0
+                    # adapt mask based on rock mask
+                    mask_modern[rock_mask == 0] = 0
 
                 # add confidence mask
                 if "confidence" in mask_type:
@@ -1935,6 +1940,7 @@ def run_agi(project_name: str, images_paths: list,
                     # load the confidence array
                     if conf_arr_rel is None:
                         conf_arr_rel = li.load_image(output_path_conf_rel)
+                        conf_arr_rel[np.isnan(conf_arr_rel)] = 0
 
                     # check if the confidence array is existing
                     if conf_arr_rel is None:
@@ -1942,11 +1948,37 @@ def run_agi(project_name: str, images_paths: list,
                                          "Please create a confidence array first.")
 
                     # adapt mask based on confidence
-                    gcp_mask[conf_arr_rel < min_gcp_confidence] = 0
+                    mask_rel[conf_arr_rel < min_gcp_confidence] = 0
 
+                if "slope" in mask_type:
+
+                    # create base mask if not existing
+                    if mask_modern is None:
+                        mask_modern = np.ones(ortho_modern.shape[-2:])
+
+                    # pass the dem to xdem
+                    xdem_modern = xdem.DEM.from_array(dem_modern, transform_rema, crs=3031)
+
+                    # get slope
+                    slope = xdem.terrain.slope(xdem_modern)
+
+                    # create slope mask
+                    slope_mask = slope < max_slope
+                    slope_mask = slope_mask.data
+                    slope_mask = np.ma.getdata(slope_mask)
+
+                    # adapt mask based on confidence
+                    mask_modern[slope_mask == 0] = 0
+
+                # check if nothing is masked -> remove mask
+                if np.all(mask_modern == 1):
+                    mask_modern = None
+                if np.all(mask_rel == 1):
+                    mask_rel = None
             else:
-                # no mask is used
-                gcp_mask = None
+                # no masks are used
+                mask_modern = None
+                mask_rel = None
 
             # call snippet to export gcps
             gcp_df = fg.find_gcps(dem_rel, dem_modern,
@@ -1954,7 +1986,8 @@ def run_agi(project_name: str, images_paths: list,
                                   transform_modern,
                                   resolution, bounding_box_rel,
                                   rotation=best_rot,
-                                  mask=gcp_mask, no_data_value=no_data_value)
+                                  mask_old=mask_rel, mask_new=mask_modern,
+                                  no_data_value=no_data_value)
 
             if gcp_df.shape[0] == 0:
                 raise ValueError("No GCPs are found. Please check the orthophoto or "
@@ -1977,7 +2010,7 @@ def run_agi(project_name: str, images_paths: list,
             print("Load GCPs")
             start_time = time.time()
 
-            # set path to gpcs
+            # set path to gcps
             gcp_path = os.path.join(data_fld, "georef", "gcps.csv")
 
             # check if we have a gcp file
@@ -2056,100 +2089,21 @@ def run_agi(project_name: str, images_paths: list,
         projection_abs.crs = chunk.crs
 
         # remove some markers
-        if STEPS["check_gcps"]:
-            while True:
+        if STEPS["filter_gcps"]:
 
-                # init variables for the loop
-                all_markers_valid = True
-                valid_markers = 0
+            print("Filter GCPs")
+            start_time = time.time()
 
-                # get the errors of the gcps
-                for marker in chunk.markers:
-
-                    # check if the marker is enabled
-                    if marker.enabled is False:
-                        continue
-                    else:
-                        valid_markers += 1
-
-                    # check if marker is defined in 3D
-                    if not marker.position:
-                        print(marker.label + " is not defined in 3D, skipping...")
-                        continue
-
-                    # get the position of the marker
-                    position = marker.position
-
-                    # define variables for projection error
-                    proj_error_px = list()
-                    proj_error_m = list()
-                    proj_sq_sum_px = 0
-                    proj_sq_sum_m = 0
-
-                    # iterate over all cameras
-                    for camera in marker.projections.keys():
-                        if not camera.transform:
-                            continue  # skipping not aligned cameras
-
-                        # get marker name
-                        # image_name = camera.label
-
-                        # get real and estimate position (relative)
-                        proj = marker.projections[camera].coord  # noqa
-                        reproj = camera.project(position)
-
-                        # remove z coordinate from proj
-                        proj = Metashape.Vector([proj.x, proj.y])  # noqa
-
-                        # get real and estimate position (absolute)
-                        est = chunk.crs.project(
-                            chunk.transform.matrix.mulp(marker.position))
-                        ref = marker.reference.location
-
-                        if reproj is None or proj is None:
-                            continue
-
-                        # calculate px error
-                        error_norm_px = (reproj - proj).norm()
-                        proj_error_px.append(error_norm_px)
-                        proj_sq_sum_px += error_norm_px ** 2
-
-                        # calculate m error
-                        # .norm() method gives total error. Removing it gives X/Y/Z error
-                        error_norm_m = (est - ref).norm()  # noqa
-                        proj_error_m.append(error_norm_m)
-                        proj_sq_sum_m += error_norm_m ** 2
-
-                    if len(proj_error_px):
-                        error_px = math.sqrt(proj_sq_sum_px / len(proj_error_px))
-                        error_m = math.sqrt(proj_sq_sum_m / len(proj_error_m))
-                        # print(f"{marker.label} projection error: {error_px:.2f} px, {error_m:.2f} m")
-                    else:
-                        continue
-
-                    if error_px > max_gcp_error_px or error_m > max_gcp_error_m:
-                        marker.enabled = False
-                        all_markers_valid = False
-
-                if valid_markers == 0:
-                    raise Exception("No valid markers found. "
-                                    "Check the previous steps for completeness.")
-
-                if all_markers_valid:
-                    print(f"All markers are valid ({valid_markers}/{len(chunk.markers)}).")
-                    break
-                else:
-                    # update alignment and transform
-                    chunk.optimizeCameras()
-                    chunk.updateTransform()
-
-            # remove all markers that are not enabled
-            for marker in chunk.markers:
-                if marker.enabled is False:
-                    chunk.remove(marker)  # noqa
+            # filter gcps
+            fgcp.filter_gcps(chunk, max_gcp_error_px, max_gcp_error_m)
 
             # save the project
             doc.save()
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Filter GCPs - finished ({exec_time:.4f} s)")
+
 
         if STEPS["build_depth_maps_absolute"]:
 
@@ -2158,7 +2112,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # delete all existing depth maps
             for dm in chunk.depth_maps_sets:
-                chunk.remove(dm)
+                chunk.remove(dm)  # noqa
             doc.save()
 
             # arguments for building the depth maps
@@ -2188,10 +2142,10 @@ def run_agi(project_name: str, images_paths: list,
             center = chunk.region.center
             size = chunk.region.size
             rotate = chunk.region.rot
-            T = chunk.transform.matrix
+            transform = chunk.transform.matrix
 
             # Calculate corners of the bounding box
-            corners = [T.mulp(center + rotate * Metashape.Vector(  # noqa
+            corners = [transform.mulp(center + rotate * Metashape.Vector(  # noqa
                 [size[0] * ((i & 1) - 0.5), 0.5 * size[1] * ((i & 2) - 1),  # noqa
                  0.25 * size[2] * ((i & 4) - 2)])) for i in  # noqa
                        range(8)]  # noqa
@@ -2318,7 +2272,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # delete all existing meshes
             for model in chunk.models:
-                chunk.remove(model)
+                chunk.remove(model)  # noqa
             doc.save()
 
             # arguments for building the mesh
@@ -2447,7 +2401,7 @@ def run_agi(project_name: str, images_paths: list,
 
                 # delete all existing point clouds
                 for pc in chunk.point_clouds:
-                    chunk.remove(pc)
+                    chunk.remove(pc)  # noqa
                 doc.save()
 
                 # arguments for importing the point cloud
@@ -2487,7 +2441,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # delete all existing DEMs
             for elev in chunk.elevations:
-                chunk.remove(elev)
+                chunk.remove(elev)  # noqa
             doc.save()
 
             # set build parameters for the DEM
@@ -2554,7 +2508,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # delete all existing ortho-photos
             for ortho in chunk.orthomosaics:
-                chunk.remove(ortho)
+                chunk.remove(ortho)  # noqa
             doc.save()
 
             # arguments for building the orthomosaic
@@ -2701,13 +2655,43 @@ def run_agi(project_name: str, images_paths: list,
             if dem_abs is None:
                 dem_abs, transform_abs = li.load_image(output_path_dem_abs,
                                                        return_transform=True)
+
+            if ortho_abs is None:
+                ortho_abs = li.load_image(output_path_ortho_abs)
+
             # load the modern dem
             if dem_modern is None:
                 bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
-                dem_modern = lr.load_rema(bounds, auto_download=True)
+                dem_modern, transform_rema = lr.load_rema(bounds, return_transform=True,
+                                                          auto_download=True)
+            if ortho_modern is None:
+                bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
+                ortho_modern = ls.load_satellite(bounds, return_transform=False)
+
+            if rock_mask is None:
+                if rock_mask_type == "REMA":
+                    rock_mask = lrm.load_rock_mask(bounds, mask_resolution)  # noqa
+                elif rock_mask_type == "pixels":
+                    tst = "old"
+                    if tst == "modern":
+                        rock_mask = np.zeros_like(ortho_modern[0, :, :])
+                        condition = np.all((ortho_modern >= 40) & (ortho_modern <= 90), axis=0)  # noqa
+                        rock_mask[condition] = 1
+                    elif tst == "old":
+                        rock_mask = np.zeros_like(ortho_abs)
+                        rock_mask[ortho_abs < 50] = 1
+                        import src.display.display_images as di
+                        di.display_images([ortho_abs, ortho_abs], overlays=[rock_mask, None])
+                        rock_mask = rei.resize_image(rock_mask, ortho_modern.shape[-2:])
+                else:
+                    raise ValueError("Rock mask type not defined.")
+
+            # resize the old dem to the modern dem shape
+            dem_abs_resized = rei.resize_image(dem_abs, dem_modern.shape)
 
             # estimate the quality of the DEM
-            quality_dict = edq.estimate_dem_quality(dem_abs, dem_modern)
+            quality_dict = edq.estimate_dem_quality(dem_abs_resized, dem_modern,
+                                                    mask=rock_mask)
 
             print(quality_dict)
 
@@ -2730,10 +2714,15 @@ def run_agi(project_name: str, images_paths: list,
 
             # load the absolute dem
             if dem_abs is None:
+                print("  Load absolute DEM")
                 dem_abs, transform_abs = li.load_image(output_path_dem_abs,
                                                        return_transform=True)
 
+            if ortho_abs is None:
+                ortho_abs = li.load_image(output_path_ortho_abs)
+
             # load the modern dem
+            print("  Load REMA")
             bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
             dem_modern, transform_rema = lr.load_rema(bounds, auto_download=True, return_transform=True)
 
@@ -2760,23 +2749,26 @@ def run_agi(project_name: str, images_paths: list,
             if rock_mask_type == "REMA":
                 rock_mask = lrm.load_rock_mask(bounds, mask_resolution)
             elif rock_mask_type == "pixels":
-                rock_mask = np.zeros_like(ortho_modern[0, :, :])
-                condition = np.all((ortho_modern >= 40) & (ortho_modern <= 90), axis=0)
-                rock_mask[condition] = 1
+                tst = "old"
+                if tst == "modern":
+                    rock_mask = np.zeros_like(ortho_modern[0, :, :])
+                    condition = np.all((ortho_modern >= 40) & (ortho_modern <= 90), axis=0)  # noqa
+                    rock_mask[condition] = 1
+                elif tst == "old":
+                    rock_mask = np.zeros_like(ortho_abs)
+                    rock_mask[ortho_abs < 50] = 1
+                    rock_mask = rei.resize_image(rock_mask, ortho_modern.shape[-2:])
             else:
                 raise ValueError("Rock mask type not defined.")
 
-            # display the images
-            import src.display.display_images as di
-            di.display_images([ortho_modern, dem_modern], overlays=[rock_mask, rock_mask])
-
-            # correct the dem
-            dem_corrected, transform_corrected, max_slope = cd.correct_dem(
+            # correct the dem (with an adapted max_slope)
+            dem_corrected, transform_corrected, new_max_slope = cd.correct_dem(
                 dem_abs_resized, dem_modern,
                 transform_abs_resized, transform_rema,
                 modern_ortho=ortho_modern,
                 mask=rock_mask,
-                max_slope=30)
+                adapt_mask=True,
+                max_slope=max_slope)
 
             # resize back to the original shape
             dem_corrected = rei.resize_image(dem_corrected, old_shape)
@@ -2793,7 +2785,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # adapt output path
             output_path_dem_corr = output_path_dem_abs.replace(".tif",
-                                                               f"_{max_slope}.tif")
+                                                               f"_{new_max_slope}.tif")
 
             # save the corrected dem
             eti.export_tiff(dem_corrected, output_path_dem_corr,
@@ -2811,13 +2803,12 @@ def run_agi(project_name: str, images_paths: list,
             start_time = time.time()
 
             # load the corrected dem
-            if dem_corrected is None:
+            if dem_corrected is None or transform_corrected is None:
                 dem_corrected, transform_corrected = li.load_image(output_path_dem_corr,
                                                                    return_transform=True)
 
             # get the bounds of the corrected dem
-            bounds_corrected = cb.calc_bounds(transform_corrected,
-                                              dem_corrected.shape)
+            bounds_corrected = cb.calc_bounds(transform_corrected, dem_corrected.shape)
 
             # load the modern dem again (for corrected values)
             dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
@@ -2858,13 +2849,27 @@ def run_agi(project_name: str, images_paths: list,
                 dem_corrected, transform_corrected = li.load_image(output_path_dem_corr,
                                               return_transform=True)
 
+            # calculate the bounds of the corrected dem
             bounds_corrected = cb.calc_bounds(transform_corrected,
                                               dem_corrected.shape)
 
+            # load the modern dem
             dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
 
+            if rock_mask_type == "REMA":
+                rock_mask = lrm.load_rock_mask(bounds_corrected, mask_resolution)  # noqa
+            elif rock_mask_type == "pixels":
+                rock_mask = np.zeros_like(ortho_modern[0, :, :])
+                condition = np.all((ortho_modern >= 40) & (ortho_modern <= 90), axis=0)  # noqa
+                rock_mask[condition] = 1
+            else:
+                raise ValueError("Rock mask type not defined.")
+
+            # resize the old dem to the modern dem shape
+            dem_corrected_resized = rei.resize_image(dem_corrected, dem_modern.shape)
+
             # estimate the quality of the DEM
-            quality_dict = edq.estimate_dem_quality(dem_corrected, dem_modern,
+            quality_dict = edq.estimate_dem_quality(dem_corrected_resized, dem_modern,
                                                     rock_mask)
 
             print(quality_dict)
@@ -2880,6 +2885,38 @@ def run_agi(project_name: str, images_paths: list,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Evaluate corrected dem - finished ({exec_time:.4f} s)")
+
+        # create a report of the project
+        if STEPS["create_report"]:
+            print("Create report")
+            start_time = time.time()
+
+            # create a report of the project
+            report_path = os.path.join(project_fld, project_name + "_report.pdf")
+
+            # create the report
+            chunk.exportReport(report_path, title=project_name)
+
+            finish_time = time.time()
+            exec_time = finish_time - start_time
+            print(f"Create report - finished ({exec_time:.4f} s)")
+
+        # compress images in the 4 images folder
+        if STEPS["compress_images"]:
+
+            print(f"Compress images in '{img_folder}'")
+            cotf.compress_tif_files(img_folder, "jpeg", 90)
+
+            print(f"Compress images in 'enhanced_folder'")
+            cotf.compress_tif_files(enhanced_folder, "jpeg", 90)
+
+            mask_folder = os.path.join(data_fld, "masks_original")
+            print(f"Compress images in '{mask_folder}'")
+            cotf.compress_tif_files(mask_folder, "jpeg", 90)
+
+            adapted_mask_folder = os.path.join(data_fld, "masks_adapted")
+            print(f"Compress images in '{adapted_mask_folder}'")
+            cotf.compress_tif_files(adapted_mask_folder, "jpeg", 90)
 
         # save project attributes to psql
         if STEPS["save_to_psql"]:
@@ -2930,7 +2967,6 @@ class Tee:
         self.log.close()
         sys.stdout = self.terminal
         sys.stderr = self.terminal
-
 
 def _print_progress(val):
     print('Current task progress: {:.2f}%'.format(val))

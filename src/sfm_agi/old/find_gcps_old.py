@@ -137,7 +137,7 @@ def find_gcps(hist_dem: np.ndarray,
     print(hist_px_peaks.shape)
     print(modern_px_peaks.shape)
     hist_dem[hist_dem == no_data_value] = np.nan
-    hist_dem[hist_dem == np.nan] = np.nanmin(hist_dem)
+    hist_dem[np.isnan(hist_dem)] = np.nanmin(hist_dem)
 
     # scale modern dem to min and max of hist dem
     mean_historical = np.nanmean(hist_dem)

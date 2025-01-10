@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import streamlit as st
 
+# Must be called before any Streamlit UI elements
+st.set_page_config(layout="wide")
+
 # Local imports
 import base.connect_to_database as ctd  # noqa
 
@@ -24,7 +27,7 @@ debug_more_details = False
 debug_max_cutoff = 100
 
 
-def verify_psql(table, conn):
+def verify_psql(table, only_complete, conn):
 
     # special handling for multiple tables
     if table == "All tables":
@@ -49,6 +52,12 @@ def verify_psql(table, conn):
 
         # Get table data
         data = ctd.execute_sql(f"SELECT * FROM {table}", conn)
+
+        # filter for only complete flight-paths
+        if only_complete:
+            data = filter_complete(data, conn)
+
+        # get number of total entries
         table_results["total_entries"] = len(data)
 
         # Identifying missing entries
@@ -96,9 +105,53 @@ def compare_multiple_tables(conn):
 
     return return_dict
 
+def filter_complete(data, conn):
+
+    has_fl = False
+    if 'flight_path' in data.columns:
+        has_fl = True
+
+    # get flight path based on image_ids
+    if not has_fl:
+        data['flight_path'] = data['image_id'].str[2:6]
+
+    # get all flight paths
+    flight_paths = data['flight_path'].unique()
+
+    # get all flight path data from sql
+    sql_string = "SELECT * FROM flight_paths"  # noqa
+    fl_data = ctd.execute_sql(sql_string, conn)
+    fl_data['flight_path'] = fl_data['flight_path'].astype(int).astype(str).str.zfill(4)
+
+    # Create a dictionary to hold the min/max image numbers from data
+    flight_path_ranges = (
+        data.groupby('flight_path')['image_id']
+        .apply(lambda x: (x.str[-4:].astype(int).min(), x.str[-4:].astype(int).max()))
+        .to_dict()
+    )
+
+    # Filter out incomplete flight paths
+    complete_paths = []
+    for flight_path in flight_paths:
+
+        ref_min = fl_data.loc[fl_data['flight_path'] == flight_path, 'min_img_nr'].values[0]
+        ref_max = fl_data.loc[fl_data['flight_path'] == flight_path, 'max_img_nr'].values[0]
+        data_min, data_max = flight_path_ranges.get(flight_path, (None, None))
+
+        # Check if the min and max image numbers match the reference values
+        if data_min == ref_min and data_max == ref_max:
+            complete_paths.append(flight_path)
+
+    # Keep only the rows with complete flight paths
+    filtered_data = data[data['flight_path'].isin(complete_paths)]
+
+    # remove flight_path column if it was added
+    if not has_fl:
+        filtered_data = filtered_data.drop(columns=['flight_path'])
+
+    return filtered_data
 
 def plot_results():
-
     # establish connection to psql
     conn = ctd.establish_connection()
 
@@ -107,92 +160,135 @@ def plot_results():
     # Allow selection of tables dynamically based on the results
     selected_table = st.sidebar.selectbox("Select table", tables_to_check)
 
-    table_results = verify_psql(selected_table, conn)
-
-    # Determine grid size
-    if selected_table == "All tables":
-        print(table_results)
-        n = len(table_results["missing_ids"])
+    # checkbox for only completed flights
+    if selected_table != "All tables":
+        only_complete = st.sidebar.checkbox("Only complete flight-paths")
     else:
-        n = len(table_results["missing_entries"])
-    cols_in_grid = 5  # Number of columns in the grid
-    rows_in_grid = math.ceil(n / cols_in_grid)
+        only_complete = False  # Default to False when the checkbox is hidden
 
-    # Create the figure and axes
-    fig, axs = plt.subplots(rows_in_grid, cols_in_grid, figsize=(15, rows_in_grid * 3))
-    fig.subplots_adjust(hspace=0.4, wspace=0.4)  # Adjust space between plots
+    table_results = verify_psql(selected_table, only_complete, conn)
 
-    # Flatten the array of axes for easy iteration
-    axs = axs.ravel()
-
-    # content for all tables
+    # -- If multiple tables: ---------------------------------------------------
     if selected_table == "All tables":
         st.header("Multiple Tables")
 
+        # Show total unique IDs across all tables
+        st.write(f"**Sum of unique Image IDs across all tables:** {table_results['all_ids']}")
+
+        # Prepare the figure
+        n = len(table_results["missing_ids"])
+        cols_in_grid = 5  # Number of columns in the grid
+        rows_in_grid = math.ceil(n / cols_in_grid)
+        fig, axs = plt.subplots(rows_in_grid, cols_in_grid, figsize=(15, rows_in_grid * 3))
+        fig.subplots_adjust(hspace=0.4, wspace=0.4)
+        axs = axs.ravel()
+
+        # Plot fill rates for each table
         i = 0
-        for table, count in table_results["missing_ids"].items():
-            fill_rate = 100 - (count / table_results["all_ids"] * 100)
-
-            # Calculate color based on fill_rate
+        for table_name, missing_count in table_results["missing_ids"].items():
+            fill_rate = 100 - (missing_count / table_results["all_ids"] * 100)
             color = mcolors.to_hex([1 - fill_rate / 100, fill_rate / 100, 0])
 
-            axs[i].bar(table, fill_rate, color=color)
+            # Plot a single bar at x=0
+            axs[i].bar([0], [fill_rate], color=color)
             axs[i].set_ylim(0, 100)
-            axs[i].set_title(table)
-            axs[i].set_ylabel('% Filled')
-            axs[i].set_xticklabels([round(fill_rate, 1)])
 
-            axs[i].annotate(f'{fill_rate}%',
-                            xy=(0.5, fill_rate),  # Adjust x position to center
-                            xytext=(0, 10),  # 10 points vertical offset
-                            textcoords="offset points",
-                            ha='center', va='bottom')
-            i = i + 1
+            # Explicitly set the tick location and label
+            axs[i].set_xticks([0])
+            axs[i].set_xticklabels([table_name])
 
-    # content for specific table
+            # Set title or label with fill_rate
+            axs[i].set_title(f"{table_name}\nFilled: {fill_rate:.1f}%")
+
+            # Optional annotation
+            # axs[i].annotate(
+            #    f'{fill_rate:.1f}%',
+            #    xy=(0, fill_rate),
+            #    xytext=(0, 10),
+            #    textcoords="offset points",
+            #    ha='center',
+            #    va='bottom'
+            #)
+            i += 1
+
+        # Hide any unused axes
+        for ax in axs[n:]:
+            ax.set_visible(False)
+
+        plt.tight_layout()
+        st.pyplot(fig)
+        return
+
+    # -- If a single table is selected: ---------------------------------------
+    st.header(f"Analysis of Table: {selected_table}")
+
+    # Show total entries
+    total_entries = table_results["total_entries"]
+    st.write(f"**Total entries in '{selected_table}'**: {total_entries}")
+
+    # Double entries
+    st.subheader("Double Entries")
+    double_entries_count = table_results["double_entries"]["count"]
+    if double_entries_count > 0:
+        st.write(f"There are {double_entries_count} double entries.")
+        if debug_more_details:
+            image_ids = table_results["double_entries"]["image_ids"][:debug_max_cutoff]
+            st.write("Example double entry IDs:", image_ids)
+            if len(image_ids) == debug_max_cutoff:
+                st.write(f"List was cut off after {debug_max_cutoff} entries.")
     else:
+        st.write("There are no double entries.")
 
-        st.header("Double Entries")
+    # Missing entries
+    st.subheader("Missing Entries")
+    n = len(table_results["missing_entries"])
+    cols_in_grid = 5
+    rows_in_grid = math.ceil(n / cols_in_grid)
+    fig, axs = plt.subplots(rows_in_grid, cols_in_grid, figsize=(15, rows_in_grid * 3))
+    fig.subplots_adjust(hspace=0.4, wspace=0.4)
+    axs = axs.ravel()
 
-        if table_results["double_entries"]["count"] > 0:
-            st.write(f"There are {table_results['double_entries']['count']} double entries in the '{selected_table}' table.")
-            if debug_more_details:
-                image_ids = table_results["double_entries"]["image_ids"][:debug_max_cutoff]
-                st.write("Example double entry IDs:", image_ids)
-                if len(image_ids) == debug_max_cutoff:
-                    st.write(f"List was cut off after {debug_max_cutoff} entries.")
-        else:
-            st.write(f"There are no double entries in the '{selected_table}' table.")
+    for i, col in enumerate(table_results["missing_entries"]):
+        col_missing_info = table_results["missing_entries"][col]
+        fill_rate = 100 - col_missing_info["percentage"]
 
-        st.header("Missing Entries")
+        color = mcolors.to_hex([1 - fill_rate / 100, fill_rate / 100, 0])
+        axs[i].bar([0], [fill_rate], color=color)
+        axs[i].set_ylim(0, 100)
 
-        for i, col in enumerate(table_results["missing_entries"]):
-            fill_rate = 100 - table_results["missing_entries"][col]["percentage"]
+        # Set x-axis ticks and label
+        axs[i].set_xticks([0])
+        axs[i].set_xticklabels([col])  # Column name
 
-            # Calculate color based on fill_rate
-            color = mcolors.to_hex([1 - fill_rate / 100, fill_rate / 100, 0])
+        # Title showing fill percentage
+        axs[i].set_title(f"{col}\nFilled: {fill_rate:.1f}%")
 
-            axs[i].bar(col, fill_rate, color=color)
-            axs[i].set_ylim(0, 100)
-            axs[i].set_title(col)
-            axs[i].set_ylabel('% Filled')
-            axs[i].set_xticklabels([round(fill_rate, 1)])
+        # Annotate fill rate
+        # axs[i].annotate(
+        #    f'{fill_rate:.1f}%',
+        #    xy=(0, fill_rate),
+        #    xytext=(0, 10),
+        #    textcoords="offset points",
+        #    ha='center',
+        #    va='bottom'
+        #)
 
-            axs[i].annotate(f'{fill_rate}%',
-                            xy=(0.5, fill_rate),  # Adjust x position to center
-                            xytext=(0, 10),  # 10 points vertical offset
-                            textcoords="offset points",
-                            ha='center', va='bottom')
+        # You could also add annotation for "how many missing" vs. total:
+        missing_count = col_missing_info["count"]
+        axs[i].text(
+            0, fill_rate/2,
+            f"{missing_count} missing\n({col_missing_info['percentage']}%)",
+            ha='center',
+            va='center',
+            fontsize=8,
+            color='black'
+        )
 
-            # Interactive element to reveal missing IDs
-            #if st.button(f'Show missing IDs for {col}', key=f'button_{i}'):
-            #    missing_ids = ', '.join(table_results["missing_entries"][col]["image_ids"])
-            #    st.text_area(f"Missing IDs for {col}", missing_ids, height=100)
-
-    # Hide any unused axes if the number of plots is not a perfect fill of the grid
+    # Hide any unused axes
     for ax in axs[n:]:
         ax.set_visible(False)
 
+    plt.tight_layout()
     st.pyplot(fig)
 
 

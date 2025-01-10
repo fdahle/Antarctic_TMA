@@ -42,7 +42,8 @@ def load_rock_mask(bounds: list,
             raise Warning(f"Resolution is very low ({resolution})")
 
     # Load the shape data
-    rock_shape_data = lsd.load_shape_data(PATH_ROCK_MASK)
+    rock_shape_data = lsd.load_shape_data(PATH_ROCK_MASK,
+                                          bounding_box=bounds, verbose=False)
 
     # Unpack bounds and calculate grid dimensions
     min_x, min_y, max_x, max_y = bounds
@@ -65,8 +66,12 @@ def load_rock_mask(bounds: list,
     subset_gdf = subset_gdf.copy()  # To avoid potential SettingWithCopyWarning
     subset_gdf["geometry"] = subset_gdf["geometry"].intersection(bbox_geom)
 
-    import src.display.display_shapes as ds
-    ds.display_shapes(subset_gdf)
+    # remove all shapes with area over 1000000
+    subset_gdf = subset_gdf[subset_gdf["geometry"].area < 500000]
+
+    for poly in subset_gdf["geometry"]:
+        # print poly area
+        print(poly.area)
 
     if return_shapes:
 

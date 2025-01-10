@@ -13,7 +13,10 @@ METHOD = "lzw"
 QUALITY = 100
 
 
-def compress_tif_files(folder_path: str, compression_method: str = 'lzw', quality: int = 90) -> NoReturn:
+def compress_tif_files(folder_path: str,
+                       compression_method: str = 'lzw',
+                       quality: int = 90,
+                       verbose:bool =  False) -> NoReturn:
     """
     Compresses all TIFF files in a given directory using specified compression method and quality.
 
@@ -31,8 +34,9 @@ def compress_tif_files(folder_path: str, compression_method: str = 'lzw', qualit
         Exception: Catches and ignores exceptions during image processing, logging failed attempts.
     """
 
-    print(f"Compress files in {folder_path} using "
-          f"{compression_method} with quality {quality}")
+    if verbose:
+        print(f"Compress files in {folder_path} using "
+              f"{compression_method} with quality {quality}")
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=Image.DecompressionBombWarning)
@@ -50,23 +54,17 @@ def compress_tif_files(folder_path: str, compression_method: str = 'lzw', qualit
                     # Open the TIF file
                     with Image.open(file_path) as img:
 
-                        # Check the compression method used in the TIFF file
-                        if 'compression' in img.tag_v2:
-                            current_compression = img.tag_v2['compression']
-                        else:
-                            current_compression = None
-
-                        # Determine if compression is needed based on the compression method and
-                        # current file compression
+                        # Get current compression type
+                        current_compression = img.tag_v2.get(259)  # 259 is the compression tag
                         compression_needed = True
-                        if compression_method.lower() == 'lzw' and \
-                                current_compression == TiffTags.COMPRESSION.TIFF_LZW:  # noqa
-                            compression_needed = False
-                        elif compression_method.lower() == 'jpeg' and \
-                                current_compression == TiffTags.COMPRESSION.JPEG:  # noqa
-                            compression_needed = False
 
-                        # compress the image
+                        # Check if the current compression matches the desired method
+                        if compression_method.lower() == 'lzw' and current_compression == 5:
+                            compression_needed = False  # 5 represents LZW compression
+                        elif compression_method.lower() == 'jpeg' and current_compression == 7:
+                            compression_needed = False  # 7 represents JPEG compression
+
+                        # Compress the image if needed
                         if compression_needed:
                             if compression_method.lower() == 'lzw':
                                 img.save(file_path, compression='tiff_lzw')
@@ -78,8 +76,10 @@ def compress_tif_files(folder_path: str, compression_method: str = 'lzw', qualit
                         else:
                             pbar.set_postfix_str(f"{filename} already compressed")
 
-                except (Exception,) as _:
+                except (Exception,) as e:
                     pbar.set_postfix_str(f"{filename} failed")
+                    print(e)
+                    continue
 
 
 if __name__ == "__main__":

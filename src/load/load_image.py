@@ -8,13 +8,13 @@ import warnings
 from affine import Affine
 from osgeo import gdal
 from rasterio.transform import Affine as RasterioAffine
-from typing import LiteralString, Union
+from typing import Union
 
-# Global constant for default image path
+# constant for default image path
 DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 
 
-def load_image(image_id: LiteralString | str | bytes,
+def load_image(image_id: str | bytes,
                image_path: str | None = None, image_type: str = "tif",
                driver: str = 'rasterio', return_transform: bool = False,
                catch: bool = False) -> Union[np.ndarray, tuple[np.ndarray,
@@ -101,7 +101,7 @@ def _read_image(absolute_image_path: str, driver: str) -> tuple[np.ndarray, Unio
             ds = rasterio.open(absolute_image_path, 'r')
             img = ds.read()
         except Exception as e:
-            print(absolute_image_path)
+            print("Error loading image from ", absolute_image_path)
             raise e
 
         # get transform from image

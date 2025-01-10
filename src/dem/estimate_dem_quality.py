@@ -13,9 +13,6 @@ PATH_ROCK_MASK = "/data/ATM/data_1/quantarctica/Quantarctica3/Geology/ADD/ADD_Ro
 def estimate_dem_quality(dem_abs, modern_dem=None,
                          mask=None):
 
-    # resize the historic dem to the modern dem
-    dem_abs = ri.resize_image(dem_abs, modern_dem.shape)
-
     # init quality dict
     quality_dict = {}
 
@@ -24,8 +21,9 @@ def estimate_dem_quality(dem_abs, modern_dem=None,
 
     # apply the mask
     if mask is not None:
+
         modern_dem[mask == 0] = np.nan
-        quality_dict = _calc_stats("rock", modern_dem, dem_abs, quality_dict)
+        quality_dict = _calc_stats("mask", modern_dem, dem_abs, quality_dict)
 
     # Convert all numpy float32 values in quality_dict to standard Python float
     quality_dict = {key: float(value) if isinstance(value, np.float32) else value for key, value in

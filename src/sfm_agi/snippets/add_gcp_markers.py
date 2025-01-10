@@ -75,9 +75,6 @@ def add_gcp_markers(chunk,
         # iterate over the cameras
         for camera in chunk.cameras:
 
-            # update progress bar
-            pbar.update(1)
-
             # get the camera label
             camera_label = camera.label
             cam_flight_path = camera_label[2:6]
@@ -96,6 +93,8 @@ def add_gcp_markers(chunk,
                     print(f"Skipping camera {camera_label}")
                 else:
                     pbar.set_postfix_str(f"Skipping camera {camera_label}")
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # check if camera is aligned
@@ -104,6 +103,8 @@ def add_gcp_markers(chunk,
                     print(f"No transform for camera {camera.label}")
                 else:
                     pbar.set_postfix_str("No transform for camera", camera.label)
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # project the point to the camera
@@ -115,6 +116,8 @@ def add_gcp_markers(chunk,
                     print(f"Projection for {camera.label} is invalid")
                 else:
                     pbar.set_postfix_str(f"Projection for {camera.label} is invalid")
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # get the x and y coordinates
@@ -136,6 +139,8 @@ def add_gcp_markers(chunk,
                     print(f"Projection for {camera.label} is negative ({x}, {y})")
                 else:
                     pbar.set_postfix_str(f"Projection for {camera.label} is negative ({x}, {y})")
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # skip too small values (y)
@@ -154,6 +159,8 @@ def add_gcp_markers(chunk,
                     print(f"Projection for {camera.label} is negative ({x}, {y})")
                 else:
                     pbar.set_postfix_str(f"Projection for {camera.label} is negative ({x}, {y})")
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # skip too big image (x)
@@ -172,6 +179,8 @@ def add_gcp_markers(chunk,
                     print(f"Projection for {camera.label} is outside the image ({x}, {y})")
                 else:
                     pbar.set_postfix_str(f"Projection for {camera.label} is outside the image ({x}, {y})")
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # skip too big image (y)
@@ -190,6 +199,8 @@ def add_gcp_markers(chunk,
                     print(f"Projection for {camera.label} is outside the image ({x}, {y})")
                 else:
                     pbar.set_postfix_str(f"Projection for {camera.label} is outside the image ({x}, {y})")
+                # update progress bar
+                pbar.update(1)
                 continue
 
             # check if the x,y would be masked
@@ -200,6 +211,8 @@ def add_gcp_markers(chunk,
                         print(f"Projection for {camera.label} is masked ({x}, {y})")
                     else:
                         pbar.set_postfix_str(f"Projection for {camera.label} is masked ({x}, {y})")
+                    # update progress bar
+                    pbar.update(1)
                     continue
 
             # marker must be created only once
@@ -237,6 +250,10 @@ def add_gcp_markers(chunk,
             skip_camera = False
             last_x = None
             last_y = None
+
+            # update progress bar
+            pbar.update(1)
+
 
     pbar.close()
 

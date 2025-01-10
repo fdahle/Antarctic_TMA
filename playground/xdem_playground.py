@@ -18,7 +18,7 @@ new_dem = lr.load_rema(bounds)
 
 import src.base.resize_image as ri
 new_dem = ri.resize_image(new_dem, old_dem.shape)
-new_dem[old_dem == np.nan] = np.nan
+new_dem[np.isnan(old_dem)] = np.nan
 
 import src.load.load_rock_mask as lrm
 rock_mask = lrm.load_rock_mask(bounds, return_shapes=True)

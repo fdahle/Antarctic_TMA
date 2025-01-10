@@ -5,7 +5,8 @@ from sklearn.decomposition import PCA
 # Debug variables
 debug_show_pointcloud = False
 
-def remove_outliers(point_cloud: o3d.geometry.PointCloud | np.ndarray) -> o3d.geometry.PointCloud | np.ndarray:
+def remove_outliers(point_cloud: o3d.geometry.PointCloud | np.ndarray) \
+        -> o3d.geometry.PointCloud | np.ndarray:
     """
     Removes outliers from a point cloud using Statistical Outlier Removal.
 

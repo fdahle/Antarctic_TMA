@@ -86,6 +86,8 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
                 gs_shapes.append(gpd.GeoSeries(shape))  # noqa
                 for item in shape:
                     geoms.append(item)
+            elif shape is None:
+                pass
             else:
                 raise ValueError("Invalid input shape type. Expected Shapely geometry, WKT string, or GeoDataFrame.")
 
@@ -96,8 +98,17 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
     if normalize:
         gs_shapes = _normalize_geometries(gs_shapes, min_x, min_y)
 
+        # flatten GeoSeries
+        flat_geoms = [geom for geo_series in gs_shapes for geom in geo_series.geometry]
+
+        # ensure all geoms are valid
+        valid_geoms = [geom for geom in flat_geoms if geom.is_valid]
+
+        # perform unary union
+        union = unary_union(valid_geoms)
+
         # update bounds after normalization
-        min_x, min_y, max_x, max_y = unary_union(gs_shapes).bounds
+        min_x, min_y, max_x, max_y = union.bounds
 
     # create figure on which the shapes will be plotted
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -143,7 +154,7 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
         plt.savefig(f"{save_path}.{save_type}", format=save_type)
         plt.close()  # Close the plot explicitly after saving to avoid displaying it
     else:
-
+        print("PLTSHOW")
         # If no save_path is provided, display the figure
         plt.show()
 

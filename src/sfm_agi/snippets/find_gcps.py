@@ -8,8 +8,8 @@ import src.base.rotate_image as roi
 import src.base.rotate_points as rp
 import src.display.display_images as di
 
-debug_display_all_tps = False
-debug_display_filtered_tps = False
+debug_display_cell_gcps = False
+debug_filter_empty_cells = False
 debug_display_final_gcps = False
 
 def find_gcps(dem_old, dem_new,
@@ -20,8 +20,8 @@ def find_gcps(dem_old, dem_new,
               mask_old=None, mask_new=None,
               min_conf=0.9,
               cell_size = 2500,
-              no_data_value=-9999):
-
+              no_data_value=-9999,
+              raise_error=True):
 
     if dem_old.shape != ortho_old.shape:
         print(dem_old.shape, ortho_old.shape)
@@ -42,7 +42,7 @@ def find_gcps(dem_old, dem_new,
     scale_factors = []
 
     # we want to try out to nudge the rotation a bit
-    for nudge in [0, 10, -10]:
+    for nudge in [-10, -5, 0, 5, 10]:
 
         # create adapted rotation
         adapted_rotation = rotation + nudge
@@ -147,12 +147,13 @@ def find_gcps(dem_old, dem_new,
                                                 mask2=cell_mask_old,
                                                 mask_final_tps=True)
 
-                print(f"Found {tps.shape[0]} tie points in cell {i}, {j}")
+                #print(f"Found {tps.shape[0]} tie points in cell {i}, {j}")
 
-                if False:
-                    di.display_images([cell_new, cell_old],
-                                      overlays=[cell_mask_new, cell_mask_old],
-                                        tie_points=tps, tie_points_conf=conf)
+                if debug_display_cell_gcps:
+                    if debug_filter_empty_cells and tps.shape[0] > 0:
+                        di.display_images([cell_new, cell_old],
+                                          overlays=[cell_mask_new, cell_mask_old],
+                                            tie_points=tps, tie_points_conf=conf)
 
                 # skip if no tie points were found
                 if tps.shape[0] == 0:
@@ -168,8 +169,12 @@ def find_gcps(dem_old, dem_new,
                 all_conf.append(conf)
 
         # concatenate the tie points
-        tps = np.concatenate(all_tps)
-        conf = np.concatenate(all_conf)
+        if len(all_tps) > 0:
+            tps = np.concatenate(all_tps)
+            conf = np.concatenate(all_conf)
+        else:
+            tps = np.zeros((0, 4))
+            conf = np.zeros(0)
 
         print(f"Found {tps.shape[0]} tie points for nudged rotation {adapted_rotation}")
 
@@ -187,10 +192,13 @@ def find_gcps(dem_old, dem_new,
     rot_mat = rot_mats[max_idx]
     s_x_new, s_y_new = scale_factors[max_idx]
 
-    print("Final tie points:", tps.shape[0])
-
     if tps.shape[0] == 0:
-        raise ValueError("No tie points found")
+        if raise_error:
+            raise ValueError("No tie points found")
+        else:
+            return np.zeros((0, 4))
+
+    print("Final tie points:", tps.shape[0])
 
     # scale points back
     tps[:,0] /= s_x_new

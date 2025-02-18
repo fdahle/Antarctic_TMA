@@ -4,7 +4,7 @@ import numpy as np
 import Metashape
 from tqdm import tqdm
 
-debug_print_mode = False
+debug_print_mode = True
 
 def add_gcp_markers(chunk,
                     markers,
@@ -58,6 +58,8 @@ def add_gcp_markers(chunk,
 
         # create 3d point
         point_3d = Metashape.Vector([row['x_rel'], row['y_rel'], row['z_rel']])  # noqa
+
+        print("Point created at ({}, {}, {})".format(row['x_rel'], row['y_rel'], row['z_rel']))
 
         # transform the point to local coordinates
         point_local = chunk.transform.matrix.inv().mulp(point_3d)

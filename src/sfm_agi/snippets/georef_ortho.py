@@ -25,10 +25,12 @@ def georef_ortho(ortho: np.ndarray,
                  lst_aligned: list[bool],
                  azimuth: int | None = None,
                  auto_rotate: bool = False,
-                 rotation_step: int = 20,
+                 rotation_step: int = 5,
                  max_size: int = 25000,  # in m
                  trim_image: bool = True,
                  min_nr_tps: int = 100,
+                 min_conf: float = 0.5,
+                 start_conf: float = 0.9,
                  tp_type: type = float,
                  only_vertical_footprints: bool =False,
                  save_path_ortho: str | None = None,
@@ -72,9 +74,13 @@ def georef_ortho(ortho: np.ndarray,
         ortho = copy.deepcopy(ortho)
         ortho = ortho[0, :, :]
 
+    # ensure confs are right
+    if min_conf > start_conf:
+        raise ValueError("min_conf must be smaller than start_conf")
+
     # init tie point detector
     tpd = ftp.TiePointDetector('lightglue',
-                               min_conf=0.5,
+                               min_conf=min_conf,
                                tp_type=tp_type,
                                verbose=True)
 
@@ -118,6 +124,9 @@ def georef_ortho(ortho: np.ndarray,
 
     # Filter footprints based on alignment
     aligned_footprints = [footprint for footprint, aligned in zip(footprints, lst_aligned) if aligned]
+
+    if len(aligned_footprints) == 0:
+        raise ValueError("No aligned footprints found")
 
     # Get the min and max for all footprints
     min_abs_x = min([footprint.bounds[0] for footprint in aligned_footprints])
@@ -235,6 +244,23 @@ def georef_ortho(ortho: np.ndarray,
     # convert points to absolute values
     absolute_points = np.array([sat_transform * tuple(point) for point in tps[:, 0:2]])
     tps[:, 0:2] = absolute_points
+
+    conf_val = start_conf
+
+    while conf_val > min_conf:
+
+        # remove tie points with low confidence
+        tps_filtered = tps[conf >= conf_val]
+
+        print(f"  - {tps_filtered.shape[0]} tie points left with confidence {round(conf_val, 2)}")
+
+        # check if we have enough points
+        if tps_filtered.shape[0] >= min_nr_tps:
+            break
+
+        conf_val -= 0.05
+
+    tps = tps_filtered
 
     # check if we have enough points
     if tps.shape[0] < min_nr_tps:

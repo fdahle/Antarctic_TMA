@@ -66,13 +66,13 @@ def estimate_fid_mark(image_id: str, key: str,
 
         # get all entries from the same flight and the same viewing direction
         sql_string = f"SELECT image_id, " \
-                     f"fid_mark_1_x, fid_mark_1_y, fid_mark_1_estimated " \
-                     f"fid_mark_2_x, fid_mark_2_y, fid_mark_2_estimated " \
-                     f"fid_mark_3_x, fid_mark_3_y, fid_mark_3_estimated " \
-                     f"fid_mark_4_x, fid_mark_4_y, fid_mark_4_estimated " \
-                     f"fid_mark_5_x, fid_mark_5_y, fid_mark_5_estimated " \
-                     f"fid_mark_6_x, fid_mark_6_y, fid_mark_6_estimated " \
-                     f"fid_mark_7_x, fid_mark_7_y, fid_mark_7_estimated " \
+                     f"fid_mark_1_x, fid_mark_1_y, fid_mark_1_estimated, " \
+                     f"fid_mark_2_x, fid_mark_2_y, fid_mark_2_estimated, " \
+                     f"fid_mark_3_x, fid_mark_3_y, fid_mark_3_estimated, " \
+                     f"fid_mark_4_x, fid_mark_4_y, fid_mark_4_estimated, " \
+                     f"fid_mark_5_x, fid_mark_5_y, fid_mark_5_estimated, " \
+                     f"fid_mark_6_x, fid_mark_6_y, fid_mark_6_estimated, " \
+                     f"fid_mark_7_x, fid_mark_7_y, fid_mark_7_estimated, " \
                      f"fid_mark_8_x, fid_mark_8_y, fid_mark_8_estimated " \
                      f"FROM images_fid_points WHERE image_id IN {str_data_ids}"
         fid_mark_data = ctd.execute_sql(sql_string, conn)

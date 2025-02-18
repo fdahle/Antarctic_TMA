@@ -19,7 +19,7 @@ PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded/"
 debug_display_images = False
 
 
-image_ids = ["CA214732V0030", "CA214732V0031", "CA214732V0032"]
+image_ids = ["CA173632V0009"]
 
 def rotate_images(image_ids=None):
 

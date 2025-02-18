@@ -5,6 +5,9 @@ import cv2
 import numpy as np
 import mahotas as mht
 
+import src.display.display_images as di
+
+DEBUG_SHOW_SIDEBARS = True
 
 def correct_image_orientation(image: np.ndarray,
                               image_path: str) ->\
@@ -66,6 +69,9 @@ def _check_sidebar(image: np.ndarray, subset_width: int = 300) -> bool:
     # make binary
     _, blurred_e = cv2.threshold(blurred_e, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     _, blurred_w = cv2.threshold(blurred_w, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    if DEBUG_SHOW_SIDEBARS:
+        di.display_images([blurred_e, blurred_w])
 
     # calculate homogeneity
     homog_e = mht.features.haralick(blurred_e).mean(0)[1]

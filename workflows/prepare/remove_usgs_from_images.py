@@ -1,4 +1,5 @@
 import os
+from tqdm import tqdm
 
 import src.prepare.remove_usgs as ru
 import src.load.load_image as li
@@ -7,17 +8,18 @@ import src.export.export_tiff as et
 # Constants
 PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded/"
 
-image_ids = ["CA214732V0030", "CA214732V0031", "CA214732V0032"]
-
 def remove_usgs_from_images(image_ids):
 
-    for image in image_ids:
+    for image in tqdm(image_ids, total=len(image_ids)):
 
         # define path to the image
         image_pth = os.path.join(PATH_IMAGE_FLD, image + ".tif")
 
         # load the image
-        image = li.load_image(image_pth)
+        try:
+            image = li.load_image(image_pth)
+        except:
+            continue
 
         # remove the logo
         image = ru.remove_usgs(image)

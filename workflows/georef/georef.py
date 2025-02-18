@@ -42,14 +42,21 @@ import src.load.load_transform as lt
 DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 
 # define input bounds or image ids
-INPUT_TYPE = "all"  # can be either "bounds" or "ids" or "all"
+INPUT_TYPE = "flight_path"  # can be either "bounds" or "ids" or "flight_path" or "all"
 BOUNDS = []  # min_x, min_y, max_x, max_y
-IMAGE_IDS = [""]
+IMAGE_IDS = []
+FLIGHT_PATHS = [1844] # , 2149, 2139, 2142, 2141, 2158, 2140, 1816, 1821]
+
+# 2159 auch gemacht !!!!
 
 # which type of geo-referencing should be done
 GEOREF_WITH_SATELLITE = False
 GEOREF_WITH_IMAGE = False
 GEOREF_WITH_CALC = True
+
+auto_reject=["CA164432V0040", "CA164432V0066", "CA212132V0078", "CA212132V0079", "CA181832V0005", "CA207432V0175",
+             "CA184332V0002", "CA184332V0008", "CA214232V0229", "CA196832V0141", "CA214032V0430", "CA216432V0236",
+             "CA216432V0238", "CA216332V0157"]
 
 # settings for sat
 MIN_COMPLEXITY = 0.05
@@ -59,12 +66,12 @@ VERIFY_IMAGE_POSITIONS = True
 DISTANCE_THRESHOLD = 100  # TODO UPDATE THIS!
 
 # settings for calc
-CALC_TYPES = ["sat"]
+CALC_TYPES = ["sat", "img"]
 
 # define if images of a certain type should be overwritten
 OVERWRITE_SAT = False
-OVERWRITE_IMG = False
-OVERWRITE_CALC = False
+OVERWRITE_IMG = True
+OVERWRITE_CALC = True
 
 # define if images with missing data should be done again
 RETRY_MISSING_SAT = True
@@ -342,44 +349,44 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 # clear the memory
                 torch.cuda.empty_cache()
 
-        # now that we have more images, verify the images again to check for wrong positions
-        if verify_image_positions:
+    # now that we have more images, verify the images again to check for wrong positions
+    if verify_image_positions:
 
-            # load footprint and ids of images that are already geo-referenced by satellite
-            path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
-            sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
+        # load footprint and ids of images that are already geo-referenced by satellite
+        path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
+        sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
 
-            # iterate all images
-            for image_id in tqdm(input_ids):
+        # iterate all images
+        for image_id in tqdm(input_ids):
 
-                # check if the id is in sat_shape_data
-                if image_id not in sat_shape_data['image_id'].tolist():
-                    continue
+            # check if the id is in sat_shape_data
+            if image_id not in sat_shape_data['image_id'].tolist():
+                continue
 
-                # get number of line footprints
-                num_line_footprints = sat_shape_data.loc[sat_shape_data['image_id'].str[2:6] ==
-                                                         image_id[2:6]].shape[0]
-                if num_line_footprints < 2:
-                    continue
+            # get number of line footprints
+            num_line_footprints = sat_shape_data.loc[sat_shape_data['image_id'].str[2:6] ==
+                                                     image_id[2:6]].shape[0]
+            if num_line_footprints < 2:
+                continue
 
-                footprint = sat_shape_data.loc[
-                    sat_shape_data['image_id'] == image_id].geometry.iloc[0]
-                line_footprints = sat_shape_data.loc[
-                    sat_shape_data['image_id'].str[2:6] == image_id[2:6]].geometry
+            footprint = sat_shape_data.loc[
+                sat_shape_data['image_id'] == image_id].geometry.iloc[0]
+            line_footprints = sat_shape_data.loc[
+                sat_shape_data['image_id'].str[2:6] == image_id[2:6]].geometry
 
-                valid_image = vip.verify_image_position(footprint, line_footprints, distance_threshold)
+            rejected = vip.verify_image_position(footprint, line_footprints, distance_threshold)
 
-                # set image to invalid if position is wrong
-                if not valid_image:
-                    # get datetime
-                    now = datetime.now()
-                    date_time_str = now.strftime("%d.%m.%Y %H:%M")
+            # set image to invalid if position is wrong
+            if rejected:
+                # get datetime
+                now = datetime.now()
+                date_time_str = now.strftime("%d.%m.%Y %H:%M")
 
-                    # TODO FIX TIMER
-                    processed_images_sat[image_id] = {"method": "sat", "status": "invalid",
-                                                      "reason": "position",
-                                                      "date": date_time_str}
-                    mc.modify_csv(csv_path_sat, image_id, "add", processed_images_sat[image_id], overwrite=True)
+                # TODO FIX TIMER
+                processed_images_sat[image_id] = {"method": "sat", "status": "invalid",
+                                                  "reason": "position",
+                                                  "date": date_time_str}
+                mc.modify_csv(csv_path_sat, image_id, "add", processed_images_sat[image_id], overwrite=True)
 
     # geo-reference with image
     if georef_with_image:
@@ -551,6 +558,8 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 now = datetime.now()
                 date_time_str = now.strftime("%d.%m.%Y %H:%M")
 
+                print(image_id, valid_image)
+
                 # save valid images
                 if valid_image:
 
@@ -612,10 +621,22 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         georeferenced_ids = []
 
         if "sat" in calc_types:
+
+            # load shapes
             path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
             sat_shape_data = lsd.load_shape_data(path_sat_shapefile)
             sat_shapes = sat_shape_data.geometry
             sat_ids = sat_shape_data['image_id'].tolist()
+
+            # load csv file
+            path_sat_csv = "/data/ATM/data_1/georef/sat_processed_images.csv"
+            sat_csv_data = pd.read_csv(path_sat_csv, delimiter=";")
+            valid_sat_csv_data = sat_csv_data[sat_csv_data['status'] != 'invalid']
+            valid_sat_ids = valid_sat_csv_data['id'].tolist()
+
+            # Filter sat_shapes and sat_ids to only include valid_sat_ids
+            sat_shapes = sat_shapes[sat_shape_data['image_id'].isin(valid_sat_ids)]
+            sat_ids = [sat_id for sat_id in sat_ids if sat_id in valid_sat_ids]
 
             georeferenced_footprints.extend(sat_shapes)
             georeferenced_ids.extend(sat_ids)
@@ -623,11 +644,72 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
         if "img" in calc_types:
             path_img_shapefile = "/data/ATM/data_1/georef/footprints/img_footprints.shp"
             img_shape_data = lsd.load_shape_data(path_img_shapefile)
-            img_shapes = img_shape_data.geometry
-            img_ids = img_shape_data['image_id'].tolist()
 
-            georeferenced_footprints.extend(img_shapes)
-            georeferenced_ids.extend(img_ids)
+            # Filter img_shapes and img_ids to only include IDs not already in georeferenced_ids
+            filtered_img_data = img_shape_data[~img_shape_data['image_id'].isin(georeferenced_ids)]
+
+            # Extend only with new IDs and shapes
+            filtered_img_shapes = filtered_img_data.geometry.tolist()
+            filtered_img_ids = filtered_img_data['image_id'].tolist()
+
+            georeferenced_footprints.extend(filtered_img_shapes)
+            georeferenced_ids.extend(filtered_img_ids)
+
+        # Verify image positions
+        if verify_image_positions:
+
+            final_ids = []
+            final_footprints = []
+
+            # load footprint and ids of images that are already geo-referenced by satellite
+            path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
+            shape_data = lsd.load_shape_data(path_sat_shapefile)
+            # load footprint and ids of images that are already geo-referenced by iamge
+            if "img" in calc_types:
+                path_img_shapefile = "/data/ATM/data_1/georef/footprints/img_footprints.shp"
+                img_shape_data = lsd.load_shape_data(path_img_shapefile)
+
+                # Merge the shapefiles, prioritizing satellite data
+                merged_shape_data = pd.concat([shape_data, img_shape_data], ignore_index=True)
+                shape_data = merged_shape_data.drop_duplicates(subset='image_id', keep='first')
+
+            if FLIGHT_PATHS is not None:
+                str_fps = [str(fp) for fp in FLIGHT_PATHS]
+                shape_data = shape_data[shape_data['image_id'].str[2:6].isin(str_fps)]
+
+            for image_id in georeferenced_ids:
+
+                # Check based on calc_types
+                if image_id not in shape_data['image_id'].tolist():
+                    continue
+
+                # get number of line footprints
+                num_line_footprints = shape_data.loc[shape_data['image_id'].str[2:6] ==
+                                                         image_id[2:6]].shape[0]
+                if num_line_footprints < 2:
+                    continue
+
+                footprint = shape_data.loc[
+                    shape_data['image_id'] == image_id].geometry.iloc[0]
+                line_footprints = shape_data.loc[
+                    shape_data['image_id'].str[2:6] == image_id[2:6]].geometry
+
+
+
+                rejected = vip.verify_image_position(footprint, line_footprints,
+                                                     distance_threshold, flight_path=image_id[2:6])
+
+                if image_id in auto_reject:
+                    rejected = True
+
+                if rejected is False:
+                    final_ids.append(image_id)
+                    final_footprints.append(footprint)
+                else:
+                    print(f"{image_id} rejected")
+
+            georeferenced_ids = final_ids
+            georeferenced_footprints = final_footprints
 
         # create a list of image_ids that do not have enough images to calculate the transform
         flight_path_not_enough_images = []
@@ -707,8 +789,8 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                     # the actual geo-referencing
                     transform, residuals, tps, conf = georef_calc.georeference(image, image_id,
                                                                                georeferenced_ids,
-                                                                            georeferenced_footprints)
-                except:
+                                                                               georeferenced_footprints)
+                except Exception as e:
                     transform = None
 
                 if type(transform) == str and transform == 'not_enough':
@@ -732,7 +814,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                     continue
 
                 # verify the geo-referenced image
-                valid_image, reason = vig.verify_image_geometry(image, transform)
+                valid_image, reason = vig.verify_image_geometry(image, transform, min_pixel_size = 0.05)
 
                 georef_time = round(time.time() - start)
 
@@ -858,13 +940,14 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
     path_transform = f"{DEFAULT_SAVE_FOLDER}/images/{georef_type}/{image_id}_transform.txt"
 
     # noinspection PyTypeChecker
+    print(path_transform)
     np.savetxt(path_transform, transform.reshape(3, 3), fmt='%.5f')
 
     # save the points, conf and residuals
     path_points = f"{DEFAULT_SAVE_FOLDER}/images/{georef_type}/{image_id}_points.txt"
     tps_conf = np.concatenate([tps, conf.reshape(-1, 1), residuals.reshape((-1, 1))], axis=1)
-
     # noinspection PyTypeChecker
+    print(path_points)
     np.savetxt(path_points, tps_conf, fmt=['%i', '%i', '%.2f', '%.2f', '%.3f', '%.3f'])
 
     # calculate average values
@@ -888,6 +971,7 @@ def _save_results(georef_type: str, image_id: str, image: np.ndarray,
 
     # save footprint to shp file
     path_shp_file = f"{DEFAULT_SAVE_FOLDER}/footprints/{georef_type}_footprints.shp"
+
     eg.export_geometry(footprint, path_shp_file,
                        attributes=attributes, key_field="image_id",
                        overwrite_file=False,
@@ -915,8 +999,19 @@ if __name__ == "__main__":
         _conn = ctd.establish_connection()
         sql_string = "SELECT image_id FROM images"
         _input_ids = ctd.execute_sql(sql_string, _conn).image_id.tolist()
+
+    elif INPUT_TYPE == "flight_path":
+
+        if isinstance(FLIGHT_PATHS, str):
+            FLIGHT_PATHS = [FLIGHT_PATHS]
+
+        flight_paths_str = ", ".join([f"'{fp}'" for fp in FLIGHT_PATHS])
+
+        _conn = ctd.establish_connection()
+        sql_string = f"SELECT image_id FROM images WHERE SUBSTRING(image_id, 3, 4) IN ({flight_paths_str})"
+        _input_ids = ctd.execute_sql(sql_string, _conn).image_id.tolist()
     else:
-        raise ValueError("INPUT_TYPE must be either 'bounds', 'ids' or 'all'")
+        raise ValueError("INPUT_TYPE must be either 'bounds', 'flight_path', 'ids' or 'all'")
 
     # filter image ids for only vertical images
     _input_ids = [img_id for img_id in _input_ids if "V" in img_id]
@@ -931,11 +1026,15 @@ if __name__ == "__main__":
         else:
             return None
 
+    if len(_input_ids) == 0:
+        raise ValueError("No images found")
 
     _processed_images_sat = _load_processed_images("sat_processed_images.csv")
     _processed_images_adapted = _load_processed_images("adapted_processed_images.csv")
     _processed_images_img = _load_processed_images("img_processed_images.csv")
     _processed_images_calc = _load_processed_images("calc_processed_images.csv")
+
+    print(f"Georef {_input_ids}")
 
     # call the actual geo-referencing function
     georef(_input_ids,

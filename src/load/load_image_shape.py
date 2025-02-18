@@ -5,6 +5,7 @@ from typing import LiteralString
 
 # constant for default image path
 DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
+BACKUP_IMAGE_FLD = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 
 
 def load_image_shape(image_id: LiteralString | str | bytes,
@@ -45,6 +46,11 @@ def _create_absolute_path(image_id: str, fld: str, filetype: str) -> str:
 
     # create absolute image path
     absolute_image_path = os.path.join(fld, image_id)
+
+    if absolute_image_path.startswith(DEFAULT_IMAGE_FLD) and not os.path.isfile(absolute_image_path):
+
+        # Attempt to find the image in the backup folder
+        absolute_image_path = _create_absolute_path(image_id, BACKUP_IMAGE_FLD, filetype)
 
     # check if the path is valid
     if os.path.isfile(absolute_image_path) is False:

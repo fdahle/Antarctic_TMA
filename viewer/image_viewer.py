@@ -11,15 +11,15 @@ import src.load.load_image as li
 
 base_fld = "/data/ATM/"
 img_path = base_fld + "data_1/aerial/TMA/downloaded/"
+img_path_backup = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 #img_path = "/data/ATM/data_1/sfm/projects/EGU/images_orig"
 input_img_type = "tif"
 img_size = (800, 800)
 
-view_directions = ["V", "R", "L"]
+view_directions = ["V"]
 
-input_ids = []
-input_type = 'ids'
-#input_type = "flight_path"
+input_ids = [1681]
+input_type = "flight_path"
 
 shuffle = False
 debug_mode = False
@@ -64,12 +64,17 @@ class ImageViewer:
 
             # Get all files in the directory
             all_files = os.listdir(self.image_path)
+            all_files_backup = os.listdir(img_path_backup)
+
+            # merge the two lists and remove duplicates
+            all_files = list(set(all_files + all_files_backup))
 
             # Filter the files based on the prefixes
             self.input_ids = [os.path.splitext(f)[0] for f in all_files if any(f.startswith(prefix) for prefix in prefixes)]
 
         print(len(self.input_ids))
         print(self.input_type)
+        print(self.input_ids)
 
         # load input_ids
         if self.input_ids is None or len(self.input_ids) == 0:

@@ -3,7 +3,7 @@ import numpy as np
 import src.base.connect_to_database as ctd
 from tqdm import tqdm
 
-def update_table_rotation(overwrite=False):
+def update_image_azimuth(overwrite=False):
 
     conn = ctd.establish_connection()
 
@@ -54,4 +54,4 @@ def update_table_rotation(overwrite=False):
             nr_updated += 1
 
 if __name__ == "__main__":
-    update_table_rotation()
+    update_image_azimuth()

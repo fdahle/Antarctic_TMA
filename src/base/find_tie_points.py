@@ -135,7 +135,7 @@ class TiePointDetector:
                 mask1 = mask1.astype(int)
 
             if mask1.shape != input_img1.shape[-2:]:
-                raise ValueError("Mask1 must have the same dimensions as input_img1")
+                raise ValueError(f"Mask1 must have the same dimensions as input_img1 ({mask1.shape} vs {input_img1.shape})")
 
         if mask2 is not None:
 
@@ -147,7 +147,7 @@ class TiePointDetector:
                 mask2 = mask2.astype(int)
 
             if mask2.shape != input_img2.shape[-2:]:
-                raise ValueError("Mask2 must have the same dimensions as input_img2")
+                raise ValueError(f"Mask2 must have the same dimensions as input_img2 ({mask2.shape} vs {input_img2.shape})")
 
         try:
             # we handle the warnings ourselves -> ignore them

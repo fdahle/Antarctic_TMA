@@ -47,13 +47,13 @@ image_ids = [image_id.replace("'", "") for image_id in image_ids]
 """
 
 import src.sfm_agi.other.get_images_for_glacier as gifg
-glacier_name = "mapple"
+glacier_name = "Eden Glacier"
 image_ids, bounds = gifg.get_images_for_glacier(glacier_name,
                                                 return_bounds=True)
 print(bounds)
 
 # project settings
-project_name = "mapple"
+project_name = "Eden Glacier"
 overwrite = True
 resume = False
 
@@ -72,6 +72,7 @@ only_vertical = False
 
 # define the path to the image folders
 path_image_folder = "/data/ATM/data_1/aerial/TMA/downloaded"
+path_backup_folder = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 georef_table = "images_extracted"
 
 # check if we have at least 3 images
@@ -126,9 +127,9 @@ data = data.dropna(subset=['position_exact', 'footprint_exact'])
 data['focal_length'] = data['image_id'].apply(lambda x: lmfl.load_military_focal_length(x, None, conn))
 
 # replace all values with focal length of 154.25
-data['focal_length'] = 154.25
-print(data['focal_length'])
-print("WAAAAAAAAAAAARNING")
+#data['focal_length'] = 154.25
+#print(data['focal_length'])
+#print("WAAAAAAAAAAAARNING")
 
 # print the number of images without focal length
 print(f"Number of images without focal length: {data['focal_length'].isnull().sum()}/{len(data)}")
@@ -220,6 +221,40 @@ accuracy_dict = None
 image_ids = data['image_id'].tolist()
 images_paths = [os.path.join(path_image_folder, image + ".tif") for image in image_ids]
 
+# check if the images are existing
+import os
+import shutil
+
+# Define paths
+path_image_folder = "/data/ATM/data_1/aerial/TMA/downloaded"
+backup_image_folder = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
+
+# List of image IDs (e.g., from your data)
+image_ids = data['image_id'].tolist()
+
+# Create a list with absolute paths
+images_paths = [os.path.join(path_image_folder, image + ".tif") for image in image_ids]
+
+# Check if the images exist, and copy them from the backup if necessary
+for image_path in images_paths:
+    if not os.path.isfile(image_path):
+        print(f"Image {image_path} does not exist. Checking backup...")
+
+        # Determine the corresponding path in the backup folder
+        relative_path = os.path.relpath(image_path, path_image_folder)
+        backup_image_path = os.path.join(backup_image_folder, relative_path)
+
+        if os.path.isfile(backup_image_path):
+            # Create directories if they don't exist
+            os.makedirs(os.path.dirname(image_path), exist_ok=True)
+
+            # Copy the image from the backup to the target folder
+            print(f"Copying image from backup: {backup_image_path} -> {image_path}")
+            shutil.copy2(backup_image_path, image_path)
+        else:
+            # Raise an error if the image doesn't exist in both locations
+            raise FileNotFoundError(f"Image {image_path} does not exist in the target or backup folder")
+
 # get image shapes for each image
 import src.load.load_image_shape as lis
 shapes_dict = {}
@@ -246,23 +281,48 @@ def _validate_shapes(shapes_dict):
         reference_shape = images[0][1]  # Use the shape of the first image as reference
         ref_height, ref_width = reference_shape
 
+        # iterate all images
         for image_id, shape in images:
+
+            # get base shape
             height, width = shape
+
+            # if the shape is the same, do nothing
             if abs(ref_height - height) == 0 and abs(ref_width - width) == 0:
                 # do nothing
                 pass
+
+            # if the shape is almost the same, resize the image
             elif abs(ref_height - height) < 5 and abs(ref_width - width) < 2:
 
-                # fix the image size
+                # get the images
                 import src.load.load_image as li
                 img = li.load_image(image_id)
-                import src.base.resize_image as ri
+
+                enhanced_pth = "/data/ATM/data_1/sfm/agi_data/enhanced/" + image_id + ".tif"
+                if os.path.isfile(enhanced_pth):
+                    img_enhanced = li.load_image(enhanced_pth)
+                else:
+                    img_enhanced = None
+
+                # define new shape
                 new_shape = (ref_height, ref_width)
+
+                # resize the images
+                import src.base.resize_image as ri
                 r_img = ri.resize_image(img, new_shape)
+                if img_enhanced is not None:
+                    r_img_enhanced = ri.resize_image(img_enhanced, new_shape)
+
+                # define save path
                 pth_img_folder = "/data/ATM/data_1/aerial/TMA/downloaded"
                 pth_img = os.path.join(pth_img_folder, image_id + ".tif")
+
+                # export the images
                 import src.export.export_tiff as et
                 et.export_tiff(r_img, pth_img, overwrite=True, use_lzw=True)
+                if img_enhanced is not None:
+                    et.export_tiff(r_img_enhanced, enhanced_pth, overwrite=True, use_lzw=True)
 
                 sql_string = f"UPDATE images_fid_points SET image_width={ref_width}, " \
                              f"image_height={ref_height} WHERE image_id='{image_id}'"

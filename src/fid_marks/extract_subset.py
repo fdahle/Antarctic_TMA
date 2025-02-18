@@ -15,7 +15,8 @@ FID_TYPE = 1
 CROP_FACTOR = 0.1
 
 
-DEBUG_SHOW_MULTI_DETECTIONS = False
+DEBUG_SHOW_CROP = True
+DEBUG_SHOW_MULTI_DETECTIONS = True
 
 def extract_subset(image: np.ndarray, key: str,
                    detector_path: Optional[str] = None, model_name: Optional[str] = None,
@@ -112,6 +113,9 @@ def extract_subset(image: np.ndarray, key: str,
     x_scale = orig_shape[1] / crop.shape[1]
     catch = False
 
+    if DEBUG_SHOW_CROP:
+        di.display_images([crop])
+
     try:
         # try to find the position of the fid marker
         detections = model(crop)
@@ -169,3 +173,20 @@ def extract_subset(image: np.ndarray, key: str,
     bounds = [x_left, x_right, y_top, y_bottom]
 
     return bounds
+
+
+if __name__ == "__main__":
+
+    id = "CA173632V0009"
+    keys = ['n', 'e', 's', 'w']
+
+    import src.load.load_image as li
+    img = li.load_image(id)
+
+    di.display_images([img])
+    import src.base.rotate_image as ri
+    img = ri.rotate_image(img, 180)
+
+    for key in keys:
+        bounds = extract_subset(img, key, refine_multiple=True)
+        print(bounds)

@@ -12,7 +12,7 @@ from typing import Optional, Tuple
 import src.georef.snippets.calc_transform as ct
 
 # debug plots
-debug_display_image_footprint = True
+debug_display_image_footprint = False
 print_debug = True
 
 
@@ -75,7 +75,7 @@ class GeorefCalc:
 
         # check if there are enough geo-referenced images to calculate a position
         if len(filtered_georef_ids) < self.min_nr_of_images:
-            print("Not enough images to calculate a position")
+            print(f"Not enough images to calculate a position ({len(filtered_georef_ids)} < {self.min_nr_of_images})")
             return None, None, None, None
 
         # Get the centroids of the footprints
@@ -94,24 +94,55 @@ class GeorefCalc:
         # calculate image position and footprint
         else:
             # derive the position of the image
-            image_position = self._derive_image_position(image_id, filtered_georef_ids,
+            image_position, line_poly, is_x_line = self._derive_image_position(image_id, filtered_georef_ids,
                                                          filtered_centers)
 
             image_footprint = self._derive_image_geometry(image_id, image_position,
                                                           filtered_georef_ids,
                                                           filtered_footprints)
 
+        # get minx and maxx of footprints
+        minx = min([footprint.bounds[0] for footprint in filtered_footprints])
+        maxx = max([footprint.bounds[2] for footprint in filtered_footprints])
+
+        # adapt min_x and max_x based on image_footprint
+        minx = min(minx, image_footprint.bounds[0])
+        maxx = max(maxx, image_footprint.bounds[2])
+
         if debug_display_image_footprint:
+
+            if is_x_line:
+                # For a more horizontal line: x is the independent variable.
+                x_vals = np.linspace(minx, maxx, 100)
+                y_vals = line_poly(x_vals)
+                pts = list(zip(x_vals, y_vals))
+            else:
+                # For a more vertical line: y is the independent variable.
+                # You may want to calculate miny and maxy from your footprints.
+                miny = min([footprint.bounds[1] for footprint in filtered_footprints] +
+                           [image_footprint.bounds[1]])
+                maxy = max([footprint.bounds[3] for footprint in filtered_footprints] +
+                           [image_footprint.bounds[3]])
+                y_vals = np.linspace(miny, maxy, 100)
+                x_vals = [line_poly(y) for y in y_vals]
+                pts = list(zip(x_vals, y_vals))
+
             style_config = {
-                'labels': [filtered_georef_ids, None, image_id, None],
-                'colors': ['blue', 'blue', 'red', 'red'],
+                'labels': [filtered_georef_ids, None, image_id, None, None],
+                'colors': ['blue', 'blue', 'red', 'red', 'gray'],
             }
+
+            # convert poly1d to shapely line
+            try:
+                from shapely.geometry import LineString
+                line = LineString(pts)
+            except:
+                line = None
 
             import src.display.display_shapes as ds
             ds.display_shapes([filtered_centers, filtered_footprints,
-                               image_position, image_footprint],
-                              style_config=style_config, normalize=True,
-                              save_path=f"/home/fdahle/Desktop/georef_test/{image_id}.png")
+                               image_position, image_footprint, line],
+                              style_config=style_config, normalize=True)
 
         # get corners from footprint excluding the repeated last point
         tps_abs = np.asarray(list(image_footprint.exterior.coords)[:-1])
@@ -129,6 +160,9 @@ class GeorefCalc:
         transform, residuals = ct.calc_transform(image, tps,
                                                  transform_method=self.transform_method,
                                                  gdal_order=self.transform_order)
+
+        if transform is None:
+            print("Transformation matrix could not be calculated")
 
         return transform, residuals, tps, conf
 
@@ -171,11 +205,17 @@ class GeorefCalc:
         x = [point.x for point in georeferenced_centers]
         y = [point.y for point in georeferenced_centers]
 
-        # Fit a line to these centers using polyfit for a degree 1 polynomial (linear fit)
-        line_fit = np.polyfit(x, y, 1)
+        range_x = max(x) - min(x)
+        range_y = max(y) - min(y)
 
-        # Create a line function from the fit
-        line_func = np.poly1d(line_fit)
+        if range_x > range_y:
+            print("Use x")
+            line_fit = np.polyfit(x, y, 1)
+            line_func = np.poly1d(line_fit)
+        else:
+            print("Use y")
+            line_fit = np.polyfit(y, x, 1)
+            line_func = lambda new_y: np.polyval(line_fit, new_y)
 
         # Calculate adjusted distances between consecutive points, considering their numerical IDs
         distances_adjusted = []
@@ -209,11 +249,11 @@ class GeorefCalc:
 
         # calculate the reference point and the next point
         if position_index == 0:
-            next_point = georeferenced_centers_sorted[1]
-            next_id = georeferenced_numbers_sorted[1]
+            next_point = georeferenced_centers_sorted[0]
+            next_id = georeferenced_numbers_sorted[0]
         elif position_index == len(georeferenced_centers_sorted):
-            prev_point = georeferenced_centers_sorted[-2]
-            prev_id = georeferenced_numbers_sorted[-2]
+            prev_point = georeferenced_centers_sorted[-1]
+            prev_id = georeferenced_numbers_sorted[-1]
         else:
             prev_point = georeferenced_centers_sorted[position_index - 1]
             prev_id = georeferenced_numbers_sorted[position_index - 1]
@@ -244,21 +284,13 @@ class GeorefCalc:
             ref_id = prev_id
             direction = 1
 
+        direction = 1 if image_nr <= ref_id else -1
+
         if print_debug:
             print("ref id", ref_id)
 
-        # sometimes we need to switch the direction
-        if x[0] > x[-1]:
-            if print_debug:
-                print("x0 bigger x1")
-            direction = -direction
-        else:
-            if print_debug:
-                print("x0 smaller x1")
-            direction = direction
-
-        if print_debug:
-            print("direction", direction)
+        #dx = georeferenced_centers_sorted[-1].x - georeferenced_centers_sorted[0].x
+        #dy = georeferenced_centers_sorted[-1].y - georeferenced_centers_sorted[0].y
 
         diff_ids = abs(image_nr - ref_id)
 
@@ -267,21 +299,23 @@ class GeorefCalc:
 
         distance_adjustment = avg_distance_adjusted * diff_ids
 
-        # Calculate the new position along the direction
-        new_coords = ref_coords + distance_adjustment * direction
-        new_x, new_y = new_coords
+        print("RANGE", range_x, range_y)
+
+        if range_x > range_y:
+            new_x = ref_coords[0] + direction * distance_adjustment # move along x
+            new_y = line_func(new_x)
+        else:
+            new_y = ref_coords[1] + direction * distance_adjustment
+            new_x = line_func(new_y)
 
         if print_debug:
             print("Distance adjustment", distance_adjustment)
-            print("New Coords:", new_coords)
-
-        # Adjust the y coordinate to ensure it is on the fitted line
-        new_y = line_func(new_x)
+            print("New Coords:", (new_x, new_y))
 
         # create shapely point
         calculated_point = Point(new_x, new_y)
 
-        return calculated_point
+        return calculated_point, line_func, range_x > range_y
 
     def _derive_image_geometry(self, image_id: str, image_center: Point, georeferenced_ids: list[str],
                                georeferenced_footprints: list[Polygon]) -> Polygon:

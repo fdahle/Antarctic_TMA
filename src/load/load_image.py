@@ -4,6 +4,7 @@
 import os
 import numpy as np
 import rasterio
+import shutil
 import warnings
 from affine import Affine
 from osgeo import gdal
@@ -12,7 +13,7 @@ from typing import Union
 
 # constant for default image path
 DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
-
+BACKUP_IMAGE_FLD = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 
 def load_image(image_id: str | bytes,
                image_path: str | None = None, image_type: str = "tif",
@@ -51,6 +52,7 @@ def load_image(image_id: str | bytes,
     image_id = image_id.decode() if isinstance(image_id, bytes) else image_id
     image_id = str(image_id)
 
+    # construct absolute path for the image
     absolute_image_path = _create_absolute_path(image_id, image_path, image_type)
 
     try:
@@ -82,6 +84,16 @@ def _create_absolute_path(image_id: str, fld: str, filetype: str) -> str:
 
     # create absolute image path
     absolute_image_path = os.path.join(fld, image_id)
+
+    if absolute_image_path.startswith(DEFAULT_IMAGE_FLD) and not os.path.isfile(absolute_image_path):
+
+        # Attempt to find the image in the backup folder
+        backup_image_path = _create_absolute_path(image_id, BACKUP_IMAGE_FLD, filetype)
+
+        print(f"Image not found at {absolute_image_path}. Attempting to load from backup at {backup_image_path}")
+
+        os.makedirs(os.path.dirname(absolute_image_path), exist_ok=True)
+        shutil.copy2(backup_image_path, absolute_image_path)
 
     # check if the path is valid
     if os.path.isfile(absolute_image_path) is False:

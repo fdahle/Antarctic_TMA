@@ -24,9 +24,21 @@ def angle_between_lines(line1: tuple[float, float, float, float],
     x3, y3 = line2[0], line2[1]
     x4, y4 = line2[2], line2[3]
 
-    # calc slope
-    slope1 = (y2 - y1) / (x2 - x1)
-    slope2 = (y4 - y3) / (x4 - x3)
+    # handle vertical lines
+    eps = 1e-8
+
+    dx1 = (x2 - x1)
+    dx2 = (x4 - x3)
+
+    if abs(dx1) < eps:
+        slope1= float('inf')
+    else:
+        slope1 = (y2 - y1) / (x2 - x1)
+
+    if abs(dx2) < eps:
+        slope2 = float('inf')
+    else:
+        slope2 = (y4 - y3) / (x4 - x3)
 
     # get the angle
     angle = math.atan2(slope2 - slope1, 1 + slope1 * slope2)
@@ -54,36 +66,106 @@ def angle_trans(theta: float) -> float:
     return delta
 
 
-def check_middle_line_through_center(line_1: tuple[int, int, int, int],
-                                     line_2: tuple[int, int, int, int],
-                                     x_circle: float, y_circle: float) -> bool:
+def check_middle_line_through_center(
+    line_1: tuple[int, int, int, int],
+    line_2: tuple[int, int, int, int],
+    x_circle: float,
+    y_circle: float,
+    margin: float = 10
+) -> tuple[bool, tuple[int, int, int, int]]:
     """
-    Check if the middle line between two given lines passes through a specified circle center.
+    Compute the angle bisector of the smaller angle formed by two lines (line_1, line_2).
+    Then create a 'middle line' from the circle center in that bisector direction.
+    Finally, check if the line is within some margin of the center.
+
     Args:
-        line_1 (tuple[int, int, int, int]): Coordinates of the first line [x1, y1, x2, y2].
-        line_2 (tuple[int, int, int, int]): Coordinates of the second line [x3, y3, x4, y4].
-        x_circle (float): X-coordinate of the circle's center.
-        y_circle (float): Y-coordinate of the circle's center.
+        line_1 (tuple[int, int, int, int]): First line [x1, y1, x2, y2].
+        line_2 (tuple[int, int, int, int]): Second line [x3, y3, x4, y4].
+        x_circle (float): X-coordinate of the circle center.
+        y_circle (float): Y-coordinate of the circle center.
+        margin (float): Max allowed distance from circle center to the bisector line.
+                        (Often not strictly necessary if the line starts at the center.)
+
     Returns:
-        bool: True if the middle line passes through the circle center, else False.
+        (bool, (x1, y1, x2, y2)):
+            A tuple where the first element indicates whether the middle line
+            passes near the circle center (within `margin`), and the second is
+            the 4-tuple of the bisecting line's coordinates.
     """
 
-    # get the middle line
-    mid_line, mid_angle = get_middle_line((line_1, line_2),
-                                          x_circle, y_circle)
+    # --- 1) Midpoints of each line ---
+    x1, y1, x2, y2 = line_1
+    x3, y3, x4, y4 = line_2
 
-    # get coefficients of the line
+    mx1, my1 = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    mx2, my2 = (x3 + x4) / 2.0, (y3 + y4) / 2.0
+
+    # --- 2) Direction vectors from center to each midpoint ---
+    v1 = np.array([mx1 - x_circle, my1 - y_circle], dtype=float)
+    v2 = np.array([mx2 - x_circle, my2 - y_circle], dtype=float)
+
+    # If either midpoint is too close to center, angle is ill-defined
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+    if norm_v1 < 1e-9 or norm_v2 < 1e-9:
+        # Return False, with some dummy line or original
+        return False, (int(x_circle), int(y_circle), int(x_circle), int(y_circle))
+
+    # Normalize
+    v1_u = v1 / norm_v1
+    v2_u = v2 / norm_v2
+
+    # --- 3) Angle between v1 and v2 ---
+    dot = np.dot(v1_u, v2_u)
+    # Clamp to avoid floating precision errors
+    dot = max(-1.0, min(1.0, dot))
+    angle = math.acos(dot)  # Radians
+
+    # If angle > 180° (π radians), the smaller angle is 2π - angle.
+    # We can pick the angle bisector accordingly:
+    if angle <= math.pi:
+        bisector = v1_u + v2_u  # smaller angle direct sum
+    else:
+        # They are >180°, so the "smaller angle" side is effectively the difference
+        bisector = v1_u - v2_u
+
+    # If the bisector is near zero, lines are nearly opposite
+    bisector_norm = np.linalg.norm(bisector)
+    if bisector_norm < 1e-9:
+        # No well-defined bisector
+        return False, (int(x_circle), int(y_circle), int(x_circle), int(y_circle))
+    bisector_u = bisector / bisector_norm
+
+    # --- 4) Create the 'middle line' from center outward in bisector direction ---
+    # We'll choose a length about the max of the two line distances from center
+    length = max(norm_v1, norm_v2)
+    x_end = x_circle + bisector_u[0] * length
+    y_end = y_circle + bisector_u[1] * length
+
+    mid_line = (
+        int(round(x_circle)), int(round(y_circle)),
+        int(round(x_end)),    int(round(y_end))
+    )
+
+    # --- 5) Check distance from circle center to that line within 'margin' ---
+    # Create a line from mid_line
     a = mid_line[1] - mid_line[3]
     b = mid_line[2] - mid_line[0]
-    c = mid_line[0] * mid_line[3] - mid_line[2] * mid_line[1]
+    c = mid_line[0]*mid_line[3] - mid_line[2]*mid_line[1]
 
-    if a == 0 and b == 0:
-        return False
-    d = np.abs(a * x_circle + b * y_circle + c) / np.sqrt(a ** 2 + b ** 2)
-    if d < 10:
-        return True
+    denom = math.sqrt(a*a + b*b)
+    if denom < 1e-9:
+        # Degenerate line
+        return False, mid_line
+
+    # Perp distance from (x_circle, y_circle) to line
+    dist_center = abs(a*x_circle + b*y_circle + c) / denom
+
+    # If it passes near center within margin
+    if dist_center <= margin:
+        return True, mid_line
     else:
-        return False
+        return False, mid_line
 
 
 def delete_short_lines(lines: list[tuple[int, int, int, int]],
@@ -109,6 +191,45 @@ def delete_short_lines(lines: list[tuple[int, int, int, int]],
 
     return lines
 
+def tip_points_outward(line1, line2, x_circle, y_circle):
+    """
+    Determine if the tip formed by line1 and line2 points away from the circle.
+
+    The method is:
+      1. Compute the intersection of line1 and line2.
+      2. For each line, choose the endpoint that is farthest from the circle center.
+      3. Check if the distance from the circle center to the intersection
+         is greater than the distances from the circle center to both chosen endpoints.
+
+    If yes, we say the tip is pointing in the good (outward) direction.
+    """
+    # Calculate intersection (tip) point.
+    ix, iy = intersection_of_lines(line1, line2)
+    if ix is None or iy is None:
+        return False  # Lines do not intersect; cannot form a tip.
+
+    # For a given line, pick the endpoint that is farther from the circle center.
+    def far_endpoint(line):
+        x1, y1, x2, y2 = line
+        d1 = (x1 - x_circle) ** 2 + (y1 - y_circle) ** 2
+        d2 = (x2 - x_circle) ** 2 + (y2 - y_circle) ** 2
+        if d1 >= d2:
+            return (x1, y1, d1)
+        else:
+            return (x2, y2, d2)
+
+    ep1 = far_endpoint(line1)  # (x, y, squared_distance)
+    ep2 = far_endpoint(line2)
+
+    # Compute the squared distance from the circle center to the intersection.
+    tip_dist_sq = (ix - x_circle) ** 2 + (iy - y_circle) ** 2
+
+    # Check if the intersection is further away from the circle center than the far endpoints.
+    if tip_dist_sq > ep1[2] and tip_dist_sq > ep2[2]:
+        return True
+    else:
+        return False
+
 
 def do_lines_form_tip(line_1: tuple[int, int, int, int],
                       line_2: tuple[int, int, int, int],
@@ -125,49 +246,57 @@ def do_lines_form_tip(line_1: tuple[int, int, int, int],
         bool: True if lines form a tip according to specified conditions, False otherwise.
     """
 
+    # 1. Get the intersection point of the two lines
     inter_x, inter_y = intersection_of_lines(line_1, line_2)
-
-    # lines do not intersect
     if inter_x is None or inter_y is None:
         return False
 
-    r_inner = int(r_circle / 1.7)
-    r_outer = int(r_circle / 1.4)
+    # 5. (Optional) Check that the lines are close enough to each other.
+    ls1 = LineString([(line_1[0], line_1[1]), (line_1[2], line_1[3])])
+    ls2 = LineString([(line_2[0], line_2[1]), (line_2[2], line_2[3])])
+    if ls1.distance(ls2) > 30:
+        return False
 
+    # 2. Get the angles of each line (in radians)
     angle_1 = get_angle(line_1)
     angle_2 = get_angle(line_2)
-
     if angle_1 is None or angle_2 is None:
         return False
 
-    # compute angle_diff
-    angle_diff = np.abs(angle_1 - angle_2)
-    if angle_diff > np.pi * 3 / 2:
-        angle_diff = np.pi * 2 - angle_diff
+    # 3. Compute the acute angle between the lines (the tip angle)
+    diff = abs(angle_1 - angle_2) % (2 * np.pi)
+    if diff > np.pi:
+        diff = 2 * np.pi - diff
+    # For lines the “tip” is the smaller angle between them:
+    tip_angle = diff if diff <= np.pi/2 else np.pi - diff
 
-    # convert lines to linestring to calculate the distance between the lines
-    x1, y1, x2, y2 = line_1
-    x3, y3, x4, y4 = line_2
+    # Use 40°–50° as acceptable tip angles (converted to radians)
+    deg_min = np.deg2rad(30)  # ~0.524
+    deg_max = np.deg2rad(50)  # ~0.873
 
-    # convert lines to linestring to check the distance between them
-    ls1 = LineString([(x1, y1), (x2, y2)])
-    ls2 = LineString([(x3, y3), (x4, y4)])
-    dist = ls1.distance(ls2)
-
-    # get XXXX
-    xy = (inter_x - x_circle) ** 2 + (inter_y - y_circle) ** 2
-
-    # get the middle line through center
-    mid_line_through_center = check_middle_line_through_center(line_1, line_2,
-                                                               x_circle, y_circle)
-
-    # final check if the lines form a tip or not
-    if 0.95 > angle_diff > 0.60 and \
-            dist < 60 and r_inner ** 2 < xy < r_outer ** 2 and \
-            mid_line_through_center is True:
-        return True
-    else:
+    """
+    import src.display.display_images as di
+    img = np.full((586, 458), 255, dtype=int)
+    img[0,0] = 0
+    di.display_images(img, lines=[[line_1, line_2]])
+    if not (deg_min < tip_angle < deg_max):
         return False
+    """
+
+    # 4. Check that the intersection is within an expected annulus around the center.
+    # (r_circle/1.7 and r_circle/1.4 are heuristic inner and outer radii)
+    dx = inter_x - x_circle
+    dy = inter_y - y_circle
+    dist_sq = dx**2 + dy**2
+    r_inner = r_circle / 1.7
+    r_outer = r_circle / 1.4
+    if not (r_inner**2 < dist_sq < r_outer**2):
+        return False
+
+    if tip_points_outward(line_1, line_2, x_circle, y_circle) is False:
+        return False
+
+    return True
 
 
 def get_angle(line: tuple[int, int, int, int]) -> Optional[float]:
@@ -275,6 +404,8 @@ def intersection_of_lines(line1: tuple[int, int, int, int],
         tuple[Optional[float], Optional[float]]: The intersection point (inter_x, inter_y).
                                                  Returns (None, None) if lines are parallel or identical.
     """
+
+    # ch
     x1, y1, x2, y2 = line1
     x3, y3, x4, y4 = line2
 

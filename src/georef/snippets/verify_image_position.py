@@ -12,13 +12,14 @@ from typing import List, Union
 import src.display.display_shapes as ds
 
 # Debug variables
-debug_plot_shapes = True
-debug_print_distance = True
+debug_plot_shapes = False
+debug_print_distance = False
 
 
 def verify_image_position(footprint: Union[Polygon, str],
                           line_footprints: List[Union[Polygon, str]],
-                          distance_percentage: int = 20) -> bool:
+                          distance_percentage: int = 20,
+                          flight_path="") -> bool:
     """
     Verifies if the given footprint's center is within a specified distance from a line fitted through
     the centers of a list of line footprints. The footprints can be provided as either Shapely Polygons
@@ -93,14 +94,12 @@ def verify_image_position(footprint: Union[Polygon, str],
         nearest_point_on_line = nearest_points(footprint_center, fitted_line)[1]
         shortest_line = LineString([footprint_center, nearest_point_on_line])
 
-        print(shortest_line.length, distance, global_average)
-
         style_config = {
-            "title": "Avg. Distance: {:.2f}, Distance: {:.2f}, "
-                     "Rejected: {}".format(avg_distance, distance, rejected),
+            "title": "{} Avg. Distance: {:.2f}, Distance: {:.2f}, "
+                     "Rejected: {}".format(flight_path, avg_distance, distance, rejected),
             "colors": ["green", "red", "gray", "black"]
         }
-        ds.display_shapes([footprint, line_footprints, fitted_line, shortest_line],
+        ds.display_shapes([line_footprints, footprint, fitted_line, shortest_line],
                           style_config=style_config)
 
     # Check if the distance is below the threshold

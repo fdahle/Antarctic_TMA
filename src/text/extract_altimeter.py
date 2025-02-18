@@ -1,6 +1,7 @@
 """extract an altimeter from an image"""
 
 # Library imports
+import sys
 import copy
 import cv2
 import dlib
@@ -23,16 +24,17 @@ PATH_TEMPLATES = "/data/ATM/data_1/machine_learning/dlib/altimeter/templates"
 matching_confidence_value = 20000000
 
 # Debugging
-debug_print = False
+debug_print = True
 debug_show_altimeter = False
 debug_show_binary = False
 debug_show_circle = False
+debug_show_masked = False
 debug_show_binarized = False
 debug_show_all_lines = False
 debug_show_long_lines = False
 debug_show_center_lines = False
 debug_show_special_lines = False  # show parallel & tip lines
-debug_show_pointer = False
+debug_show_pointer = True
 
 
 def extract_altimeter(image: np.ndarray,
@@ -50,6 +52,7 @@ def extract_altimeter(image: np.ndarray,
         or None if no altimeter is detected. If return_position is True, returns a tuple containing the height and the
         bounding box of the detected altimeter.
     """
+
     if debug_print:
         print("Estimate altimeter for image")
 
@@ -90,8 +93,14 @@ def extract_altimeter(image: np.ndarray,
     if debug_print:
         print(f"Circle located at {circle[0]} {circle[1]} with radius {circle[2]}")
 
+    # set everything outside the circle to nan
+    altimeter_masked = _mask_circle(altimeter, circle, 0)
+
+    if debug_show_masked:
+        di.display_images(altimeter_masked)
+
     # binarize the image with the circle
-    altimeter_binarized = _binarize_circle(altimeter, min_th + 15, 255)
+    altimeter_binarized = _binarize_circle(altimeter_masked, min_th + 20, 255)
 
     if debug_show_binarized:
         di.display_images([altimeter, altimeter_binarized])
@@ -140,37 +149,38 @@ def extract_altimeter(image: np.ndarray,
                           lines=[center_lines, non_center_lines],
                           style_config=style_config)
 
+    if debug_print:
+        print(f"Found {len(center_lines)} center lines and {len(non_center_lines)} non center lines")
+
     # select lines that are parallel or form a tip
-    parallel_lines, tip_lines = _select_lines(center_lines, non_center_lines, circle)
+    parallel_lines, tip_lines = _select_lines(altimeter, center_lines, non_center_lines, circle)
 
     if debug_print:
-        print(f"Found {len(center_lines)} center lines and {len(tip_lines)} tip lines")
+        print(f"Found {len(parallel_lines)} parallel lines and {len(tip_lines)} tip lines")
 
     if debug_show_special_lines:
-        # flatten tip lines
+        # flatten lines
+        display_parallel_lines = [inner for sublist in parallel_lines for inner in sublist]
         display_tip_lines = [inner for sublist in tip_lines for inner in sublist]
 
         style_config = {'title': 'Parallel Lines (left) & Tip Lines (right)',
                         'line_color': ['red', 'green']}
-        di.display_images([altimeter, altimeter], lines=[center_lines, display_tip_lines],
+        di.display_images([altimeter, altimeter],
+                          lines=[display_parallel_lines, display_tip_lines],
                           style_config=style_config)
 
     # for altimeter detection we need both center and tip lines
-    if parallel_lines is None or tip_lines is None:
+    if (tip_lines is None or len(tip_lines)== 0):
         if debug_print:
             print("Parallel or tip lines is None")
         return None if not return_position else (None, bounding_box)
 
     # filter parallel lines
-    correct_parallel_lines = _filter_parallel_lines(parallel_lines)
-
-    if len(tip_lines) == 0 or len(correct_parallel_lines) == 0:
-        if debug_print:
-            print("No tip or correct parallel lines found")
-        return None if not return_position else (None, bounding_box)
+    if len(parallel_lines) > 0:
+        parallel_lines = _filter_parallel_lines(parallel_lines)
 
     # get height from line
-    height = _lines2height(tip_lines, correct_parallel_lines, circle, altimeter)
+    height = _lines2height(tip_lines, parallel_lines, circle, altimeter)
 
     return height if not return_position else (height, bounding_box)
 
@@ -297,6 +307,41 @@ def _locate_circle(altimeter: np.ndarray) -> tuple[Optional[tuple[int, int, int]
     return None, None
 
 
+def _mask_circle(img: np.ndarray, circle: tuple[int, int, int], mask_val='auto') -> np.ndarray:
+    """
+    Masks everything outside of the detected circle with NaN.
+
+    Args:
+        img (np.ndarray): The input image.
+        circle (tuple[int, int, int]): The detected circle as (x, y, radius).
+
+    Returns:
+        np.ndarray: The masked image with values outside the circle set to NaN.
+    """
+    # Create a copy of the image to avoid modifying the original
+    masked_img = img.copy().astype(float)
+
+    # Get the circle parameters
+    x, y, radius = circle
+
+    # Create a grid of coordinates
+    yy, xx = np.ogrid[:img.shape[0], :img.shape[1]]
+
+    # Apply the circle equation (x-x0)^2 + (y-y0)^2 <= radius^2
+    mask = (xx - x) ** 2 + (yy - y) ** 2 <= radius ** 2
+
+    # auto calc mask value
+    if mask_val == 'auto':
+        # get median of content inside the mask
+        mask_val = np.nanmedian(img[mask])
+
+    # Set values outside the circle to NaN
+    masked_img[~mask] = mask_val
+
+
+    return masked_img
+
+
 def _find_lines(altimeter: np.ndarray) -> Optional[list[tuple[int, int, int, int]]]:
     """
     Finds lines in the altimeter image.
@@ -375,12 +420,13 @@ def _get_center_lines(circle: tuple[int, int, int],
 
     # merge lines together
     lines_center = snippets.merge_lines(lines_center)
-    # lines_non_center = snippets.merge_lines(lines_non_center)
+    #lines_non_center = snippets.merge_lines(lines_non_center)
 
     return lines_center, lines_non_center
 
 
-def _select_lines(selected_lines_center: list[tuple[int, int, int, int]],
+def _select_lines(altimeter,
+        selected_lines_center: list[tuple[int, int, int, int]],
                   selected_lines_non_center: list[tuple[int, int, int, int]],
                   circle: tuple[int, int, int]) -> tuple[list[tuple[int, int, int, int]],
                                                          list[tuple[int, int, int, int]]]:
@@ -401,7 +447,7 @@ def _select_lines(selected_lines_center: list[tuple[int, int, int, int]],
     y_circle = circle[1]
 
     # get parallel lines
-    parallel_lines = _pair_lines(selected_lines_center)
+    parallel_lines = _pair_lines(altimeter, selected_lines_center)
 
     # rearrange all lines once relative to the circle center
     rearranged_lines = [snippets.rearrange_line(line, x_circle, y_circle) for
@@ -449,40 +495,48 @@ def _lines2height(lines_tip: list[tuple[int, int, int, int]],
         print("Too many parallel lines found")
         return None
 
-    final_lines = []
-
     # get middle line of short
     inter_x, inter_y = snippets.intersection_of_lines(lines_tip[0][0], lines_tip[0][1])
     middle_line_short = [circle[0], circle[1], int(inter_x), int(inter_y)]
-    final_lines.append(middle_line_short)
+
+    print(lines_parallel)
 
     # get middle line of long
-    mid_x = int((lines_parallel[0][0] + lines_parallel[1][0]) / 2)
-    mid_y = int((lines_parallel[0][1] + lines_parallel[1][1]) / 2)
-    middle_line_long = [circle[0], circle[1], mid_x, mid_y]
-    final_lines.append(middle_line_long)
+    if len(lines_parallel) == 2:
+        mid_x = int((lines_parallel[0][0] + lines_parallel[1][0]) / 2)
+        mid_y = int((lines_parallel[0][1] + lines_parallel[1][1]) / 2)
+        middle_line_long = [circle[0], circle[1], mid_x, mid_y]
 
     # get height value for short pointer
     middle_angle_short = snippets.get_angle(middle_line_short)
     reading_short = int(10000 / (2 * np.pi) * middle_angle_short / 1000) * 1000  # only need to know how many thousands
 
     # get height value for long pointer
-    middle_angle_long = snippets.get_angle(middle_line_long)
-    reading_long = int(1000 / (2 * np.pi) * middle_angle_long / 100) * 100
+    if len(lines_parallel) == 2:
+        middle_angle_long = snippets.get_angle(middle_line_long)
+        reading_long = int(1000 / (2 * np.pi) * middle_angle_long / 100) * 100
+    else:
+        reading_long = 0
+        middle_line_long = None
 
     height = 10000 + reading_short + reading_long
 
-    # it is likely that a height below 17000 is above 20000
-    if height < 17000:
+    # it is likely that a height below 18000 is above 20000
+    if height < 18000:
         height += 10000
 
     if debug_show_pointer:
-        di.display_images(altimeter, lines=[final_lines])
+        print(middle_line_long)
+        style_config = {"title": 'Short Pointer (left) & Long Pointer (right)'}
+        di.display_images([altimeter],
+                          lines=[[middle_line_short, middle_line_long]],
+                          style_config=style_config)
 
     return height
 
 
-def _pair_lines(lines: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
+def _pair_lines(altimeter,
+                lines: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
     """
     Identifies pairs of parallel lines from the detected lines.
 
@@ -510,8 +564,11 @@ def _pair_lines(lines: list[tuple[int, int, int, int]]) -> list[tuple[int, int, 
                 distance = ls1.distance(ls2)
 
                 # If lines are close enough, consider them as parallel
-                if distance < 30:
+                if distance < 50:
                     parallel_lines.append([line1, line2])
+
+            #style_config={'title': f'angle: {angle}, distance: {distance}'}
+            #di.display_images([altimeter], lines=[[line1, line2]], style_config=style_config)
 
     return parallel_lines
 
@@ -556,7 +613,19 @@ def _binarize_circle(img: np.ndarray, min_th: int = 0, max_th: int = 255) -> np.
     """
     img = copy.deepcopy(img)
 
-    ret, o1 = cv2.threshold(img, min_th, max_th, cv2.THRESH_BINARY)
+    # 3) Convert circle_region to grayscale if needed
+    if len(img.shape) == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    if img.dtype != np.uint8:
+        # e.g. it might be float32 or something else; cast to uint8
+        img = np.clip(img, 0, 255).astype(np.uint8)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    img_eq = clahe.apply(img)
+
+    ret, o1 = cv2.threshold(img_eq, min_th, max_th, cv2.THRESH_BINARY)
+
     # Erosion & Dilation
     kernel1 = np.ones((3, 3), np.uint8)
     img_erosion = cv2.erode(o1, kernel1, iterations=2)

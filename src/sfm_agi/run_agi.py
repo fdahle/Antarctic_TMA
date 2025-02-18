@@ -1,5 +1,5 @@
 """run the complete process to create a DEM from images with Agisoft"""
-
+import copy
 # Python imports
 import json
 import os
@@ -7,13 +7,13 @@ import math
 import shutil
 import sys
 import time
+from datetime import datetime
 
 # Library imports
 import geopandas as gpd
 import Metashape
 import numpy as np
 import pandas as pd
-import xdem
 from pyproj import CRS
 from shapely.geometry import Polygon
 from tqdm.auto import tqdm
@@ -46,6 +46,7 @@ import src.sfm_agi.snippets.create_adapted_mask as cam
 import src.sfm_agi.snippets.create_confidence_array as cca
 import src.sfm_agi.snippets.create_difference_dem as cdd
 import src.sfm_agi.snippets.create_matching_structure as cms  # noqa: SpellingInspection
+import src.sfm_agi.snippets.create_slope_mask as csm
 import src.sfm_agi.snippets.convert_ply_files as cpf
 import src.sfm_agi.snippets.extract_camera_params as ecp
 import src.sfm_agi.snippets.filter_gcps as fgcp
@@ -84,24 +85,27 @@ use_gcp_mask = True  # filter ground control points with a mask
 mask_type = ["rock", "confidence", "slope"]  # "confidence" or "rock"
 rock_mask_type = "REMA"
 mask_resolution = 10
+min_gcp_required = 5
 min_gcp_confidence = 0.9
 gcp_accuracy_px = 5 # in px
 max_gcp_error_px = 0.5 # in px
 max_gcp_error_m = 50
-max_slope = 25   # for gcp mask and for correcting the dem
+max_slope_begin = 20
+max_slope_finish = 50
 mask_buffer = 10  # in pixels
 no_data_value = -9999
 interpolate = True  # interpolate values in MESH and DEM
 
 # Other variables
 save_text_output = True  # if True, the output will be saved in a text file
+save_to_psql = True
 save_commands = True  # if True, the arguments of the commands will be saved in a json file
 absolute_mode = True  # if False, the execution stops after the relative steps
 
 auto_true_for_new = True  # new projects will have all steps set to True
 auto_display_true_for_new = True  # new projects will have all display steps set to True
-auto_debug_true_for_new = True  # new projects will have all debug steps set to True
-auto_cache_true_for_new = False  # new projects will have all cache steps set to True
+auto_debug_true_for_new = False  # new projects will have all debug steps set to True
+auto_cache_true_for_new = True  # new projects will have all cache steps set to True
 
 flag_display_steps = True  # an additional flag to enable/disable the display steps
 flag_debug_steps = True  # an additional flag to enable/disable the debug steps
@@ -122,24 +126,24 @@ STEPS = {
     "build_orthomosaic_relative": False,
     "build_confidence_relative": False,
     "georef_ortho": False,
-    "create_gcps": False,
-    "load_gcps": False,
-    "filter_gcps": False,
-    "build_depth_maps_absolute": False,
-    "save_camera_params": False,
-    "build_mesh_absolute": False,
-    "build_pointcloud_absolute": False,
-    "clean_pointcloud_absolute": False,
-    "build_dem_absolute": False,
-    "build_orthomosaic_absolute": False,
-    "export_alignment": False,
-    "build_confidence_absolute": False,
-    "build_difference_dem": False,
+    "create_gcps": True,
+    "load_gcps": True,
+    "filter_gcps": True,
+    "build_depth_maps_absolute": True,
+    "save_camera_params": True,
+    "build_mesh_absolute": True,
+    "build_pointcloud_absolute": True,
+    "clean_pointcloud_absolute": True,
+    "build_dem_absolute": True,
+    "build_orthomosaic_absolute": True,
+    "export_alignment": True,
+    "build_confidence_absolute": True,
+    "build_difference_dem": True,
     "evaluate_dem": True,
     "correct_dem": True,
-    "create_report": False,
-    "compress_images": False,
-    "save_to_psql": False,
+    "create_report": True,
+    "compress_images": True,
+    "copy_to_external": True,
 }
 
 DEBUG_STEPS = {
@@ -159,10 +163,10 @@ DISPLAY_STEPS = {
 CACHE_STEPS = {
     'save_enhanced': True,
     'use_enhanced': True,
-    'save_masks': True,
-    'use_masks': True,
+    'save_masks': True,  # TODO: IMPLEMENT
+    'use_masks': True,  # TODO: IMPLEMENT
     'save_tps': True,
-    'use_tps': False,
+    'use_tps': True,
     'save_bundler': True,
     'use_bundler': True,
     'save_rock_mask': True,
@@ -210,6 +214,10 @@ def run_agi(project_name: str, images_paths: list,
 
     # create empty conn variable
     conn = None
+
+    # adapt project name
+    project_name = project_name.replace(" ", "_")
+    project_name = project_name.lower()
 
     # check some combination of settings
     if resume and overwrite:
@@ -268,7 +276,8 @@ def run_agi(project_name: str, images_paths: list,
             CACHE_STEPS[key] = False
 
     # TEMP: set some steps to false
-    print("TEMP: Disable 'save_tie_points")
+    print("TEMP: Disable 'save_key_points' & 'save_tie_points")
+    DISPLAY_STEPS["save_key_points"] = False
     DISPLAY_STEPS["save_tie_points"] = False
 
     # check if we have image
@@ -329,7 +338,18 @@ def run_agi(project_name: str, images_paths: list,
         path_log = os.path.join(log_fld, "log.txt")
         tee = Tee(path_log)
 
+    # create a steps file
+    steps_path = os.path.join(log_fld, "steps.txt")
+    if os.path.exists(steps_path) is False:
+        with open(steps_path, "w") as file:
+            file.write(project_name + "\n")
+
     try:
+
+        # required for the safe to sfm
+        status = ""
+        error_raised = False
+        status_message = ""
 
         # print a list of images
         print("Used Image ids:")
@@ -368,6 +388,9 @@ def run_agi(project_name: str, images_paths: list,
         best_rot = None  # best rotation of georef
         rock_mask = None  # rock mask for gcps
         bounding_box_rel = None  # relative bounding box
+        bounding_box_abs = None
+        quality_dict = None
+        quality_dict_corr = None
 
         # create the metashape project
         doc = Metashape.Document(read_only=False)  # noqa
@@ -752,6 +775,11 @@ def run_agi(project_name: str, images_paths: list,
             print("Create masks")
             start_time = time.time()
 
+            # save step
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: create_masks - {current_date_time}\n")
+
             # create temporary doc
             doc_temp = Metashape.Document(read_only=False)  # noqa
 
@@ -841,6 +869,11 @@ def run_agi(project_name: str, images_paths: list,
             # remove the temporary doc
             del doc_temp
 
+            # save step
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: create_masks - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Create masks - finished ({exec_time:.4f} s)")
@@ -854,6 +887,11 @@ def run_agi(project_name: str, images_paths: list,
 
             time.sleep(0.1)
             start_time = time.time()
+
+            # save step
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: union_masks - {current_date_time}\n")
 
             # adapt the path to the mask folder
             mask_folder = os.path.join(data_fld, "masks_adapted")
@@ -919,6 +957,11 @@ def run_agi(project_name: str, images_paths: list,
                 if idx == len(chunk.cameras) - 1:
                     pbar.set_postfix_str("Finished!")
 
+            # save step
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: union_masks - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Union masks - finished ({exec_time:.4f} s)")
@@ -934,6 +977,10 @@ def run_agi(project_name: str, images_paths: list,
 
             time.sleep(0.1)
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: enhance_photos - {current_date_time}\n")
 
             # create folder for the enhanced images
             if not os.path.exists(enhanced_folder):
@@ -997,6 +1044,10 @@ def run_agi(project_name: str, images_paths: list,
                 if idx == len(chunk.cameras) - 1:
                     pbar.set_postfix_str("Finished!")
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: enhance_photos - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Enhance photos - finished ({exec_time:.4f} s)")
@@ -1043,6 +1094,10 @@ def run_agi(project_name: str, images_paths: list,
             print("Match photos")
             time.sleep(0.1)
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: match_photos - {current_date_time}\n")
 
             if custom_matching:
 
@@ -1208,6 +1263,10 @@ def run_agi(project_name: str, images_paths: list,
                 if save_commands:
                     _save_command_args("matchPhotos", arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: match_photos - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Match photos - finished ({exec_time:.4f} s)")
@@ -1274,6 +1333,10 @@ def run_agi(project_name: str, images_paths: list,
             print("Align cameras")
             start_time = time.time()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: align_cameras - {current_date_time}\n")
+
             arguments = {
                 'reset_alignment': False,
                 'adaptive_fitting': True
@@ -1304,6 +1367,10 @@ def run_agi(project_name: str, images_paths: list,
                 raise Exception("No cameras are aligned")
 
             print(f"Aligned cameras: {num_aligned}/{num_cameras}")
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: align_cameras - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -1380,6 +1447,10 @@ def run_agi(project_name: str, images_paths: list,
             print("Build relative depth maps")
             start_time = time.time()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_depth_maps_relative - {current_date_time}\n")
+
             arguments = {}
 
             chunk.buildDepthMaps(**arguments)
@@ -1387,6 +1458,10 @@ def run_agi(project_name: str, images_paths: list,
             # save the arguments of the command
             if save_commands:
                 _save_command_args("buildDepthMaps_relative", arguments, argument_fld)
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_depth_maps_relative - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -1456,6 +1531,10 @@ def run_agi(project_name: str, images_paths: list,
             print("Build relative mesh")
             start_time = time.time()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_mesh_relative - {current_date_time}\n")
+
             arguments = {
                 'surface_type': Metashape.Arbitrary,
                 'interpolation': Metashape.EnabledInterpolation,
@@ -1482,6 +1561,10 @@ def run_agi(project_name: str, images_paths: list,
             if save_commands:
                 _save_command_args("exportMesh_relative", arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_mesh_relative - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build relative mesh - finished ({exec_time:.4f} s)")
@@ -1491,6 +1574,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build relative point cloud")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_pointcloud_relative - {current_date_time}\n")
 
             arguments = {
                 'point_colors': True,
@@ -1524,6 +1611,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportPointCloud_relative",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_pointcloud_relative - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build relative point cloud - finished ({exec_time:.4f} s)")
@@ -1533,6 +1624,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build relative DEM")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_dem_relative - {current_date_time}\n")
 
             arguments = {
                 'source_data': Metashape.DataSource.PointCloudData,
@@ -1593,6 +1688,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportDEM_relative",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_dem_relative - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build relative DEM - finished ({exec_time:.4f} s)")
@@ -1602,6 +1701,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build relative orthomosaic")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_orthomosaic_relative - {current_date_time}\n")
 
             # arguments for building the orthomosaic
             arguments = {
@@ -1663,6 +1766,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportOrthomosaic_relative",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_orthomosaic_relative - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build relative orthomosaic - finished ({exec_time:.4f} s)")
@@ -1671,6 +1778,10 @@ def run_agi(project_name: str, images_paths: list,
         if STEPS["build_confidence_relative"]:
             print("Build relative confidence array")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_confidence_relative - {current_date_time}\n")
 
             # load the dem
             if dem_rel is None:
@@ -1692,6 +1803,10 @@ def run_agi(project_name: str, images_paths: list,
             eti.export_tiff(conf_arr_rel, output_path_conf_rel,
                             transform=transform_rel, overwrite=True, use_lzw=True)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_confidence_relative - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build relative confidence array - finished ({exec_time:.4f} s)")
@@ -1706,6 +1821,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Georeference ortho-photo")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: georef_ortho - {current_date_time}\n")
 
             if os.path.exists(output_path_dem_rel) is False:
                 raise FileNotFoundError(f"DEM file does not exist "
@@ -1762,7 +1881,6 @@ def run_agi(project_name: str, images_paths: list,
             # create path for best rotation
             rot_path = os.path.join(georef_data_fld, "best_rot.txt")
 
-            # get the transform of dem/ortho (identical for both)
             transform_georef, bounds_georef, best_rot = go.georef_ortho(ortho_rel,
                                                                         image_ids,
                                                                         list(camera_footprints.values()),
@@ -1771,15 +1889,17 @@ def run_agi(project_name: str, images_paths: list,
                                                                         auto_rotate=True,
                                                                         trim_image=True,
                                                                         tp_type=tp_type,
+                                                                        min_conf=0.5,
+                                                                        start_conf=0.9,
                                                                         only_vertical_footprints = True,
                                                                         save_path_tps=ortho_tps_path,
                                                                         save_path_ortho=ortho_georef_path,
                                                                         save_path_rot=rot_path,
                                                                         save_path_transform=transform_path)
 
-            # try again with complete autorotate
+
+            # try again with complete autorotate (if azimuth was given)
             if transform_georef is None and azimuth is not None:
-                print("Try georef ortho again with complete autorotate")
                 tpl = go.georef_ortho(ortho_rel,
                                       image_ids,
                                       list(camera_footprints.values()),
@@ -1787,6 +1907,8 @@ def run_agi(project_name: str, images_paths: list,
                                       azimuth=None, auto_rotate=True,
                                       trim_image=True,
                                       tp_type=tp_type,
+                                      min_conf=0.5,
+                                      start_conf=0.9,
                                       only_vertical_footprints=True,
                                       save_path_tps=ortho_tps_path,
                                       save_path_ortho=ortho_georef_path,
@@ -1800,6 +1922,10 @@ def run_agi(project_name: str, images_paths: list,
             if transform_georef is None:
                 raise ValueError("Transform is not defined. Check the georef_ortho function.")
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: georef_ortho - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Georeference ortho-photo - finished ({exec_time:.4f} s)")
@@ -1808,6 +1934,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Create GCPs")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: create_gcps - {current_date_time}\n")
 
             # set expected accuracy of the markers in px
             chunk.marker_projection_accuracy = gcp_accuracy_px
@@ -1913,12 +2043,14 @@ def run_agi(project_name: str, images_paths: list,
 
                     if CACHE_STEPS["use_rock_mask"]:
                         if os.path.isfile(path_cached_rock_mask):
+                            print("Load cached rock mask")
                             rock_mask = li.load_image(path_cached_rock_mask)
                         else:
                             rock_mask = None
 
                     # calc the rock mask
-                    if rock_mask is None:
+                    if rock_mask is None or rock_mask.shape != mask_modern.shape:
+                        print("  Create rock mask")
                         rock_mask = lrm.load_rock_mask(bounds_georef,
                                                        mask_resolution,
                                                        mask_buffer=0)
@@ -1950,25 +2082,14 @@ def run_agi(project_name: str, images_paths: list,
                     # adapt mask based on confidence
                     mask_rel[conf_arr_rel < min_gcp_confidence] = 0
 
+                # add slope mask
                 if "slope" in mask_type:
 
-                    # create base mask if not existing
-                    if mask_modern is None:
-                        mask_modern = np.ones(ortho_modern.shape[-2:])
+                    global max_slope_begin
 
-                    # pass the dem to xdem
-                    xdem_modern = xdem.DEM.from_array(dem_modern, transform_rema, crs=3031)
-
-                    # get slope
-                    slope = xdem.terrain.slope(xdem_modern)
-
-                    # create slope mask
-                    slope_mask = slope < max_slope
-                    slope_mask = slope_mask.data
-                    slope_mask = np.ma.getdata(slope_mask)
-
-                    # adapt mask based on confidence
-                    mask_modern[slope_mask == 0] = 0
+                    base_mask_modern = copy.deepcopy(mask_modern)
+                    mask_modern = csm.create_slope_mask(dem_modern, transform_rema,
+                                                        mask_modern, max_slope_begin)
 
                 # check if nothing is masked -> remove mask
                 if np.all(mask_modern == 1):
@@ -1987,11 +2108,38 @@ def run_agi(project_name: str, images_paths: list,
                                   resolution, bounding_box_rel,
                                   rotation=best_rot,
                                   mask_old=mask_rel, mask_new=mask_modern,
-                                  no_data_value=no_data_value)
+                                  no_data_value=no_data_value,
+                                  raise_error=False)
 
-            if gcp_df.shape[0] == 0:
-                raise ValueError("No GCPs are found. Please check the orthophoto or "
+            if "slope" in mask_type:
+                while max_slope_begin <= max_slope_finish:
+
+                    # we found enough tie-points
+                    if gcp_df.shape[0] >= min_gcp_required:
+                        break
+
+                    # increase the slope
+                    max_slope_begin = max_slope_begin + 5
+
+                    # adapt new mask
+                    print(f"Create slope mask with {max_slope_begin}")
+                    mask_modern = copy.deepcopy(base_mask_modern)
+                    mask_modern = csm.create_slope_mask(dem_modern, transform_rema,
+                                                        mask_modern, max_slope_begin)
+
+                    gcp_df = fg.find_gcps(dem_rel, dem_modern,
+                                          ortho_rel, ortho_modern,
+                                          transform_modern,
+                                          resolution, bounding_box_rel,
+                                          rotation=best_rot,
+                                          mask_old=mask_rel, mask_new=mask_modern,
+                                          no_data_value=no_data_value,
+                                          raise_error=False)
+
+            if gcp_df.shape[0] < min_gcp_required:
+                raise ValueError("Too few GCPs are found. Please check the orthophoto or "
                                  "increase the mask buffer.")
+
 
             # Create labels (n x 1 array)
             num_points = gcp_df.shape[0]
@@ -2001,6 +2149,10 @@ def run_agi(project_name: str, images_paths: list,
 
             gcp_df.to_csv(gcp_path, sep=';', index=False, float_format='%.8f')
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: create_gcps - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Create GCPs - finished ({exec_time:.4f} s)")
@@ -2009,6 +2161,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Load GCPs")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: load_gcps - {current_date_time}\n")
 
             # set path to gcps
             gcp_path = os.path.join(data_fld, "georef", "gcps.csv")
@@ -2033,6 +2189,10 @@ def run_agi(project_name: str, images_paths: list,
             # "https://www.agisoft.com/forum/index.php?topic=10855.0"
             doc.save()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: load_gcps - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Load GCPs - finished ({exec_time:.4f} s)")
@@ -2041,6 +2201,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Export alignment")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: export_alignment - {current_date_time}\n")
 
             cam_fld = os.path.join(data_fld, "cameras")
             if not os.path.exists(cam_fld):
@@ -2056,6 +2220,10 @@ def run_agi(project_name: str, images_paths: list,
                     if camera.transform:
                         line = camera.label + ',' + ','.join(map(str, np.asarray(camera.transform).flatten())) + '\n'
                         f.write(line)
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: export_alignment - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2094,21 +2262,32 @@ def run_agi(project_name: str, images_paths: list,
             print("Filter GCPs")
             start_time = time.time()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: filter_gcps - {current_date_time}\n")
+
             # filter gcps
             fgcp.filter_gcps(chunk, max_gcp_error_px, max_gcp_error_m)
 
             # save the project
             doc.save()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: filter_gcps - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Filter GCPs - finished ({exec_time:.4f} s)")
-
 
         if STEPS["build_depth_maps_absolute"]:
 
             print("Build absolute depth maps")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_depth_maps_absolute - {current_date_time}\n")
 
             # delete all existing depth maps
             for dm in chunk.depth_maps_sets:
@@ -2128,6 +2307,10 @@ def run_agi(project_name: str, images_paths: list,
 
             # save the project
             doc.save()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_depth_maps_absolute - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2222,6 +2405,10 @@ def run_agi(project_name: str, images_paths: list,
             print("Save camera parameters")
             start_time = time.time()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: save_camera_params - {current_date_time}\n")
+
             # get the camera params
             camera_params = ecp.extract_camera_params(chunk)
 
@@ -2230,6 +2417,10 @@ def run_agi(project_name: str, images_paths: list,
 
             # save to csv
             camera_params.to_csv(camera_params_path, index=False)
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: save_camera_params - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2269,6 +2460,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute mesh")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_mesh_absolute - {current_date_time}\n")
 
             # delete all existing meshes
             for model in chunk.models:
@@ -2311,6 +2506,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportModel_absolute",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_mesh_absolute - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute mesh - finished ({exec_time:.4f} s)")
@@ -2320,6 +2519,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute point cloud")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_pointcloud_absolute - {current_date_time}\n")
 
             # build parameters for the point cloud
             arguments = {
@@ -2362,6 +2565,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportPointCloud_absolute",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_pointcloud_absolute - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute point cloud - finished ({exec_time:.4f} s)")
@@ -2380,6 +2587,10 @@ def run_agi(project_name: str, images_paths: list,
             else:
                 print("Clean absolute point cloud")
                 start_time = time.time()
+
+                with open(steps_path, "a") as file:
+                    current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    file.write(f"START: clean_pointcloud_absolute - {current_date_time}\n")
 
                 # load the point cloud
                 if point_cloud_abs is None:
@@ -2425,6 +2636,10 @@ def run_agi(project_name: str, images_paths: list,
 
                 doc.save()
 
+                with open(steps_path, "a") as file:
+                    current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    file.write(f"FINISHED: clean_pointcloud_absolute - {current_date_time}\n")
+
                 finish_time = time.time()
                 exec_time = finish_time - start_time
                 print(f"Clean absolute point cloud - finished ({exec_time:.4f} s)")
@@ -2438,6 +2653,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute DEM")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_dem_absolute - {current_date_time}\n")
 
             # delete all existing DEMs
             for elev in chunk.elevations:
@@ -2496,6 +2715,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportDEM_absolute",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_dem_absolute - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute DEM - finished ({exec_time:.4f} s)")
@@ -2505,6 +2728,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute orthomosaic")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_orthomosaic_absolute - {current_date_time}\n")
 
             # delete all existing ortho-photos
             for ortho in chunk.orthomosaics:
@@ -2560,6 +2787,10 @@ def run_agi(project_name: str, images_paths: list,
                 _save_command_args("exportOrthomosaic_absolute",
                                    arguments, argument_fld)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_orthomosaic_absolute - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute orthomosaic - finished ({exec_time:.4f} s)")
@@ -2568,9 +2799,19 @@ def run_agi(project_name: str, images_paths: list,
         if STEPS["build_dem_absolute"] and STEPS["build_orthomosaic_absolute"]:
             print("Align DEM and Ortho")
 
+            start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: align_dem_ortho - {current_date_time}\n")
+
             # align the images
             ai.align_images(output_path_ortho_abs, output_path_dem_abs,
                             output_path_ortho_abs, output_path_dem_abs)
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: align_dem_ortho - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2580,6 +2821,10 @@ def run_agi(project_name: str, images_paths: list,
         if STEPS["build_confidence_absolute"]:
             print("Build absolute confidence array")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_confidence_absolute - {current_date_time}\n")
 
             # load the absolute dem
             if dem_abs is None:
@@ -2601,6 +2846,10 @@ def run_agi(project_name: str, images_paths: list,
                             transform=transform_abs, overwrite=True,
                             use_lzw=True)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_confidence_absolute - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute confidence array - finished ({exec_time:.4f} s)")
@@ -2610,6 +2859,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute difference DEM")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_difference_dem - {current_date_time}\n")
 
             # load the absolute dem
             if dem_abs is None:
@@ -2642,6 +2895,10 @@ def run_agi(project_name: str, images_paths: list,
                             transform=transform_abs, overwrite=True,
                             no_data=np.nan, use_lzw=True)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_difference_dem - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute difference dem - finished ({exec_time:.4f} s)")
@@ -2650,6 +2907,10 @@ def run_agi(project_name: str, images_paths: list,
         if STEPS["evaluate_dem"]:
             print("Evaluate dem")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: evaluate_dem - {current_date_time}\n")
 
             # load the absolute dem
             if dem_abs is None:
@@ -2693,8 +2954,6 @@ def run_agi(project_name: str, images_paths: list,
             quality_dict = edq.estimate_dem_quality(dem_abs_resized, dem_modern,
                                                     mask=rock_mask)
 
-            print(quality_dict)
-
             # define the output path for the quality dict
             quality_path = os.path.join(output_fld,
                                         str(project_name + "_quality.json"))
@@ -2702,6 +2961,10 @@ def run_agi(project_name: str, images_paths: list,
             # export the quality dict to a json file
             with open(quality_path, 'w') as f:
                 json.dump(quality_dict, f, indent=4)  # noqa
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: evaluate_dem - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2711,6 +2974,10 @@ def run_agi(project_name: str, images_paths: list,
         if STEPS["correct_dem"]:
             print("Correct DEM")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: correct_dem - {current_date_time}\n")
 
             # load the absolute dem
             if dem_abs is None:
@@ -2768,7 +3035,7 @@ def run_agi(project_name: str, images_paths: list,
                 modern_ortho=ortho_modern,
                 mask=rock_mask,
                 adapt_mask=True,
-                max_slope=max_slope)
+                max_slope=max_slope_begin)
 
             # resize back to the original shape
             dem_corrected = rei.resize_image(dem_corrected, old_shape)
@@ -2792,6 +3059,10 @@ def run_agi(project_name: str, images_paths: list,
                             transform=transform_corrected, overwrite=True,
                             use_lzw=True, no_data=-9999)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: correct_dem - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Correct DEM - finished ({exec_time:.4f} s)")
@@ -2801,6 +3072,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Build absolute difference DEM (corrected)")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: build_difference_dem_corrected - {current_date_time}\n")
 
             # load the corrected dem
             if dem_corrected is None or transform_corrected is None:
@@ -2834,6 +3109,10 @@ def run_agi(project_name: str, images_paths: list,
                             overwrite=True, no_data=np.nan,
                             use_lzw=True)
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: build_difference_dem_corrected - {current_date_time}\n")
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Build absolute difference dem (corrected) - finished ({exec_time:.4f} s)")
@@ -2843,6 +3122,10 @@ def run_agi(project_name: str, images_paths: list,
 
             print("Evaluate corrected dem")
             start_time = time.time()
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: evaluate_dem_corrected - {current_date_time}\n")
 
             # load the corrected dem
             if dem_corrected is None:
@@ -2869,18 +3152,20 @@ def run_agi(project_name: str, images_paths: list,
             dem_corrected_resized = rei.resize_image(dem_corrected, dem_modern.shape)
 
             # estimate the quality of the DEM
-            quality_dict = edq.estimate_dem_quality(dem_corrected_resized, dem_modern,
+            quality_dict_corr = edq.estimate_dem_quality(dem_corrected_resized, dem_modern,
                                                     rock_mask)
 
-            print(quality_dict)
-
             # define the output path for the quality dict
-            quality_path = os.path.join(output_fld,
+            quality_path_corr = os.path.join(output_fld,
                                         project_name + "_quality_corrected.json")
 
             # export the quality dict to a json file
-            with open(quality_path, 'w') as f:
-                json.dump(quality_dict, f, indent=4)  # noqa
+            with open(quality_path_corr, 'w') as f:
+                json.dump(quality_dict_corr, f, indent=4)  # noqa
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: evaluate_dem_corrected - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2891,11 +3176,19 @@ def run_agi(project_name: str, images_paths: list,
             print("Create report")
             start_time = time.time()
 
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: create_report - {current_date_time}\n")
+
             # create a report of the project
             report_path = os.path.join(project_fld, project_name + "_report.pdf")
 
             # create the report
             chunk.exportReport(report_path, title=project_name)
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: create_report - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
@@ -2903,6 +3196,10 @@ def run_agi(project_name: str, images_paths: list,
 
         # compress images in the 4 images folder
         if STEPS["compress_images"]:
+
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"START: compress_images - {current_date_time}\n")
 
             print(f"Compress images in '{img_folder}'")
             cotf.compress_tif_files(img_folder, "jpeg", 90)
@@ -2918,23 +3215,93 @@ def run_agi(project_name: str, images_paths: list,
             print(f"Compress images in '{adapted_mask_folder}'")
             cotf.compress_tif_files(adapted_mask_folder, "jpeg", 90)
 
-        # save project attributes to psql
-        if STEPS["save_to_psql"]:
-            # if quality_dict is None:
-            #     raise ValueError("Quality dict must be created before saving to psql.")
+            with open(steps_path, "a") as file:
+                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                file.write(f"FINISHED: compress_images - {current_date_time}\n")
 
-            # sstd.save_sfm_to_db(project_name, quality_dict, images_paths)  # noqa
-
-            raise ValueError("Saving to psql is not implemented yet.")
-
+        if STEPS["copy_to_external"]:
+            pass
 
 
     except Exception as e:
         print("!!ERROR!!")
         print(e)
+
+        # set error flag
+        error_raised = True
+        status_message = str(e)
+
         if DEBUG_MODE:
             raise e
     finally:
+
+        # define path to save all parameters
+        output_path_params = os.path.join(output_fld, "params.json")
+
+        # create dict with the params
+        params = {
+            'project_name': project_name,
+            'gcp_accuracy': gcp_accuracy,
+            'azimuth': azimuth,
+            'absolute_bounds': absolute_bounds,
+            'epsg_code': epsg_code,
+            'overwrite': overwrite,
+            'resume': resume,
+            'fixed_focal_length': fixed_focal_length,
+            'use_rotations_only_for_tps': use_rotations_only_for_tps,
+            'pixel_size': pixel_size,
+            'resolution_rel': resolution_rel,
+            'resolution_abs': resolution_abs,
+            'matching_method': matching_method,
+            'min_overlap': min_overlap,
+            'step_range': step_range,
+            'custom_matching': custom_matching,
+            'min_tps': min_tps,
+            'max_tps': max_tps,
+            'min_tp_confidence': min_tp_confidence,
+            'tp_type': tp_type,
+            'tp_tolerance': tp_tolerance,
+            'custom_markers': custom_markers,
+            'zoom_level_dem': zoom_level_dem,
+            'use_gcp_mask': use_gcp_mask,
+            'mask_type': mask_type,
+            'rock_mask_type': rock_mask_type,
+            'mask_resolution': mask_resolution,
+            'min_gcp_required': min_gcp_required,
+            'min_gcp_confidence': min_gcp_confidence,
+            'gcp_accuracy_px': gcp_accuracy_px,
+            'max_gcp_error_px': max_gcp_error_px,
+            'max_gcp_error_m': max_gcp_error_m,
+            'max_slope_begin': max_slope_begin,
+            'max_slope_finish': max_slope_finish,
+            'mask_buffer': mask_buffer,
+            'no_data_value':no_data_value,
+            'interpolate':interpolate
+        }
+
+        # special case for tp_type
+        if params['tp_type'] is float:
+            params['tp_type'] = "float"
+        elif params['tp_type'] is int:
+            params['tp_type'] = "int"
+
+        # save the parameters of the project
+        with open(output_path_params, 'w') as f:
+            json.dump(params, f, indent=4, default=custom_serializer)  # noqa
+
+        if error_raised is False:
+            status = "finished"
+            status_message = ""
+        else:
+            status = "error"
+
+        # save to psql
+        if save_to_psql:
+            sstd.save_sfm_to_db(project_name, images_paths,
+                                bounding_box_abs, status, quality_dict, quality_dict_corr,
+                                status_message=status_message, conn=conn)
+
+        # close the text output
         if save_text_output:
             tee.close()  # noqa
 
@@ -3008,29 +3375,27 @@ def _save_command_args(method, args, output_fld):
         print("No commands to save for", method)
 
     # define path to save the command arguments
-    output_path = os.path.join(output_fld, f"{method}_args.json")
+    output_path_args = os.path.join(output_fld, f"{method}_args.json")
 
     # save the dict to a json file
-    with open(output_path, 'w') as f:
+    with open(output_path_args, 'w') as f:
         json.dump(args, f, indent=4)  # noqa
 
 
-if __name__ == "__main__":
-    sys_project_name = sys.argv[1]
-    sys_images = json.loads(sys.argv[2])
-    sys_camera_positions = json.loads(sys.argv[3])
-    sys_camera_accuracies = json.loads(sys.argv[4])
-    sys_camera_rotations = json.loads(sys.argv[5])
-    sys_camera_footprints = json.loads(sys.argv[6])
-    sys_camera_tie_points = json.loads(sys.argv[7])
-    sys_focal_lengths = json.loads(sys.argv[8])
-    sys_azimuth = json.loads(sys.argv[9])
-    sys_absolute_bounds = json.loads(sys.argv[10])
-    sys_overwrite = json.loads(sys.argv[11])
-    sys_resume = json.loads(sys.argv[12])
+def custom_serializer(obj):
+    """
+    Custom serializer for JSON encoding.
+    Converts non-serializable objects (e.g., sets, tuples) to serializable formats.
+    """
+    if isinstance(obj, set):  # Convert sets to lists
+        return list(obj)
+    elif hasattr(obj, '__dict__'):  # Convert objects with `__dict__` attribute to dicts
+        return obj.__dict__
+    elif isinstance(obj, type):  # Convert type objects to their string representation
+        return obj.__name__
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
-    run_agi(sys_project_name, sys_images, sys_camera_positions,
-            sys_camera_accuracies, sys_camera_rotations,
-            sys_camera_footprints, sys_camera_tie_points,
-            sys_focal_lengths, sys_azimuth, sys_absolute_bounds,
-            sys_overwrite, sys_resume)
+
+if __name__ == "__main__":
+
+    raise Exception("This script is not meant to be run as a standalone script. Please run 'start_agi'")

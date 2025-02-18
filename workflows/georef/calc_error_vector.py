@@ -3,10 +3,13 @@ from tqdm import tqdm
 
 import src.base.connect_to_database as ctd
 
-table = "images_extracted"
+table = "images_georef"
 overwrite=True
+flight_paths = [2163]
 
 def calc_error_vector():
+
+    nr_updated = 0
 
     # create connection to database
     conn = ctd.establish_connection()
@@ -18,6 +21,12 @@ def calc_error_vector():
                   f"ST_astext({table}.error_vector) AS error_vector "
                   f"FROM {table} JOIN images ON {table}.image_id = images.image_id")
     data = ctd.execute_sql(sql_string, conn)
+
+    print(data.shape)
+
+    if flight_paths is not None:
+        str_fp = [str(fp) for fp in flight_paths]
+        data = data[data['image_id'].str[2:6].isin(str_fp)]
 
     print(data.shape)
 
@@ -44,6 +53,11 @@ def calc_error_vector():
                       f"SET error_vector = ST_GeomFromText('{error_vector}', 3031) "
                       f"WHERE image_id = '{row['image_id']}'")
         ctd.execute_sql(sql_string, conn)
+
+        nr_updated = nr_updated + 1
+
+    print(f"Updated {nr_updated} entries")
+
 
 if __name__ == "__main__":
     calc_error_vector()

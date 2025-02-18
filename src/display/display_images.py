@@ -253,7 +253,7 @@ def display_images(images: np.ndarray | list[np.ndarray],
             # get the lines for the current image
             image_lines = lines[idx]
 
-            if len(image_lines) > 1:
+            if len(image_lines) >= 1:
 
                 # get the line colors
                 line_colors = style_config['line_color']
@@ -266,10 +266,13 @@ def display_images(images: np.ndarray | list[np.ndarray],
 
                 # plot each line with its corresponding color
                 for line, color in zip(image_lines, line_colors):
-                    ax.plot([line[0], line[2]], [line[1], line[3]],
+                    try:
+                        ax.plot([line[0], line[2]], [line[1], line[3]],
                             color=_normalize_color(color),
                             linewidth=style_config['line_width'],
                             zorder=5)
+                    except:
+                        continue
 
         # Optionally draw bounding boxes on the image
         if bounding_boxes and idx < len(bounding_boxes):

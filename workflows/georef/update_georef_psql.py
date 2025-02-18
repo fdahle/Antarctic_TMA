@@ -9,10 +9,15 @@ import src.base.connect_to_database as ctd
 
 # Variables
 input_fld = "/data/ATM/data_1/georef"
-overwrite = False
+overwrite_sat = True
+overwrite_img = True
+overwrite_calc = True
 skip_invalid = True
 
+flight_paths = [2163] # if None, all flight paths are used
+
 update_types = ["sat", "img", "calc"]
+
 
 def update_georef_psql():
 
@@ -22,6 +27,11 @@ def update_georef_psql():
     # get existing image ids from the database as list
     sql_string = "SELECT image_id FROM images_georef"
     existing_image_ids = ctd.execute_sql(sql_string, conn)
+
+    if flight_paths is not None:
+        str_fp = [str(fp) for fp in flight_paths]
+        existing_image_ids = existing_image_ids[existing_image_ids["image_id"].str[2:6].isin(str_fp)]
+
     existing_image_ids = existing_image_ids["image_id"].tolist()
 
     for update_type in update_types:
@@ -31,12 +41,14 @@ def update_georef_psql():
         # load the footprints from pandas
         footprints = gpd.read_file(path_footprint_shp)
 
-        print(footprints)
+        if flight_paths is not None:
+            str_fp = [str(fp) for fp in flight_paths]
+            footprints = footprints[footprints["image_id"].str[2:6].isin(str_fp)]
 
         # iterate the file
         for i, row in tqdm(footprints.iterrows(), total=footprints.shape[0]):
 
-            # get the image id
+            # get the image  id
             image_id = row["image_id"]
 
             # get the footprint
@@ -113,18 +125,18 @@ def update_georef_psql():
                 # Apply additional conditions based on `update_type`
                 if update_type == "sat":
                     # "sat" can overwrite anything unless `overwrite` is False
-                    if overwrite is False:
+                    if overwrite_sat is False:
                         sql_string += " AND (footprint_exact IS NULL OR georef_type != 'sat')"
                 elif update_type == "img":
                     # always skip 'sat' footprints
                     sql_string += " AND georef_type != 'sat'"
-                    if overwrite is False:
+                    if overwrite_img is False:
                         # Avoid overwriting existing "img" footprints
                         sql_string += " AND (footprint_exact IS NULL OR georef_type != 'img')"
                 elif update_type == "calc":
                     # always skip 'sat' and 'img' footprints
                     sql_string += " AND georef_type != 'sat' AND georef_type != 'img'"
-                    if overwrite is False:
+                    if overwrite_calc is False:
                         # Avoid overwriting existing "calc" footprints
                         sql_string += " AND footprint_exact IS NULL"
 

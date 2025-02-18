@@ -21,14 +21,14 @@ import src.georef.snippets.calc_transform as ct
 import src.display.display_images as di
 
 # debug settings
-debug_display_steps = True
+debug_display_steps = False
 debug_display_axes = False
 
 # debug plots
 debug_display_initial = False
 debug_display_located = False
 debug_display_tweaked = False
-debug_display_final = False
+debug_display_final = True
 
 
 class GeorefSatellite:

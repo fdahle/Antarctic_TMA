@@ -7,10 +7,10 @@ import src.base.connect_to_database as ctd
 import src.prepare.create_table_entry as cte
 
 # Constants
-PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
+PATH_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded_child"
 
 # Variables
-tables_for_adding = ["images_extracted"]
+tables_for_adding = ["images", "images_extracted", "images_fid_points", "images_georef"]
 
 
 def add_images_to_psql(lst_images: list[str], tables: list[str]) -> None:

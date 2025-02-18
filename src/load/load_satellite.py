@@ -62,7 +62,7 @@ def load_satellite(bounds: Tuple[float, float, float, float] or shapely.geometry
     ]
 
     # adapt path to load for a certain month (0 means composite over complete year)
-    sat_folder = sat_folder + "/" + month_strings[month]
+    sat_folder = sat_folder + "/" + month_strings[int(month)]
 
     # last check if we have the right folder
     if os.path.isdir(sat_folder) is False:

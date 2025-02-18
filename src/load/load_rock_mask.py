@@ -69,10 +69,6 @@ def load_rock_mask(bounds: list,
     # remove all shapes with area over 1000000
     subset_gdf = subset_gdf[subset_gdf["geometry"].area < 500000]
 
-    for poly in subset_gdf["geometry"]:
-        # print poly area
-        print(poly.area)
-
     if return_shapes:
 
         subset_gdf = subset_gdf.copy()  # To avoid SettingWithCopyWarning

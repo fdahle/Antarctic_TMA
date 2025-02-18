@@ -1,6 +1,7 @@
 import numpy as np
 import open3d as o3d
 import rasterio
+from scipy import ndimage
 
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
@@ -58,6 +59,29 @@ def create_confidence_arr(dem: np.ndarray,
 
     if interpolate:
         print("Interpolating confidence values...")
+
+        # Create a mask of cells with no points.
+        missing_mask = (count_array == 0)
+
+        # Compute the distance transform.
+        # 'indices' will contain, for each cell, the indices of the nearest non-missing cell.
+        distances, indices = ndimage.distance_transform_edt(
+            missing_mask, return_distances=True, return_indices=True)
+
+        # Extract the nearest valid cell indices.
+        nearest_row = indices[0]
+        nearest_col = indices[1]
+
+        # If a maximum distance threshold is desired, create a mask for cells within that threshold.
+        threshold_mask = distances <= distance
+
+        # Only update cells that are both missing and within the allowed distance.
+        fill_mask = missing_mask & threshold_mask
+
+        # Use the indices from the distance transform to assign the nearest valid confidence.
+        confidence_array[fill_mask] = confidence_array[nearest_row[fill_mask], nearest_col[fill_mask]]
+
+        """
         # Create mask for valid values
         valid_mask = count_array > 0
         invalid_mask = ~valid_mask
@@ -84,6 +108,7 @@ def create_confidence_arr(dem: np.ndarray,
 
         # Assign nearest neighbor values to the invalid points
         confidence_array[nearby_invalid_coords[:, 0], nearby_invalid_coords[:, 1]] = valid_values[nearby_indices]
+        """
 
     # Handle cells with no points
     confidence_array[np.isnan(confidence_array)] = min_confidence

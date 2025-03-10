@@ -3,9 +3,11 @@ import cv2
 import os
 import numpy as np
 import random
+import threading  # added for background preloading
 
 from PIL import Image, ImageTk
 from tkinter import Tk, Label, Button
+from tqdm import tqdm
 
 import src.load.load_image as li
 
@@ -14,15 +16,20 @@ img_path = base_fld + "data_1/aerial/TMA/downloaded/"
 img_path_backup = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 #img_path = "/data/ATM/data_1/sfm/projects/EGU/images_orig"
 input_img_type = "tif"
-img_size = (800, 800)
+img_size = (1200, 1200)
 
-view_directions = ["V"]
+view_directions = ["L"]
 
-input_ids = [1681]
+#"1833", "2137", "1825", "2136" "2143", "1826", "2141"
+#"2140", "2073", "1827", "2142" "1824", "1846", "2139", "2075"
+#1813, 1816, 1821, 1822
+
+input_ids = [2075]
 input_type = "flight_path"
 
 shuffle = False
 debug_mode = False
+load_all = True
 
 
 class ImageViewer:
@@ -39,6 +46,8 @@ class ImageViewer:
         self.view_directions = view_directions
         self.shuffle = shuffle
         self.size = size
+
+        self.preload_count = 5
 
         self.debug_mode = debug_mode
 
@@ -71,10 +80,6 @@ class ImageViewer:
 
             # Filter the files based on the prefixes
             self.input_ids = [os.path.splitext(f)[0] for f in all_files if any(f.startswith(prefix) for prefix in prefixes)]
-
-        print(len(self.input_ids))
-        print(self.input_type)
-        print(self.input_ids)
 
         # load input_ids
         if self.input_ids is None or len(self.input_ids) == 0:
@@ -138,24 +143,47 @@ class ImageViewer:
         # add mouse moving event
         self.img_container.bind('<Motion>', self.on_mouse_move)
 
+        # Bind arrow keys for navigation
+        self.root.bind("<Left>", self.handle_left_arrow)
+        self.root.bind("<Right>", self.handle_right_arrow)
+
+        # If load_all is True, preload every image before starting
+        if load_all:
+            print("Loading all images...")
+            self.preload_all_images()
+
         # load image
         self.load_image()
 
         # show the windows
         self.root.mainloop()
 
+    def preload_all_images(self):
+        # load all images in input_ids with a tqdm progress bar
+        for image_id in tqdm(self.input_ids, desc="Loading all images"):
+            if image_id not in self.img_dict:
+                np_arr = li.load_image(image_id,
+                                       image_type=self.img_type,
+                                       image_path=self.image_path,
+                                       catch=True)
+                if np_arr is None:
+                    np_arr = np.ones(self.size)
+                np_arr = cv2.resize(np_arr, self.size)
+                self.img_dict[image_id] = np_arr
+
+    def handle_left_arrow(self, event):
+        self.load_image("back")
+
+    def handle_right_arrow(self, event):
+        self.load_image("forward")
+
     # load the image
     def load_image(self, direction=None):
 
         if direction == "forward":
-            self.img_pos = self.img_pos + 1
+            self.img_pos = (self.img_pos + 1) % len(self.input_ids)
         elif direction == "back":
-            self.img_pos = self.img_pos - 1
-
-        if self.img_pos < 0:
-            self.img_pos = len(self.input_ids) - 1
-        elif self.img_pos == len(self.input_ids):
-            self.img_pos = 0
+            self.img_pos = (self.img_pos - 1) % len(self.input_ids)
 
         self.image_id = self.input_ids[self.img_pos]
 
@@ -182,6 +210,35 @@ class ImageViewer:
         self.img_container.image = photo
 
         self.img_caption.configure(text=self.image_id)
+
+        # start background loading
+        preload_direction = direction if direction is not None else "forward"
+        preload_thread = threading.Thread(target=self.preload_images, args=(preload_direction, self.preload_count))
+        preload_thread.daemon = True
+        preload_thread.start()
+
+    def preload_images(self, direction, count):
+        # determine indices to preload based on navigation direction
+        if direction == "forward":
+            indices = [(self.img_pos + i) % len(self.input_ids) for i in range(1, count+1)]
+        elif direction == "back":
+            indices = [(self.img_pos - i) % len(self.input_ids) for i in range(1, count+1)]
+        else:
+            raise ValueError(f"Invalid direction '{direction}' for preloading images.")
+
+        for idx in indices:
+            image_id = self.input_ids[idx]
+            if image_id not in self.img_dict:
+                if self.debug_mode:
+                    print(f"Preloading image '{image_id}'")
+                np_arr = li.load_image(image_id,
+                                       image_type=self.img_type,
+                                       image_path=self.image_path)
+                if np_arr is None:
+                    np_arr = np.ones(self.size)
+                np_arr = cv2.resize(np_arr, self.size)
+                self.img_dict[image_id] = np_arr
+
 
     def change_view(self, change_type):
 

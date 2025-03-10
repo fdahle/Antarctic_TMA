@@ -6,7 +6,7 @@ import numpy as np
 import rasterio.transform
 
 # Debug variables
-debug_print_values = False
+debug_print_values = True
 
 
 def verify_image_geometry(image: np.ndarray, transform: np.ndarray,

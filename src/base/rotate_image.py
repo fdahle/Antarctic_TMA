@@ -1,91 +1,197 @@
-"""Rotate an image"""
-
-# Library imports
 import cv2
+import pyvips
 import numpy as np
 
 
 def rotate_image(image: np.ndarray,
                  angle: float,
                  expand: bool = True,
-                 return_rot_matrix=False) -> (np.ndarray, np.ndarray | None):
+                 interpolate: bool = True,
+                 force_pyvips: bool = False,
+                 return_rot_matrix: bool = False) -> (np.ndarray, np.ndarray | None):
     """
-    Rotates an image by a given angle, optionally expanding the image to fit the rotated result.
+    Rotates an image by a given angle. For large images (w or h > 20000px),
+    uses pyvips for memory-efficient rotation. Otherwise uses OpenCV warpAffine.
+
+    The function also automatically checks for CHW format (if channels < 10 and height >= 10)
+    and converts to HWC for processing. Boolean images are converted to [0, 255].
 
     Args:
-        image (np.ndarray): The image to rotate.
-        angle (float): The rotation angle in degrees. Positive values indicate a counter-clockwise rotation,
-            while negative values indicate a clockwise rotation.
-        expand (bool): If True, the output image size is expanded to fit the entire rotated image.
-            If False, the output image size is the same as the input, and parts of the rotated image may be cropped.
-        return_rot_matrix (bool): If True, the function will return the 2x3 affine rotation matrix used for the
-            rotation
+        image (np.ndarray): Input image (2D or 3D).
+                            - For color images, can be CHW (channels, height, width) or
+                              HWC (height, width, channels).
+                            - For boolean, values are converted to [0, 255].
+        angle (float): Rotation angle in degrees (counter-clockwise).
+        expand (bool): If True, the output image is expanded to fit the entire rotated image.
+        interpolate (bool): If True, uses bilinear interpolation; otherwise nearest-neighbor.
+        return_rot_matrix (bool): If True, also return the 2×3 rotation matrix (for the OpenCV path only).
+
     Returns:
-        rotated_image (np.ndarray): The rotated image as a NumPy array. The size may change from the original
-            based on the angle and whether expansion is requested.
-        rotation_matrix (np.ndarray): The 2x3 affine rotation matrix used for the transformation. This matrix can be
-            used to understand the rotation and translation applied to the original image.
+        rotated_image (np.ndarray): The rotated image, same shape format as input.
+        rotation_matrix (np.ndarray, optional): 2×3 affine matrix (only if return_rot_matrix is True
+                                                and OpenCV was used).
     """
+    # 1) Preprocessing: handle bool, handle CHW->HWC
+    is_bool = False
+    if image.dtype == bool or image.dtype == np.bool_:
+        is_bool = True
+        image = image.astype(np.uint8) * 255
 
-    # calculate image center
-    height, width = image.shape[:2]
-    center = (width // 2, height // 2)
+    was_chw = False
+    if len(image.shape) == 3:
+        if image.shape[0] < 10 and image.shape[1] >= 10:  # channels, height, width
+            was_chw = True
+            image = np.transpose(image, (1, 2, 0))  # CHW -> HWC
 
-    if len(image.shape) == 3 and image.shape[0] > 10:
-        raise ValueError("Image bands must be in the last dimension")
+    h, w = image.shape[:2]
+    c = 1 if image.ndim == 2 else image.shape[2]
 
-    # If angle is 0 or a multiple of 360, no need to rotate
+    # If angle is multiple of 360, just return original
     if angle % 360 == 0:
-        # Create an identity matrix for the rotation matrix
-        rotation_matrix = np.array([[1, 0, 0],
-                                    [0, 1, 0]], dtype=np.float32)
-        if return_rot_matrix:
-            return image, rotation_matrix
-        else:
-            return image
+        identity = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float32)
+        if was_chw:
+            image = np.transpose(image, (2, 0, 1))  # HWC -> CHW
+        if is_bool:
+            image = (image >= 128)
+        return (image, identity) if return_rot_matrix else image
 
-    # Get the rotation matrix
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-
-    # init variable
-    rotated_image = None
+    center = (w / 2, h / 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
 
     if expand:
-        # Calculate the new dimensions to accommodate the rotated image
-        cos_theta = abs(rotation_matrix[0, 0])
-        sin_theta = abs(rotation_matrix[0, 1])
-        new_width = int((height * sin_theta) + (width * cos_theta))
-        new_height = int((height * cos_theta) + (width * sin_theta))
-
-        # Adjust the rotation matrix to account for translation
-        rotation_matrix[0, 2] += (new_width / 2) - center[0]
-        rotation_matrix[1, 2] += (new_height / 2) - center[1]
-
-        # Apply the rotation matrix to the image with new dimensions
-        if len(image.shape) == 2:
-            rotated_image = cv2.warpAffine(image, rotation_matrix, (new_width, new_height))
-        else:
-            for i in range(image.shape[0]):
-                if i == 0:
-                    rotated_image = cv2.warpAffine(image[i], rotation_matrix, (new_width, new_height))
-                    rotated_image = rotated_image[np.newaxis, ...]
-                else:
-                    rotated_image = np.vstack((rotated_image, cv2.warpAffine(image[i], rotation_matrix,
-                                                                             (new_width, new_height))[np.newaxis, ...]))
+        abs_cos = abs(M[0, 0])
+        abs_sin = abs(M[0, 1])
+        new_w = int(h * abs_sin + w * abs_cos)
+        new_h = int(h * abs_cos + w * abs_sin)
+        # shift the center so the image is fully visible
+        M[0, 2] += (new_w / 2) - center[0]
+        M[1, 2] += (new_h / 2) - center[1]
     else:
-        # Apply the rotation matrix to the image with original dimensions
-        if len(image.shape) == 2:
-            rotated_image = cv2.warpAffine(image, rotation_matrix, (width, height))
-        else:
-            for i in range(image.shape[0]):
-                if i == 0:
-                    rotated_image = cv2.warpAffine(image[i], rotation_matrix, (width, height))
-                    rotated_image = rotated_image[np.newaxis, ...]
-                else:
-                    rotated_image = np.vstack((rotated_image, cv2.warpAffine(image[i], rotation_matrix,
-                                                                             (width, height))[np.newaxis, ...]))
+        new_w, new_h = w, h
 
-    if return_rot_matrix:
-        return rotated_image, rotation_matrix
+    # 2) Decide if we use pyvips or OpenCV
+    use_pyvips = (w > 20000 or h > 20000) or force_pyvips
+
+    if not use_pyvips:
+
+        # === Use OpenCV ===
+        interp_flag = cv2.INTER_LINEAR if interpolate else cv2.INTER_NEAREST
+
+        rotated = cv2.warpAffine(
+            image,
+            M,
+            (new_w, new_h),
+            flags=interp_flag,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(255, 255, 255)  # or (0, 0, 0) if you prefer black
+        )
+
+        if was_chw:
+            rotated = np.transpose(rotated, (2, 0, 1))
+        if is_bool:
+            rotated = (rotated >= 128)
+
+        return (rotated, M) if return_rot_matrix else rotated
+
     else:
-        return rotated_image
+
+        # Create the interpolator for rotate().
+        interp_obj = pyvips.Interpolate.new("bilinear") if interpolate else pyvips.Interpolate.new("nearest")
+
+        # Convert the numpy image to a pyvips image.
+        if c == 1:
+            vips_img = pyvips.Image.new_from_memory(
+                image.tobytes(), w, h, 1, _numpy2vips_format(image.dtype)
+            )
+        else:
+            vips_img = pyvips.Image.new_from_memory(
+                image.tobytes(), w, h, c, _numpy2vips_format(image.dtype)
+            )
+
+        A = [M[0, 0], M[0, 1], M[1, 0], M[1, 1]]
+
+        idx = -center[0]
+        idy = -center[1]
+
+        odx = center[0]
+        ody = center[1]
+
+        if expand:
+            # Adjust the output offset to center the expanded canvas as OpenCV does:
+            odx += (new_w / 2) - center[0]
+            ody += (new_h / 2) - center[1]
+
+        # Step 2: Rotate the image around (0,0)
+        rotated_vips = vips_img.affine(A, idx=idx, idy=idy, odx=odx, ody=ody,
+                                       interpolate=interp_obj, background=[255] * c,
+                                       oarea=[0, 0, new_w, new_h])
+
+        # Ensure the final image has the desired dimensions.
+        rotated_vips = rotated_vips.embed(0, 0, new_w, new_h, background=[255] * c)
+
+        # Convert the pyvips image back to a numpy array.
+        out_mem = rotated_vips.write_to_memory()
+        rotated_arr = np.frombuffer(out_mem, dtype=image.dtype)
+        if c == 1:
+            rotated_arr = rotated_arr.reshape((new_h, new_w))
+        else:
+            rotated_arr = rotated_arr.reshape((new_h, new_w, c))
+        if was_chw:
+            rotated_arr = np.transpose(rotated_arr, (2, 0, 1))
+        if is_bool:
+            rotated_arr = (rotated_arr >= 128)
+
+        return (rotated_arr, M) if return_rot_matrix else rotated_arr
+
+
+def _numpy2vips_format(dtype):
+    """
+    Helper to map NumPy dtypes to pyvips.BandFormat.
+    """
+    if dtype == np.uint8:
+        return 'uchar'
+    elif dtype == np.uint16:
+        return 'ushort'
+    elif dtype == np.int16:
+        return 'short'
+    elif dtype == np.int32:
+        return 'int'
+    elif dtype == np.float32:
+        return 'float'
+    elif dtype == np.float64:
+        return 'double'
+    else:
+        # fallback
+        return 'uchar'
+
+
+if __name__ == "__main__":
+
+    # Define dimensions
+    size = 5000
+    img = np.full((size, size, 3), 255, dtype=np.uint8)
+
+    th = int(size/200)
+
+    # Draw a blue diagonal line
+    cv2.line(img, (0, 0), (size - 1, size - 1), (255, 0, 0), thickness=th)
+
+    # Draw a red border around the image
+    cv2.rectangle(img, (0, 0), (size - 1, size - 1), (0, 0, 255), thickness=th)
+
+    # Draw green grid lines every 10%
+    grid_spacing = int(size / 10)
+    for i in range(0, size, grid_spacing):
+        cv2.line(img, (0, i), (size - 1, i), (0, 255, 0), thickness=th)
+        cv2.line(img, (i, 0), (i, size - 1), (0, 255, 0), thickness=th)
+
+    angle = -173.3
+    expand = False
+
+    rotated_img, rot_mat = rotate_image(img, angle, return_rot_matrix=True, expand=expand, force_pyvips=False)
+    rotated_img2, rot_mat2 = rotate_image(img, angle, return_rot_matrix=True, expand=expand, force_pyvips=True)
+    print(rot_mat)
+
+
+    import src.display.display_images as di
+    di.display_images([rotated_img, rotated_img2])

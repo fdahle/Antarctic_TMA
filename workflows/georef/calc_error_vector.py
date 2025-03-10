@@ -4,8 +4,8 @@ from tqdm import tqdm
 import src.base.connect_to_database as ctd
 
 table = "images_georef"
-overwrite=True
-flight_paths = [2163]
+overwrite=False
+flight_paths = None
 
 def calc_error_vector():
 
@@ -47,6 +47,13 @@ def calc_error_vector():
 
         # get a vector from the two points
         error_vector = LineString([exact_point, approx_point])
+
+        if row['image_id'] in ["CA182332V0059", "CA182332V0060", "CA182332V0061", "CA182332V0062", "CA182332V0063"]:
+            print(row['image_id'])
+            print(error_vector)
+            print(exact_point)
+            # get length of the vector
+            print(error_vector.length)
 
         # update the database
         sql_string = (f"UPDATE {table} "

@@ -19,6 +19,9 @@ def load_military_focal_length(image_id, cam_id=None, conn=None):
     sql_string = f"SELECT cfl FROM military_calibration WHERE camera = '{cam_id}'"
     data = ctd.execute_sql(sql_string, conn)
 
-    focal_length = data['cfl'].iloc[0]
+    if data.shape[0] == 0:
+        focal_length = None
+    else:
+        focal_length = data['cfl'].iloc[0]
 
     return focal_length

@@ -2,9 +2,10 @@ import numpy as np
 import open3d as o3d
 import rasterio
 from scipy import ndimage
+from tqdm import tqdm
 
-from scipy.interpolate import griddata
-from scipy.spatial import cKDTree
+#from scipy.interpolate import griddata
+#from scipy.spatial import cKDTree
 
 def create_confidence_arr(dem: np.ndarray,
                           point_cloud: np.ndarray,
@@ -33,7 +34,12 @@ def create_confidence_arr(dem: np.ndarray,
     x_coords = point_cloud[:, 0]
     y_coords = point_cloud[:, 1]
     confidence_values = point_cloud[:, 10]
-    count_array = np.zeros_like(dem, dtype=np.int32)
+
+    # delete pointcloud from memory
+    del point_cloud
+
+    # Create arrays to accumulate confidence values and counts
+    count_array = np.zeros_like(dem, dtype=np.int16)
 
     # Invert the transform to map world coordinates to pixel coordinates
     inverse_transform = ~transform
@@ -43,15 +49,24 @@ def create_confidence_arr(dem: np.ndarray,
     cols = cols.astype(int)
     rows = rows.astype(int)
 
+    # delete x_coords and y_coords from memory
+    del x_coords, y_coords
+
     # Create a mask to filter out points that fall outside the DEM bounds
     valid_mask = (rows >= 0) & (rows < dem.shape[0]) & (cols >= 0) & (cols < dem.shape[1])
-    valid_rows = rows[valid_mask]
-    valid_cols = cols[valid_mask]
-    valid_confidences = confidence_values[valid_mask]
+    rows = rows[valid_mask]
+    cols = cols[valid_mask]
+    confidence_values = confidence_values[valid_mask]
+
+    # delete valid_mask from memory
+    del valid_mask
 
     # Use numpy indexing to accumulate confidence values and counts
-    np.add.at(confidence_array, (valid_rows, valid_cols), valid_confidences)
-    np.add.at(count_array, (valid_rows, valid_cols), 1)
+    np.add.at(confidence_array, (rows, cols), confidence_values)
+    np.add.at(count_array, (rows, cols), 1)
+
+    # delete rows and cols from memory
+    del rows, cols
 
     # Avoid division by zero
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -60,26 +75,64 @@ def create_confidence_arr(dem: np.ndarray,
     if interpolate:
         print("Interpolating confidence values...")
 
-        # Create a mask of cells with no points.
-        missing_mask = (count_array == 0)
+        chunk_size = 5000
+        buffer = 100
 
-        # Compute the distance transform.
-        # 'indices' will contain, for each cell, the indices of the nearest non-missing cell.
-        distances, indices = ndimage.distance_transform_edt(
-            missing_mask, return_distances=True, return_indices=True)
+        rows_total, cols_total = confidence_array.shape
+        result = confidence_array.copy()
 
-        # Extract the nearest valid cell indices.
-        nearest_row = indices[0]
-        nearest_col = indices[1]
+        # Calculate total number of chunks for progress reporting.
+        n_chunks_row = (rows_total + chunk_size - 1) // chunk_size
+        n_chunks_col = (cols_total + chunk_size - 1) // chunk_size
+        total_chunks = n_chunks_row * n_chunks_col
 
-        # If a maximum distance threshold is desired, create a mask for cells within that threshold.
-        threshold_mask = distances <= distance
+        pbar = tqdm(total=total_chunks, desc="Processing chunks")
 
-        # Only update cells that are both missing and within the allowed distance.
-        fill_mask = missing_mask & threshold_mask
+        for row in range(0, rows_total, chunk_size):
+            for col in range(0, cols_total, chunk_size):
+                # Determine current chunk dimensions
+                cur_rows = min(chunk_size, rows_total - row)
+                cur_cols = min(chunk_size, cols_total - col)
 
-        # Use the indices from the distance transform to assign the nearest valid confidence.
-        confidence_array[fill_mask] = confidence_array[nearest_row[fill_mask], nearest_col[fill_mask]]
+                # Define window indices with buffer
+                r_start = max(row - buffer, 0)
+                c_start = max(col - buffer, 0)
+                r_end = min(row + cur_rows + buffer, rows_total)
+                c_end = min(col + cur_cols + buffer, cols_total)
+
+                # Extract the chunk (with buffer)
+                chunk_confidence = result[r_start:r_end, c_start:c_end]
+                chunk_count = count_array[r_start:r_end, c_start:c_end]
+
+                # Create a mask for missing points
+                missing_mask = (chunk_count == 0)
+
+                # Compute the distance transform for the chunk
+                distances, indices = ndimage.distance_transform_edt(
+                    missing_mask, return_distances=True, return_indices=True)
+                nearest_row = indices[0]
+                nearest_col = indices[1]
+
+                # Determine where to fill: missing points within threshold
+                threshold_mask = distances <= distance
+                fill_mask = missing_mask & threshold_mask
+
+                # Apply nearest neighbor interpolation for the fill region
+                chunk_confidence[fill_mask] = chunk_confidence[nearest_row[fill_mask],
+                nearest_col[fill_mask]]
+
+                # Compute indices for the inner region (without buffer)
+                # Here, inner region starts at:
+                inner_r_start = row - r_start
+                inner_c_start = col - c_start
+                inner_r_end = inner_r_start + cur_rows
+                inner_c_end = inner_c_start + cur_cols
+
+                # Write the processed inner region back to the result array
+                result[row:row + cur_rows, col:col + cur_cols] = \
+                    chunk_confidence[inner_r_start:inner_r_end, inner_c_start:inner_c_end]
+
+                pbar.update(1)
 
         """
         # Create mask for valid values

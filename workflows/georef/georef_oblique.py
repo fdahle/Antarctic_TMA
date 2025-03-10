@@ -24,6 +24,8 @@ rema_size=32
 # Constants
 PATH_GEOREF_FLD = "/data/ATM/data_1/georef/"
 
+flight_paths = None
+
 debug_show_footprints = False
 
 def georef_oblique(georef_type):
@@ -39,8 +41,16 @@ def georef_oblique(georef_type):
     # get all vertical image_ids
     image_ids = center_shp_data["image_id"]
 
+    # filter pandas series for flight path
+    if flight_paths is not None:
+        image_ids = image_ids[image_ids.str[2:6].isin(flight_paths)]
+
     # convert image_ids to list for sql query
     image_ids = tuple(image_ids)
+
+    if len(image_ids) == 0:
+        print("No image_ids found")
+        return
 
     # get height and azimuth for all vertical images
     sql_string = ("SELECT images.image_id, images.altitude, "
@@ -50,9 +60,11 @@ def georef_oblique(georef_type):
                   f"WHERE images.image_id IN {image_ids}")
     meta_data = ctd.execute_sql(sql_string, conn)
 
+    # combine the height and altimeter value
+    meta_data["height"] = meta_data["height"].combine_first(meta_data["altimeter_value"])
+
     # get average height
     avg_height = np.nanmean(meta_data["height"])
-    print("AVG HEIGHT:", avg_height)
 
     # load shapefile or create empty gpd with oblique data
     path_oblique_shp = os.path.join(PATH_GEOREF_FLD, "footprints",
@@ -74,8 +86,11 @@ def georef_oblique(georef_type):
         image_id = center_row["image_id"]
         center = center_row["geometry"]
 
+
         # get the right rows for the current image_id
         meta_row = meta_data[meta_data["image_id"] == center_row["image_id"]]
+        if meta_row.empty:
+            continue
 
         # get the correct height
         altitude = meta_row["height"].iloc[0]
@@ -128,7 +143,10 @@ def georef_oblique(georef_type):
 
             if focal_length.empty or focal_length["focal_length"].iloc[0] is None:
                 if use_avg_focal_length:
-                    focal_length = np.nanmean(meta_data["focal_length"])
+                    try:
+                        focal_length = np.nanmean(meta_data["focal_length"])
+                    except:
+                        focal_length = 154.25
                 else:
                     print(f"Could not find focal length for {new_image_id}")
                     continue

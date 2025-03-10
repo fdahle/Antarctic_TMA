@@ -47,18 +47,22 @@ image_ids = [image_id.replace("'", "") for image_id in image_ids]
 """
 
 import src.sfm_agi.other.get_images_for_glacier as gifg
-glacier_name = "Eden Glacier"
+glacier_name = "Attlee Glacier"
 image_ids, bounds = gifg.get_images_for_glacier(glacier_name,
+                                                min_overlap=0.2,
                                                 return_bounds=True)
-print(bounds)
-
 # project settings
-project_name = "Eden Glacier"
+project_name = "Attlee Glacier"
 overwrite = True
 resume = False
 
+print(f"Start Project '{project_name}'")
+print("Bounds:", bounds)
+print("Overwrite:", overwrite)
+print("Resume:", resume)
+
 if glacier_name is not None and glacier_name != project_name:
-    raise ValueError("Project name and project source are not the same")
+    raise ValueError("Project name and Glacier name are not the same")
 
 # accuracy settings (None means not using it)
 camera_accuracy = (100, 100, 100)  # x, y, z in m
@@ -258,9 +262,26 @@ for image_path in images_paths:
 # get image shapes for each image
 import src.load.load_image_shape as lis
 shapes_dict = {}
+ids_to_remove = []
 for image_id in image_ids:
     image_shape = lis.load_image_shape(image_id)
-    shapes_dict[image_id] = image_shape
+    if image_shape is None:
+        print(f"Image {image_id} failed to load")
+        ids_to_remove.append(image_id)
+    else:
+        shapes_dict[image_id] = image_shape
+
+# remove all images that failed to load
+for image_id in ids_to_remove:
+    images_paths.remove(os.path.join(path_image_folder, image_id + ".tif"))
+    image_ids.remove(image_id)
+
+# remove from other dicts as well
+dicts = [focal_length_dict, footprint_dict, position_dict, rotation_dict, accuracy_dict, azimuth]
+for d in dicts:
+    if d is not None:
+        for image_id in ids_to_remove:
+            d.pop(image_id, None)
 
 # check if the shape of the images is correct
 def _validate_shapes(shapes_dict):
@@ -293,7 +314,7 @@ def _validate_shapes(shapes_dict):
                 pass
 
             # if the shape is almost the same, resize the image
-            elif abs(ref_height - height) < 5 and abs(ref_width - width) < 2:
+            elif abs(ref_height - height) < 5 and abs(ref_width - width) < 5:
 
                 # get the images
                 import src.load.load_image as li
@@ -331,6 +352,9 @@ def _validate_shapes(shapes_dict):
                 print("Resized image", image_id, "from", shape, "to", reference_shape)
 
             else:
+
+                print(abs(ref_height - height), abs(ref_width - width))
+
                 raise ValueError(f"Shape mismatch in group {key}: {image_id} has shape {shape} "
                                  f"but reference shape is {reference_shape}")
 

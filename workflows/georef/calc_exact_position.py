@@ -6,7 +6,7 @@ import src.georef.snippets.calc_camera_position as ccp
 
 table = "images_georef"
 overwrite = True
-flight_paths = [2163]
+flight_paths = None
 
 def calc_exact_position():
     nr_updated = 0
@@ -22,13 +22,9 @@ def calc_exact_position():
 
     data = ctd.execute_sql(sql_string, conn)
 
-    print(data.shape)
-
     if flight_paths is not None:
         str_fp = [str(fp) for fp in flight_paths]
         data = data[data['image_id'].str[2:6].isin(str_fp)]
-
-    print(data.shape)
 
     # iterate over all rows
     for idx, row in tqdm(data.iterrows(), total=data.shape[0]):
@@ -39,17 +35,26 @@ def calc_exact_position():
 
         image_id = row['image_id']
 
+        if "32V" not in image_id:
+            continue
+
         # convert the geometries to shapely objects
         footprint_exact = wkt.loads(row['footprint_exact'])
 
         # calc the position
         position_exact = ccp.calc_camera_position(image_id, footprint_exact)
 
+        image_id_l = image_id.replace('32V', '31L')
+        image_id_r = image_id.replace('32V', '33R')
+
+        image_ids_str = "('" + image_id + "', '" + image_id_l + "', '" + image_id_r + "')"
+
         # update the database
         sql_string = (f"UPDATE {table} "
                       f"SET position_exact = ST_GeomFromText('{position_exact}', 3031) "
-                      f"WHERE image_id = '{image_id}'")
+                      f"WHERE image_id IN {image_ids_str}")
         ctd.execute_sql(sql_string, conn)
+
 
         nr_updated = nr_updated + 1
 

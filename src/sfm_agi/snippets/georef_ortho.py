@@ -2,11 +2,14 @@
 
 # Library imports
 import copy
+
+import cv2
 import numpy as np
 
 # Local imports
 import src.base.find_tie_points as ftp
 import src.base.resize_max as rm
+import src.base.resize_image as rim
 import src.base.rotate_image as ri
 import src.base.rotate_points as rp
 import src.display.display_images as di
@@ -16,7 +19,7 @@ import src.load.load_satellite as ls
 
 # debug settings
 debug_show_rotated_tie_points = False
-debug_show_trimmed_tie_points = False
+debug_show_patch_tie_points = False
 debug_show_final_tie_points = False
 
 def georef_ortho(ortho: np.ndarray,
@@ -33,6 +36,7 @@ def georef_ortho(ortho: np.ndarray,
                  start_conf: float = 0.9,
                  tp_type: type = float,
                  only_vertical_footprints: bool =False,
+                 extensive_matching: bool = True,
                  save_path_ortho: str | None = None,
                  save_path_tps: str | None = None,
                  save_path_rot: str | None = None,
@@ -89,17 +93,32 @@ def georef_ortho(ortho: np.ndarray,
 
     # Trim the orthophoto if needed
     if trim_image:
-        trim_mask = ortho != 255  # Exclude white pixels
-        trim_coords = np.argwhere(trim_mask)
-        trim_y_min, trim_x_min = trim_coords.min(axis=0)
-        trim_y_max, trim_x_max = trim_coords.max(axis=0) + 1
-        trimmed_ortho = ortho[trim_y_min:trim_y_max, trim_x_min:trim_x_max]
 
-        # Calculate the percentage removed from each side
-        left_trim_percentage = (trim_x_min / original_width_ortho) * 100
-        right_trim_percentage = ((original_width_ortho - trim_x_max) / original_width_ortho) * 100
-        top_trim_percentage = (trim_y_min / original_height_ortho) * 100
-        bottom_trim_percentage = ((original_height_ortho - trim_y_max) / original_height_ortho) * 100
+        trim_threshold = .75
+
+        # Calculate the fraction of white pixels for each row and column
+        row_white_fraction = np.mean(ortho == 255, axis=1)
+        col_white_fraction = np.mean(ortho == 255, axis=0)
+
+        # Identify rows and columns that are not mostly white
+        rows_to_keep = np.where(row_white_fraction < trim_threshold)[0]
+        cols_to_keep = np.where(col_white_fraction < trim_threshold)[0]
+
+        if rows_to_keep.size and cols_to_keep.size:
+            # Determine the bounding box for rows and columns to keep
+            trim_y_min = rows_to_keep[0]
+            trim_y_max = rows_to_keep[-1] + 1  # +1 to include the last index
+            trim_x_min = cols_to_keep[0]
+            trim_x_max = cols_to_keep[-1] + 1
+
+            # Trim the image using the calculated indices
+            trimmed_ortho = ortho[trim_y_min:trim_y_max, trim_x_min:trim_x_max]
+
+            # Calculate the percentage removed from each side
+            left_trim_percentage = (trim_x_min / original_width_ortho) * 100
+            right_trim_percentage = ((original_width_ortho - trim_x_max) / original_width_ortho) * 100
+            top_trim_percentage = (trim_y_min / original_height_ortho) * 100
+            bottom_trim_percentage = ((original_height_ortho - trim_y_max) / original_height_ortho) * 100
 
     else:
         trimmed_ortho = ortho
@@ -135,14 +154,14 @@ def georef_ortho(ortho: np.ndarray,
     max_abs_y = max([footprint.bounds[3] for footprint in aligned_footprints])
 
     # Calculate the size of the bounding rectangle before trimming
-    width_tmp = max_abs_x - min_abs_x
-    height_tmp = max_abs_y - min_abs_y
+    #width_tmp = max_abs_x - min_abs_x
+    #height_tmp = max_abs_y - min_abs_y
 
     # Adjust the min and max coordinates based on the trim percentages
-    min_abs_x = min_abs_x + (width_tmp * (left_trim_percentage / 100))
-    max_abs_x = max_abs_x - (width_tmp * (right_trim_percentage / 100))
-    min_abs_y = min_abs_y + (height_tmp * (top_trim_percentage / 100))
-    max_abs_y = max_abs_y - (height_tmp * (bottom_trim_percentage / 100))
+    #min_abs_x = min_abs_x + (width_tmp * (left_trim_percentage / 100))
+    #max_abs_x = max_abs_x - (width_tmp * (right_trim_percentage / 100))
+    #min_abs_y = min_abs_y + (height_tmp * (top_trim_percentage / 100))
+    #max_abs_y = max_abs_y - (height_tmp * (bottom_trim_percentage / 100))
 
     # load the complete satellite image
     sat_bounds = (min_abs_x, min_abs_y, max_abs_x, max_abs_y)
@@ -185,9 +204,57 @@ def georef_ortho(ortho: np.ndarray,
         # rotate the ortho
         ortho_rotated, rot_mat = ri.rotate_image(ortho_resized, rotation,
                                                  return_rot_matrix=True)
+        # make no data uniform again
+        ortho_rotated[ortho_rotated == 0] = 255
 
         # find tie points
         tie_points, conf = tpd.find_tie_points(sat, ortho_rotated)
+
+        if tie_points.shape[0] >= 5 and extensive_matching:
+
+            # define patch dimensions and stride
+            patch_h, patch_w = ortho_rotated.shape[0] // 2, ortho_rotated.shape[1] // 2
+            stride_y, stride_x = patch_h // 2, patch_w // 2
+
+            max_tps = tie_points.shape[0]
+
+            patch_counter = 0
+            for y in range(3):
+                for x in range(3):
+
+                    patch_counter += 1
+
+                    start_y, start_x = y * stride_y, x * stride_x
+                    end_y, end_x = start_y + patch_h, start_x + patch_w
+
+                    # get patch
+                    ortho_patch = ortho_rotated[start_y:end_y, start_x:end_x]
+
+                    # find tie points
+                    tie_points_patch, conf_patch = tpd.find_tie_points(sat, ortho_patch)
+
+                    if debug_show_patch_tie_points:
+                        style_config = {
+                            "title": f"{tie_points.shape[0]} tie points "
+                                     f"found at rotation {rotation} "
+                                     f"for patch {patch_counter}",
+                        }
+                        di.display_images([sat, ortho_patch],
+                                          tie_points=tie_points_patch, tie_points_conf=conf_patch,
+                                          style_config=style_config)
+
+                    # check if we have more tie points
+                    if tie_points_patch.shape[0] > max_tps:
+                        max_tps = tie_points_patch.shape[0]
+
+                        # save tp and conf for best patch
+                        tie_points = tie_points_patch
+                        conf = conf_patch
+
+                        # add offset to tie points
+                        tie_points[:, 2] += start_x
+                        tie_points[:, 3] += start_y
+
 
         print("    ", tie_points.shape[0], "tie points found")
 
@@ -219,14 +286,53 @@ def georef_ortho(ortho: np.ndarray,
         print(f"No tie points found")
         return None, None, None
 
+    """
+    transform_matching = True
+    if transform_matching:
+        # get trans
+        pts1 = tps[:, 0:2]
+        pts2 = tps[:, 2:4]
+
+        pts1 = pts1.astype(np.float32)
+        pts2 = pts2.astype(np.float32)
+
+        print(pts1.shape, pts2.shape)
+        # get affine transformation
+        M, _ = cv2.estimateAffine2D(pts1, pts2,
+                                    method=cv2.RANSAC, ransacReprojThreshold=3.0)
+
+        # apply the transform to the 4 corners of the ortho
+        corners = np.array([[0, 0], [ortho_rotated.shape[1], 0],
+                            [ortho_rotated.shape[1], ortho_rotated.shape[0]],
+                            [0, ortho_rotated.shape[0]]]).astype(np.float32)
+        corners = np.expand_dims(corners, axis=1)
+        transformed_corners = cv2.transform(corners, M)
+
+        # Extract min/max transformed pixel coordinates
+        min_px_x = np.min(transformed_corners[:, 0, 0])
+        min_px_y = np.min(transformed_corners[:, 0, 1])
+        max_px_x = np.max(transformed_corners[:, 0, 0])
+        max_px_y = np.max(transformed_corners[:, 0, 1])
+
+        # Convert pixel coordinates to absolute geographic coordinates using sat_transform
+        min_abs_x, min_abs_y = sat_transform * (min_px_x, min_px_y)
+        max_abs_x, max_abs_y = sat_transform * (max_px_x, max_px_y)
+
+        # Define the new satellite bounding box
+        new_sat_bounds = (min_abs_x, min_abs_y, max_abs_x, max_abs_y)
+
+        # Load a new satellite image based on the updated bounding box
+        sat, sat_transform = ls.load_satellite(new_sat_bounds, return_transform=True)
+
+        # find tie points again
+        tps, conf = tpd.find_tie_points(sat, ortho_rotated)
+
+        di.display_images([sat, ortho_rotated],tie_points=tps, tie_points_conf=conf)
+    """
+
     # rotate points back
     tps[:, 2:] = rp.rotate_points(tps[:, 2:],
                                   rot_mat, invert=True)
-
-    # show the trimmed tie points
-    if debug_show_trimmed_tie_points:
-        di.display_images([sat, trimmed_ortho],
-                          tie_points=tps, tie_points_conf=conf)
 
     # account for the scaling
     tps[:, 2] = tps[:, 2] / s_x
@@ -264,7 +370,7 @@ def georef_ortho(ortho: np.ndarray,
 
     # check if we have enough points
     if tps.shape[0] < min_nr_tps:
-        print(f"Not enough tie points ({tps.shape[0]}) found")
+        print(f"Not enough tie points ({tps.shape[0]}) found (min required: {min_nr_tps})")
         return None, None, None
 
     # save the tie points to a file
@@ -316,6 +422,15 @@ def georef_ortho(ortho: np.ndarray,
     # save the best rotation
     if save_path_rot is not None:
         np.savetxt(save_path_rot, np.array([rotation]), delimiter=',')
+
+    print("Transform")
+    print(transform)
+    print("Transformed bounds")
+    print(transformed_bounds)
+    print("Rotation")
+    print(rotation)
+    print("ORTHO")
+    print(ortho.shape)
 
     # save the transform
     if save_path_transform is not None:

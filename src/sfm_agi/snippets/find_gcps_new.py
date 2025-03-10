@@ -3,31 +3,28 @@ import pandas as pd
 
 import src.base.find_tie_points as ftp
 import src.base.resize_image as ri
-import src.base.resize_max as rm
 import src.base.rotate_image as roi
 import src.base.rotate_points as rp
+
 import src.display.display_images as di
 
-debug_display_input_data = True
-debug_display_cell_gcps = True
+debug_display_input_data = False
+debug_display_cell_gcps = False
 debug_show_empty_cells = True
-debug_display_final_gcps = False
 
 debug_check_unmasked_tps = True
 
-# mask_new = rock mask and slope
-# mask_old = confidence
 
-def find_gcps(dem_old, dem_new,
-              ortho_old, ortho_new,
-              transform,
-              resolution, bounding_box,
-              rotation,
-              mask_old=None, mask_new=None,
-              min_conf=0.9,
-              cell_size = 2500,
-              no_data_value=-9999,
-              raise_error=True):
+def find_gcps_new(dem_old, dem_new,
+                  ortho_old, ortho_new,
+                  transform,
+                  resolution, bounding_box,
+                  rotation,
+                  mask_old=None, mask_new=None,
+                  min_conf=0.9,
+                  cell_size = 2500,
+                  nudge_rotations=True,
+                  raise_error=False):
 
     if dem_old.shape != ortho_old.shape:
         print(dem_old.shape, ortho_old.shape)
@@ -36,16 +33,9 @@ def find_gcps(dem_old, dem_new,
         print(dem_new.shape, ortho_new.shape)
         raise ValueError("modern DEM and ortho have different shapes")
 
-    # resize the old ortho (to a max size, as otherwise rotation does not work)
-    ortho_old_resized, s_x_old, s_y_old = rm.resize_max(ortho_old, max_size=25000)
-    ortho_old_resized = ortho_old
-
-    # resize the old mask
-    if mask_old is not None:
-        mask_old_resized, _, _ = rm.resize_max(mask_old, max_size=25000)
-
-    # uniform no data
-    ortho_old_resized[ortho_old_resized == 255] = 0
+    rotations = [0]
+    if nudge_rotations:
+        rotations = [0, -10, -5, 5, 10]
 
     # create lists that will contain tps and conf of each rotation
     tps_per_rotation = []
@@ -55,19 +45,22 @@ def find_gcps(dem_old, dem_new,
     scale_factors2 = []
 
     # we want to try out to nudge the rotation a bit
-    for nudge in [0, -10, -5, 5, 10]:
+    for nudge in rotations:
 
         # create adapted rotation
         adapted_rotation = rotation + nudge
         adapted_rotation = adapted_rotation % 360
 
         # rotate the old ortho
-        ortho_old_rotated, rot_mat = roi.rotate_image(ortho_old_resized,
+        ortho_old_rotated, rot_mat = roi.rotate_image(ortho_old,
                                                       adapted_rotation,
                                                       return_rot_matrix=True)
+
+        ortho_old[ortho_old==255] = 0
+
         # resize and rotate mask
         if mask_old is not None:
-            mask_old_rotated = roi.rotate_image(mask_old_resized, adapted_rotation,
+            mask_old_rotated = roi.rotate_image(mask_old, adapted_rotation,
                                                 interpolate=False)
         else:
             mask_old_rotated = None
@@ -76,29 +69,28 @@ def find_gcps(dem_old, dem_new,
         rot_mats.append(rot_mat)
 
         # resize to dem_rel size
-        ortho_old_resized, s_x_d, s_y_d = ri.resize_image(ortho_old_rotated, dem_old.shape,
+        ortho_old_resized, s_x_1, s_y_1 = ri.resize_image(ortho_old_rotated, dem_old.shape,
                                                           return_scale_factor=True)
-        scale_factors1.append((s_x_d, s_y_d))
+        scale_factors1.append((s_x_1, s_y_1))
 
         if mask_old is not None:
             mask_old_resized = ri.resize_image(mask_old_rotated, dem_old.shape)
 
         # resize the old ortho to the size of the new ortho
-        ortho_old_final, s_x_final, s_y_final = ri.resize_image(ortho_old_resized, ortho_new.shape[-2:],
+        ortho_old_final, s_x_2, s_y_2 = ri.resize_image(ortho_old_resized, ortho_new.shape[-2:],
                                                                 return_scale_factor=True)
-        scale_factors2.append((s_x_final,s_y_final))
+        scale_factors2.append((s_x_2,s_y_2))
 
         if mask_old is not None:
-            mask_old_resized = ri.resize_image(mask_old_resized, ortho_old_final.shape)
+            mask_old_final = ri.resize_image(mask_old_resized, ortho_new.shape[-2:])
 
         if debug_display_input_data:
             style_config = {
                 "title": "Input satellite, ortho and overlay"
             }
-            di.display_images([ortho_new, ortho_old_final, ortho_new],
-                              overlays=[None, None, ortho_old_final],
+            di.display_images([ortho_new, ortho_old_final, mask_new, mask_old_final, ortho_new],
+                              overlays=[None, None, None, None, ortho_old_final],
                               style_config=style_config)
-            di.display_images([mask_new, mask_old_resized])
 
         # find the number of cells in the x and y direction
         n_x = int(np.ceil(ortho_old_final.shape[1] / cell_size))
@@ -106,12 +98,10 @@ def find_gcps(dem_old, dem_new,
 
         all_tps = []
         all_conf = []
-
         num_tps_unmasked = 0
 
         # new tie point detector with higher required confidence
         tpd = ftp.TiePointDetector('lightglue', min_conf=min_conf, tp_type=float)
-
 
         # iterate over the cells
         for i in range(n_x):
@@ -122,67 +112,30 @@ def find_gcps(dem_old, dem_new,
                 y_min = j * cell_size
                 y_max = min((j + 1) * cell_size, ortho_old_final.shape[0])
 
-                # get initial old cell
+                # get the old cell
                 cell_old = ortho_old_final[y_min:y_max, x_min:x_max]
 
-                # check if the cell is empty
                 if np.sum(cell_old) == 0:
-                    print("Old cell empty", i, j)
                     continue
 
                 # check if the cell is masked completely
                 if mask_old is not None:
-                    cell_mask_old = mask_old_resized[y_min:y_max, x_min:x_max]
+                    cell_mask_old = mask_old_final[y_min:y_max, x_min:x_max]
 
                     if np.sum(cell_mask_old) == 0:
-                        print("Old cell completely masked", i, j)
                         continue
-
-                # Find the number of leading/trailing rows and columns that are zero
-                top_zeros = np.argmax(np.any(cell_old != 0, axis=1))  # First non-zero row
-                bottom_zeros = np.argmax(np.any(cell_old[::-1] != 0, axis=1))  # First non-zero row from the bottom
-                left_zeros = np.argmax(np.any(cell_old != 0, axis=0))  # First non-zero column
-                right_zeros = np.argmax(np.any(cell_old[:, ::-1] != 0, axis=0))  # First non-zero column from the right
-
-                if top_zeros > bottom_zeros:
-                    y_min += top_zeros
-                    y_max += top_zeros
-                elif bottom_zeros > top_zeros:
-                    y_min -= bottom_zeros
-                    y_max -= bottom_zeros
-                else:
-                    # do nothing
-                    pass
-
-                if left_zeros > right_zeros:
-                    x_min += left_zeros
-                    x_max += left_zeros
-                elif right_zeros > left_zeros:
-                    x_min -= right_zeros
-                    x_max -= right_zeros
-                else:
-                    # do nothing
-                    pass
-
-                x_min = max(0, x_min)
-                x_max = min(ortho_old_final.shape[1], x_max)
-                y_min = max(0, y_min)
-                y_max = min(ortho_old_final.shape[0], y_max)
-
-                # get the new cells with adapted values
-                cell_old = ortho_old_final[y_min:y_max, x_min:x_max]
-                cell_new = ortho_new[:, y_min:y_max, x_min:x_max]
-
-                if mask_old is not None:
-                    cell_mask_old = mask_old_resized[y_min:y_max, x_min:x_max]
                 else:
                     cell_mask_old = None
+
+                cell_new = ortho_new[:, y_min:y_max, x_min:x_max]
+
+                if np.sum(cell_new) == 0:
+                    continue
+
                 if mask_new is not None:
                     cell_mask_new = mask_new[y_min:y_max, x_min:x_max]
 
-                    # check if the cell is masked completely
                     if np.sum(cell_mask_new) == 0:
-                        print("New cell completely masked", i, j)
                         continue
                 else:
                     cell_mask_new = None
@@ -231,6 +184,11 @@ def find_gcps(dem_old, dem_new,
                 tps[:, 2] += x_min
                 tps[:, 3] += y_min
 
+                print_str = f"Found {tps.shape[0]} tie points in cell {i} {j} for {f'(nudged) ' if nudge != 0 else ''}rotation {adapted_rotation}"
+                if debug_check_unmasked_tps:
+                    print_str = print_str + f"({tps_unmasked.shape[0]} without mask)"
+                print(print_str)
+
                 all_tps.append(tps)
                 all_conf.append(conf)
 
@@ -242,11 +200,6 @@ def find_gcps(dem_old, dem_new,
             tps = np.zeros((0, 4))
             conf = np.zeros(0)
 
-        print_str = f"Found {tps.shape[0]} tie points for {f'(nudged) ' if nudge != 0 else ''}rotation {adapted_rotation}"
-        if debug_check_unmasked_tps:
-            print_str = print_str + f"({num_tps_unmasked} without mask)"
-        print(print_str)
-
         if tps.shape[0] == 0:
             tps_per_rotation.append(np.zeros((0, 4)))
             conf_per_rotation.append(np.zeros(0))
@@ -256,11 +209,16 @@ def find_gcps(dem_old, dem_new,
 
     # get rotation with most tps
     max_idx = np.argmax([tps.shape[0] for tps in tps_per_rotation])
+
     tps = tps_per_rotation[max_idx]
     conf = conf_per_rotation[max_idx]
     rot_mat = rot_mats[max_idx]
-    s_x_d, s_y_d = scale_factors1[max_idx]
-    s_x_final, s_y_final = scale_factors2[max_idx]
+    s_x_1, s_y_1 = scale_factors1[max_idx]
+    s_x_2, s_y_2 = scale_factors2[max_idx]
+
+    print(f"Most tie points ({tps.shape[0]}) found for rotation", rotations[max_idx])
+    if debug_check_unmasked_tps:
+        print(f"Unmasked tie points: {num_tps_unmasked}")
 
     if tps.shape[0] == 0:
         if raise_error:
@@ -268,23 +226,17 @@ def find_gcps(dem_old, dem_new,
         else:
             return np.zeros((0, 4))
 
-    print("Final tie points:", tps.shape[0])
-
-    # scale points back I
-    tps[:, 2] /= s_x_final
-    tps[:, 3] /= s_y_final
-
     # scale points back II
-    tps[:, 0] /= s_x_d
-    tps[:, 1] /= s_y_d
+    tps[:, 2] /= s_x_2
+    tps[:, 3] /= s_y_2
+
+    # scale points back I1
+    tps[:, 0] /= s_x_1
+    tps[:, 1] /= s_y_1
 
     # rotate points back
     tps[:,2:4] = rp.rotate_points(tps[:,2:4], rot_mat,
                                          invert=True)
-
-    # scale old points back III
-    tps[:,2] /= s_x_old
-    tps[:,3] /= s_y_old
 
     # init variables for tp selection
     selected_tps, selected_conf = [], []
@@ -392,44 +344,3 @@ def find_gcps(dem_old, dem_new,
                                               'x_abs', 'y_abs', 'z_abs'])
 
     return df
-
-
-if __name__ == "__main__":
-
-    project_name = "test1"
-    path_project_fld = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
-
-    import os
-    output_fld = os.path.join(path_project_fld, "output")
-    data_fld = os.path.join(path_project_fld, "data")
-
-    import src.base.calc_bounds as cb
-    import src.load.load_image as li
-    import src.load.load_rema as lr
-    import src.load.load_satellite as ls
-    import src.load.load_transform as lt
-
-    old_dem = li.load_image(os.path.join(output_fld, f"{project_name}_dem_relative.tif"))
-    transform = lt.load_transform(os.path.join(data_fld, "georef", "transform.txt"), delimiter=",")
-    bounds = cb.calc_bounds(transform, old_dem.shape)
-
-    new_dem = lr.load_rema(bounds)
-    old_ortho = li.load_image(os.path.join(output_fld, f"{project_name}_ortho_relative.tif"))
-    new_ortho, modern_transform = ls.load_satellite(bounds, return_transform=True)
-
-    if len(old_ortho.shape) == 3:
-        old_ortho = old_ortho[0, :, :]
-
-    path_cached_rock_mask = os.path.join(data_fld, "georef", "rock_mask.tif")
-    rock_mask = li.load_image(path_cached_rock_mask)
-
-    resolution = 0.01
-
-    rotation = np.loadtxt(os.path.join(data_fld, "georef", "best_rot.txt"))
-    rotation = float(rotation)
-
-    rock_mask = ri.resize_image(rock_mask, old_ortho.shape)
-
-    df = find_gcps(old_dem, new_dem, old_ortho, new_ortho, modern_transform,
-              resolution, bounds, rotation=rotation, mask=rock_mask)
-

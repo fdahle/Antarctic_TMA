@@ -32,7 +32,8 @@ class TiePointDetector:
     def __init__(self, matching_method: str, matching_additional: bool = True, matching_extra: bool = True,
                  keep_resized_points: bool = False, min_resized_points: int = 10, num_transform_points: int = 25,
                  min_conf: float = 0.0, ransac_value: float = 5.0, average_threshold: float = 10.0,
-                 tp_type=int, display: bool = False, display_level=1, catch=False, verbose: bool = False):
+                 tp_type=int, display: bool = False, display_level=1,
+                 catch=False, verbose: bool = False):
         """
         Initializes the TiePointDetector with specified configuration for tie-point detection and matching.
 
@@ -101,6 +102,7 @@ class TiePointDetector:
                         mask_additional_tps: bool = True,
                         mask_extra_tps: bool = True,
                         mask_final_tps: bool = False,
+                        image_id_1=None, image_id_2=None,
                         save_path: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
         """
         Finds tie points between two input images, optionally using masks to limit the search area.
@@ -135,6 +137,8 @@ class TiePointDetector:
                 mask1 = mask1.astype(int)
 
             if mask1.shape != input_img1.shape[-2:]:
+                if image_id_1 is not None:
+                    print(image_id_1)
                 raise ValueError(f"Mask1 must have the same dimensions as input_img1 ({mask1.shape} vs {input_img1.shape})")
 
         if mask2 is not None:
@@ -147,6 +151,8 @@ class TiePointDetector:
                 mask2 = mask2.astype(int)
 
             if mask2.shape != input_img2.shape[-2:]:
+                if image_id_2 is not None:
+                    print(image_id_2)
                 raise ValueError(f"Mask2 must have the same dimensions as input_img2 ({mask2.shape} vs {input_img2.shape})")
 
         try:

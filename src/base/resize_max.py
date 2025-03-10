@@ -1,5 +1,4 @@
-from skimage.transform import resize
-
+import src.base.resize_image as ri
 
 def resize_max(arr, max_size):
     """
@@ -24,6 +23,6 @@ def resize_max(arr, max_size):
     new_x = int(x * scale)
 
     # Rescale the array using numpy
-    resized_arr = resize(arr, (new_y, new_x), preserve_range=True, anti_aliasing=True).astype(arr.dtype)
+    resized_arr = ri.resize_image(arr, (new_y, new_x), size="size", interpolation="nearest")
 
     return resized_arr, scale, scale

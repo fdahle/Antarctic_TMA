@@ -21,5 +21,3 @@ chunk_absolute = doc_absolute.chunks[0]
 
 print(chunk_relative.transform.matrix)
 print(chunk_absolute.transform.matrix)
-
-chunk_absolute.

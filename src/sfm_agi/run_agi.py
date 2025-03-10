@@ -1,6 +1,7 @@
 """run the complete process to create a DEM from images with Agisoft"""
-import copy
+
 # Python imports
+import cv2
 import json
 import os
 import math
@@ -49,10 +50,12 @@ import src.sfm_agi.snippets.create_matching_structure as cms  # noqa: SpellingIn
 import src.sfm_agi.snippets.create_slope_mask as csm
 import src.sfm_agi.snippets.convert_ply_files as cpf
 import src.sfm_agi.snippets.extract_camera_params as ecp
-import src.sfm_agi.snippets.filter_gcps as fgcp
-import src.sfm_agi.snippets.find_gcps as fg
+import src.sfm_agi.snippets.filter_markers as fm
+# import src.sfm_agi.snippets.find_gcps as fg
+import src.sfm_agi.snippets.find_gcps_new as fgn
 import src.sfm_agi.snippets.find_tie_points_for_sfm as ftp
 import src.sfm_agi.snippets.georef_ortho as go
+import src.sfm_agi.snippets.georef_ortho2 as go2
 import src.sfm_agi.snippets.save_key_points as skp
 import src.sfm_agi.snippets.save_sfm_to_db as sstd  # noqa: SpellingInspection
 import src.sfm_agi.snippets.save_tie_points as stp
@@ -78,6 +81,7 @@ min_tps = 15  # minimum number of tie points between images
 max_tps = 10000
 min_tp_confidence = 0.9
 tp_type = float
+min_nr_tps = 50
 tp_tolerance = 0.5
 custom_markers = False  # if True, custom markers support the matching of Agisoft
 zoom_level_dem = 10  # in m
@@ -85,13 +89,18 @@ use_gcp_mask = True  # filter ground control points with a mask
 mask_type = ["rock", "confidence", "slope"]  # "confidence" or "rock"
 rock_mask_type = "REMA"
 mask_resolution = 10
+min_gpc_tp_conf=0.75
+gcp_mask_kernel_conf = 5
+gcp_mask_kernel_rock = 11
+min_gcp_optimum = 20
 min_gcp_required = 5
 min_gcp_confidence = 0.9
-gcp_accuracy_px = 5 # in px
-max_gcp_error_px = 0.5 # in px
-max_gcp_error_m = 50
+gcp_accuracy_px = 1 # in px
+min_markers = 5
+max_marker_error_px = 1 # in px
+max_marker_error_m = 25 # in m
 max_slope_begin = 20
-max_slope_finish = 50
+max_slope_finish = 60
 mask_buffer = 10  # in pixels
 no_data_value = -9999
 interpolate = True  # interpolate values in MESH and DEM
@@ -117,18 +126,18 @@ STEPS = {
     "union_masks": False,
     "enhance_photos": False,
     "match_photos": False,
-    "align_cameras": False,
-    "build_depth_maps_relative": False,
-    "build_mesh_relative": False,
-    "build_pointcloud_relative": False,
-    "clean_pointcloud_relative": False,
-    "build_dem_relative": False,
-    "build_orthomosaic_relative": False,
-    "build_confidence_relative": False,
-    "georef_ortho": False,
+    "align_cameras": True,
+    "build_depth_maps_relative": True,
+    "build_mesh_relative": True,
+    "build_pointcloud_relative": True,
+    "clean_pointcloud_relative": True,
+    "build_dem_relative": True,
+    "build_orthomosaic_relative": True,
+    "build_confidence_relative": True,
+    "georef_ortho": True,
     "create_gcps": True,
     "load_gcps": True,
-    "filter_gcps": True,
+    "filter_markers": True,
     "build_depth_maps_absolute": True,
     "save_camera_params": True,
     "build_mesh_absolute": True,
@@ -163,8 +172,8 @@ DISPLAY_STEPS = {
 CACHE_STEPS = {
     'save_enhanced': True,
     'use_enhanced': True,
-    'save_masks': True,  # TODO: IMPLEMENT
-    'use_masks': True,  # TODO: IMPLEMENT
+    'save_masks': True,
+    'use_masks': True,
     'save_tps': True,
     'use_tps': True,
     'save_bundler': True,
@@ -280,6 +289,10 @@ def run_agi(project_name: str, images_paths: list,
     DISPLAY_STEPS["save_key_points"] = False
     DISPLAY_STEPS["save_tie_points"] = False
 
+    #print("TEMP: DISABLE CONFIDENCE")
+    #STEPS["build_confidence_relative"] = False
+    #STEPS["build_confidence_absolute"] = False
+
     # check if we have image
     if len(images_paths) == 0:
         raise ValueError("No images were provided")
@@ -343,6 +356,13 @@ def run_agi(project_name: str, images_paths: list,
     if os.path.exists(steps_path) is False:
         with open(steps_path, "w") as file:
             file.write(project_name + "\n")
+
+    # create a memory file
+    memory_path = os.path.join(log_fld, "memory.txt")
+    if os.path.exists(memory_path) is False:
+        with open(memory_path, "w") as file:
+            file.write(project_name + "\n")
+
 
     try:
 
@@ -532,6 +552,8 @@ def run_agi(project_name: str, images_paths: list,
                 if i == len(images_paths) - 1:
                     pbar.set_postfix_str("Finished!")
 
+            del img
+
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Copy images - finished ({exec_time:.4f} s)")
@@ -613,7 +635,7 @@ def run_agi(project_name: str, images_paths: list,
                     continue
 
                 # get the image dimensions
-                image_dims[camera.label] = [camera.calibration.width, camera.calibration.height]
+                image_dims[camera.label] = [camera.calibration.height, camera.calibration.width]
 
             # add focal length to the images
             if focal_lengths is not None:
@@ -770,204 +792,244 @@ def run_agi(project_name: str, images_paths: list,
 
                 doc.save()
 
-        if STEPS["create_masks"]:
+        counter_missing_masks = 0
+        if STEPS["create_masks"] and CACHE_STEPS["use_masks"]:
+            # define cache fld
+            mask_cache_fld = "/data/ATM/data_1/sfm/agi_data/masks"
 
-            print("Create masks")
-            start_time = time.time()
-
-            # save step
-            with open(steps_path, "a") as file:
-                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file.write(f"START: create_masks - {current_date_time}\n")
-
-            # create temporary doc
-            doc_temp = Metashape.Document(read_only=False)  # noqa
-
-            # add a chunk for the temporary doc
-            chunk_temp = doc_temp.addChunk()
-
-            # add the images to the temporary chunk
-            chunk_temp.addPhotos(images_paths, progress=_print_progress)
-
-            # set the images to film cameras (required for finding fiducials)
-            for camera in chunk_temp.cameras:
+            for camera in chunk.cameras:
                 if camera.enabled is False:
                     continue
 
-                camera.sensor.film_camera = True
-                camera.sensor.fixed_calibration = True
+                # define exact cache path
+                mask_cache_pth = os.path.join(mask_cache_fld, f"{camera.label}_mask.tif")
 
-            arguments = {
-                'generate_masks': True,
-                'generic_detector': False,
-                'frame_detector': True,
-                'fiducials_position_corners': False
-            }
+                if os.path.exists(mask_cache_pth):
+                    mask = li.load_image(mask_cache_pth)
 
-            # detect fiducials
-            chunk_temp.detectFiducials(**arguments)
-
-            # save the arguments of the command
-            if save_commands:
-                _save_command_args("detectFiducials", arguments, argument_fld)
-
-            # calibrate fiducials
-            for idx, camera in (pbar := tqdm(enumerate(chunk_temp.cameras), total=len(chunk_temp.cameras))):
-
-                # skip disabled cameras
-                if camera.enabled is False:
-                    continue
-
-                # update progressbar
-                pbar.set_description("Calibrate fiducials")
-                pbar.set_postfix_str(f"{camera.label}")
-
-                # calibrate the fiducials
-                try:
-                    camera.sensor.calibrateFiducials(0.025)
-                except RuntimeError:
-                    print(f"WARNING: Calibration of fiducials failed for {camera.label}")
-                    print(f"{camera.label} will be removed from SfM processing.")
-                    camera.enabled = False
-
-                # update progressbar in last loop
-                if idx == len(chunk_temp.cameras) - 1:
-                    pbar.set_postfix_str("Finished!")
-
-            # define path to save masks
-            mask_folder = os.path.join(data_fld, "masks_original")
-            if not os.path.exists(mask_folder):
-                os.makedirs(mask_folder)
-
-            # check if the number of cameras is equal in the temporary chunk
-            if len(chunk_temp.cameras) != len(chunk.cameras):
-                raise ValueError("The number of cameras in the temporary chunk is not equal to the original chunk.")
-
-            # save masks and copy them to the original chunk as well
-            for i, camera_temp in (pbar := tqdm(enumerate(chunk_temp.cameras), total=len(chunk_temp.cameras))):
-
-                # update description
-                pbar.set_description("Save and copy mask")
-                pbar.set_postfix_str(f"{camera_temp.label}")
-
-                if camera_temp.mask is not None:
-                    # save the mask
-                    mask_path = os.path.join(mask_folder, f"{camera_temp.label}_mask.tif")
-                    camera_temp.mask.image().save(mask_path)
-
-                    # copy the mask to the original chunk
-                    camera = chunk.cameras[i]
-                    camera.mask = camera_temp.mask
-
-                # update progressbar in last loop
-                if i == len(chunk_temp.cameras) - 1:
-                    pbar.set_postfix_str("Finished!")
-
-            # save the project
-            doc.save()
-
-            # remove the temporary doc
-            del doc_temp
-
-            # save step
-            with open(steps_path, "a") as file:
-                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file.write(f"FINISHED: create_masks - {current_date_time}\n")
-
-            finish_time = time.time()
-            exec_time = finish_time - start_time
-            print(f"Create masks - finished ({exec_time:.4f} s)")
-
-        # remove all cameras that are not enabled
-        for camera in chunk.cameras:
-            if camera.enabled is False:
-                chunk.remove(camera)  # noqa
-
-        if STEPS["union_masks"]:
-
-            time.sleep(0.1)
-            start_time = time.time()
-
-            # save step
-            with open(steps_path, "a") as file:
-                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file.write(f"START: union_masks - {current_date_time}\n")
-
-            # adapt the path to the mask folder
-            mask_folder = os.path.join(data_fld, "masks_adapted")
-            if not os.path.exists(mask_folder):
-                os.makedirs(mask_folder)
-
-            # iterate over the cameras
-            for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
-
-                if camera.enabled is False:
-                    continue
-
-                # update progressbar
-                pbar.set_description("Union masks")
-                pbar.set_postfix_str(f"{camera.label}")
-
-                # check if camera has a mask
-                if camera.mask:
-
-                    # get the mask
-                    mask = camera.mask.image()
-
-                    # get the dimensions of the mask
-                    m_width = mask.width
-                    m_height = mask.height
-
-                    # convert to np array
-                    mask_bytes = mask.tostring()
-                    existing_mask = np.frombuffer(mask_bytes, dtype=np.uint8).reshape((m_height, m_width))
-
-                    # get the image id
-                    image_id = camera.label.split("_")[0]
-
-                    # check if image_id is in the rotated images
-                    if image_id in rotated_images:
-                        rotated = True
-                    else:
-                        rotated = False
-
-                    # create an adapted mask
-                    adapted_mask = cam.create_adapted_mask(existing_mask, image_id,
-                                                           rotated=rotated, conn=conn)
-
-                    # convert the adapted mask to a metashape image
-                    adapted_mask_m = Metashape.Image.fromstring(adapted_mask,
-                                                                adapted_mask.shape[1],
-                                                                adapted_mask.shape[0],
-                                                                channels=' ',
-                                                                datatype='U8')
-
-                    # create a mask object
+                    # convert the mask to a metashape image
+                    mask_m = Metashape.Image.fromstring(mask,
+                                                        mask.shape[1],
+                                                        mask.shape[0],
+                                                        channels=' ',
+                                                        datatype='U8')
                     mask_obj = Metashape.Mask()
-                    mask_obj.setImage(adapted_mask_m)
+                    mask_obj.setImage(mask_m)
 
                     # set the mask to the camera
                     camera.mask = mask_obj
+                else:
+                    counter_missing_masks += 1
 
-                    # save the adapted mask
-                    mask_path = os.path.join(mask_folder, f"{camera.label}_mask.tif")
-                    camera.mask.image().save(mask_path)
+        if CACHE_STEPS["use_masks"] is False or counter_missing_masks > 0:
 
-                # update progressbar in last loop
-                if idx == len(chunk.cameras) - 1:
-                    pbar.set_postfix_str("Finished!")
+            if STEPS["create_masks"]:
 
-            # save step
-            with open(steps_path, "a") as file:
-                current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file.write(f"FINISHED: union_masks - {current_date_time}\n")
+                print("Create masks")
+                start_time = time.time()
 
-            finish_time = time.time()
-            exec_time = finish_time - start_time
-            print(f"Union masks - finished ({exec_time:.4f} s)")
+                # save step
+                with open(steps_path, "a") as file:
+                    current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    file.write(f"START: create_masks - {current_date_time}\n")
 
-            # save the project
-            doc.save()
+                # create temporary doc
+                doc_temp = Metashape.Document(read_only=False)  # noqa
+
+                # add a chunk for the temporary doc
+                chunk_temp = doc_temp.addChunk()
+
+                # add the images to the temporary chunk
+                chunk_temp.addPhotos(images_paths, progress=_print_progress)
+
+                # set the images to film cameras (required for finding fiducials)
+                for camera in chunk_temp.cameras:
+                    if camera.enabled is False:
+                        continue
+
+                    camera.sensor.film_camera = True
+                    camera.sensor.fixed_calibration = True
+
+                arguments = {
+                    'generate_masks': True,
+                    'generic_detector': False,
+                    'frame_detector': True,
+                    'fiducials_position_corners': False
+                }
+
+                # detect fiducials
+                chunk_temp.detectFiducials(**arguments)
+
+                # save the arguments of the command
+                if save_commands:
+                    _save_command_args("detectFiducials", arguments, argument_fld)
+
+                # calibrate fiducials
+                for idx, camera in (pbar := tqdm(enumerate(chunk_temp.cameras), total=len(chunk_temp.cameras))):
+
+                    # skip disabled cameras
+                    if camera.enabled is False:
+                        continue
+
+                    # update progressbar
+                    pbar.set_description("Calibrate fiducials")
+                    pbar.set_postfix_str(f"{camera.label}")
+
+                    # calibrate the fiducials
+                    try:
+                        camera.sensor.calibrateFiducials(0.025)
+                    except RuntimeError:
+                        print(f"WARNING: Calibration of fiducials failed for {camera.label}")
+                        print(f"{camera.label} will be removed from SfM processing.")
+                        camera.enabled = False
+
+                    # update progressbar in last loop
+                    if idx == len(chunk_temp.cameras) - 1:
+                        pbar.set_postfix_str("Finished!")
+
+                # define path to save masks
+                mask_folder = os.path.join(data_fld, "masks_original")
+                if not os.path.exists(mask_folder):
+                    os.makedirs(mask_folder)
+
+                # check if the number of cameras is equal in the temporary chunk
+                if len(chunk_temp.cameras) != len(chunk.cameras):
+                    raise ValueError("The number of cameras in the temporary chunk is not equal to the original chunk.")
+
+                # save masks and copy them to the original chunk as well
+                for i, camera_temp in (pbar := tqdm(enumerate(chunk_temp.cameras), total=len(chunk_temp.cameras))):
+
+                    # update description
+                    pbar.set_description("Save and copy mask")
+                    pbar.set_postfix_str(f"{camera_temp.label}")
+
+                    if camera_temp.mask is not None:
+                        # save the mask
+                        mask_path = os.path.join(mask_folder, f"{camera_temp.label}_mask.tif")
+                        camera_temp.mask.image().save(mask_path)
+
+                        # copy the mask to the original chunk
+                        camera = chunk.cameras[i]
+                        camera.mask = camera_temp.mask
+
+                    # update progressbar in last loop
+                    if i == len(chunk_temp.cameras) - 1:
+                        pbar.set_postfix_str("Finished!")
+
+                # save the project
+                doc.save()
+
+                # remove the temporary doc
+                del doc_temp
+
+                # save step
+                with open(steps_path, "a") as file:
+                    current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    file.write(f"FINISHED: create_masks - {current_date_time}\n")
+
+                finish_time = time.time()
+                exec_time = finish_time - start_time
+                print(f"Create masks - finished ({exec_time:.4f} s)")
+
+            # remove all cameras that are not enabled
+            for camera in chunk.cameras:
+                if camera.enabled is False:
+                    chunk.remove(camera)  # noqa
+
+            if STEPS["union_masks"]:
+
+                time.sleep(0.1)
+                start_time = time.time()
+
+                # save step
+                with open(steps_path, "a") as file:
+                    current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    file.write(f"START: union_masks - {current_date_time}\n")
+
+                # adapt the path to the mask folder
+                mask_folder = os.path.join(data_fld, "masks_adapted")
+                if not os.path.exists(mask_folder):
+                    os.makedirs(mask_folder)
+
+                # iterate over the cameras
+                for idx, camera in (pbar := tqdm(enumerate(chunk.cameras), total=len(chunk.cameras))):
+
+                    if camera.enabled is False:
+                        continue
+
+                    # update progressbar
+                    pbar.set_description("Union masks")
+                    pbar.set_postfix_str(f"{camera.label}")
+
+                    # check if camera has a mask
+                    if camera.mask:
+
+                        # get the mask
+                        mask = camera.mask.image()
+
+                        # get the dimensions of the mask
+                        m_width = mask.width
+                        m_height = mask.height
+
+                        # convert to np array
+                        mask_bytes = mask.tostring()
+                        existing_mask = np.frombuffer(mask_bytes, dtype=np.uint8).reshape((m_height, m_width))
+
+                        # get the image id
+                        image_id = camera.label.split("_")[0]
+
+                        # check if image_id is in the rotated images
+                        if image_id in rotated_images:
+                            rotated = True
+                        else:
+                            rotated = False
+
+                        # create an adapted mask
+                        adapted_mask = cam.create_adapted_mask(existing_mask, image_id,
+                                                               rotated=rotated, conn=conn)
+
+                        # convert the adapted mask to a metashape image
+                        adapted_mask_m = Metashape.Image.fromstring(adapted_mask,
+                                                                    adapted_mask.shape[1],
+                                                                    adapted_mask.shape[0],
+                                                                    channels=' ',
+                                                                    datatype='U8')
+
+                        if CACHE_STEPS["save_masks"]:
+                            mask_cache_fld = "/data/ATM/data_1/sfm/agi_data/masks"
+                            eti.export_tiff(adapted_mask, os.path.join(mask_cache_fld, f"{camera.label}_mask.tif"),
+                                            use_lzw=True, overwrite=True)
+
+                        # create a mask object
+                        mask_obj = Metashape.Mask()
+                        mask_obj.setImage(adapted_mask_m)
+
+                        # set the mask to the camera
+                        camera.mask = mask_obj
+
+                        # save the adapted mask
+                        mask_path = os.path.join(mask_folder, f"{camera.label}_mask.tif")
+                        camera.mask.image().save(mask_path)
+
+                    # update progressbar in last loop
+                    if idx == len(chunk.cameras) - 1:
+                        pbar.set_postfix_str("Finished!")
+
+                # save step
+                with open(steps_path, "a") as file:
+                    current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    file.write(f"FINISHED: union_masks - {current_date_time}\n")
+
+                finish_time = time.time()
+                exec_time = finish_time - start_time
+                print(f"Union masks - finished ({exec_time:.4f} s)")
+
+                # save the project
+                doc.save()
+
+            # reset variable
+            del adapted_mask
+            del mask_bytes
 
         # init variable for enhanced folder
         enhanced_folder = os.path.join(data_fld, "images_enhanced")
@@ -1013,7 +1075,7 @@ def run_agi(project_name: str, images_paths: list,
                 else:
                     mask = None
 
-                # enhance the image
+                # define path for cache
                 enhanced_fld = "/data/ATM/data_1/sfm/agi_data/enhanced"
                 enhanced_cache_pth = os.path.join(enhanced_fld, f"{camera.label}.tif")
 
@@ -1021,6 +1083,8 @@ def run_agi(project_name: str, images_paths: list,
                 if CACHE_STEPS['use_enhanced']:
                     if os.path.exists(enhanced_cache_pth):
                         enhanced_image = li.load_image(enhanced_cache_pth)
+                        if enhanced_image.shape != image.shape:
+                            enhanced_image = ei.enhance_image(image, mask)
                     else:
                         enhanced_image = ei.enhance_image(image, mask)
                 else:
@@ -1327,6 +1391,9 @@ def run_agi(project_name: str, images_paths: list,
                 # save the project
                 doc.save()
 
+            # reset the progress bar
+            pbar = None
+
         # align cameras
         if STEPS["align_cameras"]:
 
@@ -1498,11 +1565,13 @@ def run_agi(project_name: str, images_paths: list,
             print(f"Height: {max_corner.y - min_corner.y}")
 
             # restrain the bounding box to the absolute bounds if given
+            """
             if camera_positions is not None and absolute_bounds is not None:
                 min_corner.x = max(min_corner.x, absolute_bounds[0])
                 min_corner.y = max(min_corner.y, absolute_bounds[1])
                 max_corner.x = min(max_corner.x, absolute_bounds[2])
                 max_corner.y = min(max_corner.y, absolute_bounds[3])
+            """
 
             # create 2d versions of the corners
             min_corner_2d = Metashape.Vector([min_corner.x, min_corner.y])  # noqa
@@ -1792,6 +1861,21 @@ def run_agi(project_name: str, images_paths: list,
             if point_cloud_rel is None:
                 point_cloud_rel = lpl.load_ply(output_path_pc_rel)
 
+            import sys
+            def sizeof_fmt(num, suffix='B'):
+                ''' by Fred Cirera,  https://stackoverflow.com/a/1094933/1870254, modified'''
+                for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+                    if abs(num) < 1024.0:
+                        return "%3.1f %s%s" % (num, unit, suffix)
+                    num /= 1024.0
+                return "%.1f %s%s" % (num, 'Yi', suffix)
+
+            with open(memory_path, "a") as file:
+                for name, size in sorted(((name, sys.getsizeof(value)) for name, value in list(
+                        locals().items())), key=lambda x: -x[1])[:20]:
+                    file.write("{:>30}: {:>8}\n".format(name, sizeof_fmt(size)))
+                    print("{:>30}: {:>8}".format(name, sizeof_fmt(size)))
+
             # create the confidence array
             conf_arr_rel = cca.create_confidence_arr(dem_rel,
                                                      point_cloud_rel,
@@ -1826,16 +1910,11 @@ def run_agi(project_name: str, images_paths: list,
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 file.write(f"START: georef_ortho - {current_date_time}\n")
 
-            if os.path.exists(output_path_dem_rel) is False:
-                raise FileNotFoundError(f"DEM file does not exist "
-                                        f"at '{output_path_dem_rel}'")
             if os.path.exists(output_path_ortho_rel) is False:
                 raise FileNotFoundError(f"Ortho file does not exist "
                                         f"at '{output_path_ortho_rel}'")
 
             # load the required data
-            if dem_rel is None:
-                dem_rel = li.load_image(output_path_dem_rel)
             if ortho_rel is None:
                 ortho_rel = li.load_image(output_path_ortho_rel)
             if camera_footprints is None:
@@ -1844,11 +1923,6 @@ def run_agi(project_name: str, images_paths: list,
             # if ortho has alpha -> remove it
             if len(ortho_rel.shape) == 3:
                 ortho_rel = ortho_rel[0, :, :]
-
-            if dem_rel.shape != ortho_rel.shape:
-                print("DEM", dem_rel.shape)
-                print("Ortho", ortho_rel.shape)
-                raise ValueError("DEM and ortho should have the same shape")
 
             # check which cameras are aligned
             image_ids = []
@@ -1889,6 +1963,7 @@ def run_agi(project_name: str, images_paths: list,
                                                                         auto_rotate=True,
                                                                         trim_image=True,
                                                                         tp_type=tp_type,
+                                                                        min_nr_tps=min_nr_tps,
                                                                         min_conf=0.5,
                                                                         start_conf=0.9,
                                                                         only_vertical_footprints = True,
@@ -1906,6 +1981,7 @@ def run_agi(project_name: str, images_paths: list,
                                       aligned,
                                       azimuth=None, auto_rotate=True,
                                       trim_image=True,
+                                      min_nr_tps=min_nr_tps,
                                       tp_type=tp_type,
                                       min_conf=0.5,
                                       start_conf=0.9,
@@ -1916,11 +1992,23 @@ def run_agi(project_name: str, images_paths: list,
                                       save_path_transform=transform_path)
 
                 transform_georef = tpl[0]
-                # bounds_georef = tpl[1]
                 best_rot = tpl[2]
 
             if transform_georef is None:
                 raise ValueError("Transform is not defined. Check the georef_ortho function.")
+
+            georef_2 = True
+            if georef_2:
+                gref_ortho, gref_transform = li.load_image(ortho_georef_path, return_transform=True)
+                transform_georef = go2.georef_ortho_2(gref_ortho, gref_transform, best_rot,
+                                   min_nr_tps=min_nr_tps,
+                                   tp_type=tp_type,
+                                   save_path_tps=ortho_tps_path,
+                                   save_path_ortho=ortho_georef_path,
+                                   save_path_transform=transform_path)
+
+                if transform_georef is None:
+                    raise ValueError("Transform is not defined. Check the georef_ortho2 function.")
 
             with open(steps_path, "a") as file:
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1976,10 +2064,10 @@ def run_agi(project_name: str, images_paths: list,
             max_y = bounds_georef_old[3]
 
             # round values to the next step of 10
-            min_x = math.ceil(min_x / 10) * 10
-            min_y = math.ceil(min_y / 10) * 10
-            max_x = math.floor(max_x / 10) * 10
-            max_y = math.floor(max_y / 10) * 10
+            min_x_r = math.ceil(min_x / 10) * 10
+            min_y_r = math.ceil(min_y / 10) * 10
+            max_x_r = math.floor(max_x / 10) * 10
+            max_y_r = math.floor(max_y / 10) * 10
 
             # set bounding box to int values
             min_x = int(min_x)
@@ -1988,16 +2076,18 @@ def run_agi(project_name: str, images_paths: list,
             max_y = int(max_y)
 
             # calculate new bounds
-            bounds_georef = [min_x, min_y, max_x, max_y]
+            bounds_georef = [min_x_r, min_y_r, max_x_r, max_y_r]
 
             # get difference in min_x and min_y
-            diff_x = min_x - bounds_georef_old[0]
-            diff_y = min_y - bounds_georef_old[1]
+            diff_min_x = min_x_r - min_x
+            diff_min_y = min_y_r - min_y
+            diff_max_x = max_x_r - max_x
+            diff_max_y = max_y_r - max_y
+            diffs = (diff_min_x, diff_min_y, diff_max_x, diff_max_y)
 
             print("Old bounds:", bounds_georef_old)
             print("New bounds:", bounds_georef)
-            print("Difference in x:", diff_x)
-            print("Difference in y:", diff_y)
+            print("Differences:", diffs)
 
             # load modern dem
             print("  Load modern DEM")
@@ -2031,8 +2121,8 @@ def run_agi(project_name: str, images_paths: list,
             if use_gcp_mask:
 
                 # define base mask (where nothing is masked)
-                mask_modern = np.ones(ortho_modern.shape[-2:])
-                mask_rel = np.ones(dem_rel.shape)
+                mask_modern = np.ones(ortho_modern.shape[-2:], dtype=bool)
+                mask_rel = np.ones(dem_rel.shape, dtype=bool)
 
                 # add rock mask
                 if "rock" in mask_type:
@@ -2053,7 +2143,7 @@ def run_agi(project_name: str, images_paths: list,
                         print("  Create rock mask")
                         rock_mask = lrm.load_rock_mask(bounds_georef,
                                                        mask_resolution,
-                                                       mask_buffer=0)
+                                                       mask_buffer=gcp_mask_kernel_rock)
 
                     if CACHE_STEPS["save_rock_mask"] and rock_mask is not None:
                         eti.export_tiff(rock_mask, path_cached_rock_mask,
@@ -2069,25 +2159,40 @@ def run_agi(project_name: str, images_paths: list,
                 # add confidence mask
                 if "confidence" in mask_type:
 
+                    print("  Create confidence mask")
+
                     # load the confidence array
                     if conf_arr_rel is None:
-                        conf_arr_rel = li.load_image(output_path_conf_rel)
-                        conf_arr_rel[np.isnan(conf_arr_rel)] = 0
+                        try:
+                            conf_arr_rel = li.load_image(output_path_conf_rel)
+                            conf_arr_rel[np.isnan(conf_arr_rel)] = 0
+                        except:
+                            conf_arr_rel = None
 
                     # check if the confidence array is existing
                     if conf_arr_rel is None:
                         raise ValueError("Confidence array is not defined. "
                                          "Please create a confidence array first.")
 
+
                     # adapt mask based on confidence
                     mask_rel[conf_arr_rel < min_gcp_confidence] = 0
+                    mask_rel[conf_arr_rel >= min_gcp_confidence] = 1
+
+                    # apply kernel to mask
+                    mask_rel = mask_rel.astype(np.uint8)
+                    kernel = np.ones((gcp_mask_kernel_conf, gcp_mask_kernel_conf), np.uint8)
+                    mask_rel = cv2.dilate(mask_rel, kernel, iterations=1)
+                    mask_rel = mask_rel.astype(bool)
 
                 # add slope mask
                 if "slope" in mask_type:
 
-                    global max_slope_begin
+                    print("  Create slope mask")
 
-                    base_mask_modern = copy.deepcopy(mask_modern)
+                    global max_slope_begin
+                    base_mask_modern = mask_modern.copy()
+
                     mask_modern = csm.create_slope_mask(dem_modern, transform_rema,
                                                         mask_modern, max_slope_begin)
 
@@ -2101,39 +2206,44 @@ def run_agi(project_name: str, images_paths: list,
                 mask_modern = None
                 mask_rel = None
 
+            print("  Find GCPs")
+
             # call snippet to export gcps
-            gcp_df = fg.find_gcps(dem_rel, dem_modern,
+            gcp_df = fgn.find_gcps_new(dem_rel, dem_modern,
                                   ortho_rel, ortho_modern,
                                   transform_modern,
                                   resolution, bounding_box_rel,
                                   rotation=best_rot,
+                                  min_conf=min_gpc_tp_conf,
                                   mask_old=mask_rel, mask_new=mask_modern,
-                                  no_data_value=no_data_value,
                                   raise_error=False)
 
             if "slope" in mask_type:
+
                 while max_slope_begin <= max_slope_finish:
 
                     # we found enough tie-points
-                    if gcp_df.shape[0] >= min_gcp_required:
+                    if gcp_df.shape[0] >= min_gcp_optimum:
                         break
 
                     # increase the slope
                     max_slope_begin = max_slope_begin + 5
 
+
                     # adapt new mask
                     print(f"Create slope mask with {max_slope_begin}")
-                    mask_modern = copy.deepcopy(base_mask_modern)
+                    mask_modern = base_mask_modern.copy()
+
                     mask_modern = csm.create_slope_mask(dem_modern, transform_rema,
                                                         mask_modern, max_slope_begin)
 
-                    gcp_df = fg.find_gcps(dem_rel, dem_modern,
+                    gcp_df = fgn.find_gcps_new(dem_rel, dem_modern,
                                           ortho_rel, ortho_modern,
                                           transform_modern,
                                           resolution, bounding_box_rel,
                                           rotation=best_rot,
+                                          min_conf=min_gpc_tp_conf,
                                           mask_old=mask_rel, mask_new=mask_modern,
-                                          no_data_value=no_data_value,
                                           raise_error=False)
 
             if gcp_df.shape[0] < min_gcp_required:
@@ -2156,6 +2266,12 @@ def run_agi(project_name: str, images_paths: list,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Create GCPs - finished ({exec_time:.4f} s)")
+
+            # delete the masks
+            mask_modern = None
+            mask_rel = None
+            base_mask_modern = None
+            del mask_modern, mask_rel, base_mask_modern
 
         if STEPS["load_gcps"]:
 
@@ -2257,28 +2373,29 @@ def run_agi(project_name: str, images_paths: list,
         projection_abs.crs = chunk.crs
 
         # remove some markers
-        if STEPS["filter_gcps"]:
+        if STEPS["filter_markers"]:
 
-            print("Filter GCPs")
+            print("Filter Markers")
             start_time = time.time()
 
             with open(steps_path, "a") as file:
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file.write(f"START: filter_gcps - {current_date_time}\n")
+                file.write(f"START: filter_markers - {current_date_time}\n")
 
             # filter gcps
-            fgcp.filter_gcps(chunk, max_gcp_error_px, max_gcp_error_m)
+            fm.filter_markers(chunk, min_markers,
+                              max_marker_error_px, max_marker_error_m)
 
             # save the project
             doc.save()
 
             with open(steps_path, "a") as file:
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file.write(f"FINISHED: filter_gcps - {current_date_time}\n")
+                file.write(f"FINISHED: filter_markers - {current_date_time}\n")
 
             finish_time = time.time()
             exec_time = finish_time - start_time
-            print(f"Filter GCPs - finished ({exec_time:.4f} s)")
+            print(f"Filter Markers - finished ({exec_time:.4f} s)")
 
         if STEPS["build_depth_maps_absolute"]:
 
@@ -2346,10 +2463,10 @@ def run_agi(project_name: str, images_paths: list,
 
             # restrain the bounding box to the absolute bounds if given
             if absolute_bounds is not None:
-                min_x = min(min_x, absolute_bounds[0])
-                min_y = min(min_y, absolute_bounds[1])
-                max_x = max(max_x, absolute_bounds[2])
-                max_y = max(max_y, absolute_bounds[3])
+                min_x = max(min_x, absolute_bounds[0])
+                min_y = max(min_y, absolute_bounds[1])
+                max_x = min(max_x, absolute_bounds[2])
+                max_y = min(max_y, absolute_bounds[3])
 
             # round values to the next step of 10
             min_x = math.ceil(min_x / 10) * 10
@@ -2931,7 +3048,8 @@ def run_agi(project_name: str, images_paths: list,
 
             if rock_mask is None:
                 if rock_mask_type == "REMA":
-                    rock_mask = lrm.load_rock_mask(bounds, mask_resolution)  # noqa
+                    rock_mask = lrm.load_rock_mask(bounds, mask_resolution,
+                                                   mask_buffer=gcp_mask_kernel_rock)
                 elif rock_mask_type == "pixels":
                     tst = "old"
                     if tst == "modern":
@@ -2941,8 +3059,6 @@ def run_agi(project_name: str, images_paths: list,
                     elif tst == "old":
                         rock_mask = np.zeros_like(ortho_abs)
                         rock_mask[ortho_abs < 50] = 1
-                        import src.display.display_images as di
-                        di.display_images([ortho_abs, ortho_abs], overlays=[rock_mask, None])
                         rock_mask = rei.resize_image(rock_mask, ortho_modern.shape[-2:])
                 else:
                     raise ValueError("Rock mask type not defined.")
@@ -3014,7 +3130,7 @@ def run_agi(project_name: str, images_paths: list,
 
             # create mask for the DEM
             if rock_mask_type == "REMA":
-                rock_mask = lrm.load_rock_mask(bounds, mask_resolution)
+                rock_mask = lrm.load_rock_mask(bounds, mask_resolution, mask_buffer=gcp_mask_kernel_rock)
             elif rock_mask_type == "pixels":
                 tst = "old"
                 if tst == "modern":
@@ -3140,7 +3256,8 @@ def run_agi(project_name: str, images_paths: list,
             dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
 
             if rock_mask_type == "REMA":
-                rock_mask = lrm.load_rock_mask(bounds_corrected, mask_resolution)  # noqa
+                rock_mask = lrm.load_rock_mask(bounds_corrected, mask_resolution,
+                                               mask_buffer=gcp_mask_kernel_rock)
             elif rock_mask_type == "pixels":
                 rock_mask = np.zeros_like(ortho_modern[0, :, :])
                 condition = np.all((ortho_modern >= 40) & (ortho_modern <= 90), axis=0)  # noqa
@@ -3270,8 +3387,9 @@ def run_agi(project_name: str, images_paths: list,
             'min_gcp_required': min_gcp_required,
             'min_gcp_confidence': min_gcp_confidence,
             'gcp_accuracy_px': gcp_accuracy_px,
-            'max_gcp_error_px': max_gcp_error_px,
-            'max_gcp_error_m': max_gcp_error_m,
+            'min_markers': min_markers,
+            'max_marker_error_px': max_marker_error_px,
+            'max_marker_error_m': max_marker_error_m,
             'max_slope_begin': max_slope_begin,
             'max_slope_finish': max_slope_finish,
             'mask_buffer': mask_buffer,

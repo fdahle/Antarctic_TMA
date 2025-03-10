@@ -20,10 +20,13 @@ def load_image_shape(image_id: LiteralString | str | bytes,
 
     absolute_image_path = _create_absolute_path(image_id, image_path, image_type)
 
-    with rasterio.open(absolute_image_path) as dataset:
-        # Access metadata
-        width = dataset.width
-        height = dataset.height
+    try:
+        with rasterio.open(absolute_image_path) as dataset:
+            # Access metadata
+            width = dataset.width
+            height = dataset.height
+    except:
+        return None
 
     return height, width
 

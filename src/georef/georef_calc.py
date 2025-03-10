@@ -15,6 +15,8 @@ import src.georef.snippets.calc_transform as ct
 debug_display_image_footprint = False
 print_debug = True
 
+switch_direction = False
+distance_type = "min"
 
 class GeorefCalc:
     """
@@ -72,6 +74,9 @@ class GeorefCalc:
             if geo_id[2:6] == image_id[2:6]:
                 filtered_georef_ids.append(geo_id)
                 filtered_footprints.append(georeferenced_footprints[i])
+
+        print("Georef ids:")
+        print(filtered_georef_ids)
 
         # check if there are enough geo-referenced images to calculate a position
         if len(filtered_georef_ids) < self.min_nr_of_images:
@@ -231,7 +236,10 @@ class GeorefCalc:
             print(distances_adjusted)
 
         # get an average distance for the adjusted distances
-        avg_distance_adjusted = np.mean(distances_adjusted)
+        if distance_type == "mean":
+            avg_distance_adjusted = np.mean(distances_adjusted)
+        elif distance_type == "min":
+            avg_distance_adjusted = np.min(distances_adjusted)
 
         if print_debug:
             print("Average distance adjusted:", avg_distance_adjusted)
@@ -284,8 +292,6 @@ class GeorefCalc:
             ref_id = prev_id
             direction = 1
 
-        direction = 1 if image_nr <= ref_id else -1
-
         if print_debug:
             print("ref id", ref_id)
 
@@ -302,9 +308,15 @@ class GeorefCalc:
         print("RANGE", range_x, range_y)
 
         if range_x > range_y:
+            direction = 1 if image_nr >= ref_id else -1
+            if switch_direction:
+                direction = -direction
             new_x = ref_coords[0] + direction * distance_adjustment # move along x
             new_y = line_func(new_x)
         else:
+            direction = 1 if image_nr >= ref_id else -1
+            if switch_direction:
+                direction = -direction
             new_y = ref_coords[1] + direction * distance_adjustment
             new_x = line_func(new_y)
 

@@ -3,12 +3,13 @@
 # Python imports
 import os
 
+import cv2
+import geopandas as gpd
 import numpy as np
-from fontTools.subset import subset
+
 
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
-from scipy.ndimage import binary_dilation
 from shapely.geometry import box
 
 import src.load.load_shape_data as lsd
@@ -71,8 +72,7 @@ def load_rock_mask(bounds: list,
 
     if return_shapes:
 
-        subset_gdf = subset_gdf.copy()  # To avoid SettingWithCopyWarning
-        subset_gdf["geometry"] = subset_gdf.intersection(bbox_geom)
+        subset_gdf = gpd.clip(rock_shape_data, bbox_geom)
 
         if subset_gdf.crs is None:
             subset_gdf.set_crs(epsg=3031, inplace=True)
@@ -103,8 +103,10 @@ def load_rock_mask(bounds: list,
     # Apply mask buffer by dilating the mask (expanding the regions of 1s)
     if mask_buffer > 0:
 
-        kernel = np.ones((mask_buffer, mask_buffer),
-                         dtype=bool)
-        rasterized = binary_dilation(rasterized, structure=kernel)
+        kernel = np.ones((mask_buffer, mask_buffer), np.uint8)
+        rasterized = cv2.dilate(rasterized, kernel, iterations=1)
+
+    # convert to boolean
+    rasterized = rasterized.astype(bool)
 
     return rasterized

@@ -39,13 +39,17 @@ def _calc_stats(calc_type, modern_dem, historic_dem, quality_dict):
 
     # calculate the mean difference
     mean_difference = np.nanmean(difference)
+    median_difference = np.nanmedian(difference)
     std_difference = np.nanstd(difference)
     abs_mean_difference = np.nanmean(abs_difference)
+    abs_median_difference = np.nanmedian(abs_difference)
     abs_std_difference = np.nanstd(abs_difference)
 
     quality_dict[f"{calc_type}_mean_difference"] = mean_difference
+    quality_dict[f"{calc_type}_median_difference"] = median_difference
     quality_dict[f"{calc_type}_std_difference"] = std_difference
     quality_dict[f"{calc_type}_mean_difference_abs"] = abs_mean_difference
+    quality_dict[f"{calc_type}_median_difference_abs"] = abs_median_difference
     quality_dict[f"{calc_type}_difference_abs_std"] = abs_std_difference
 
     rmse = np.sqrt(np.nanmean((modern_dem - historic_dem) ** 2))

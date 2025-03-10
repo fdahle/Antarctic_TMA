@@ -2,7 +2,8 @@ import math
 import Metashape
 
 
-def filter_gcps(chunk,
+def filter_markers(chunk,
+                min_markers=3,
                 max_error_px=1, max_error_m=25,
                 verbose=False):
 
@@ -14,8 +15,9 @@ def filter_gcps(chunk,
         marker_errors_m = {}
 
         # check if there are any markers left
-        if len(chunk.markers) == 0:
-            raise ValueError("No markers left in the chunk")
+        if len(chunk.markers) <= min_markers:
+            print("Stop filtering as minimum number of markers is reached")
+            break
 
         # iterate all markers
         for marker in chunk.markers:
@@ -146,4 +148,4 @@ if __name__ == "__main__":
     doc = Metashape.Document()
     doc.open(project_path)
     chunk = doc.chunk
-    filter_gcps(chunk)
+    filter_markers(chunk)

@@ -24,7 +24,6 @@ TPS_TXT_FLD = "/data/ATM/data_1/sfm/agi_data/tie_points"
 # debug settings
 debug_show_intermediate_steps = False
 debug_show_final_tps = False
-debug_min_tps = 0  # can be used together with min_tps
 
 
 def find_tie_points_for_sfm(img_folder: str,
@@ -120,11 +119,11 @@ def find_tie_points_for_sfm(img_folder: str,
 
         # Load cached tie points if available
         if use_cached_tps:
-            tps, conf = _load_cached_tps(TPS_TXT_FLD, img_1_id, img_2_id, cached_tps)
+            tps, conf, file_path = _load_cached_tps(TPS_TXT_FLD, img_1_id, img_2_id, cached_tps)
             if tps is not None:
                 pbar.set_postfix_str(f"{tps.shape[0]} tps between {img_1_id} "
                                      f"and {img_2_id} (cached) - Memory: {memory_usage / 1024 ** 2:.2f} MB")
-                if tps.shape[0] < min_tps or tps.shape[0] < debug_min_tps:
+                if tps.shape[0] < min_tps or tps.shape[0]:
                     continue
                 else:
 
@@ -135,9 +134,21 @@ def find_tie_points_for_sfm(img_folder: str,
                         tps = tps[top_indices]
                         conf = conf[top_indices]
 
-                    tp_dict[(img_1_id, img_2_id)] = tps
-                    conf_dict[(img_1_id, img_2_id)] = conf
-                    continue
+                    img_1_shape = image_dims[img_1_id]
+                    img_2_shape = image_dims[img_2_id]
+
+                    tp_error = False
+                    if np.amax(tps[:, 0]) > img_1_shape[1] or np.amax(tps[:, 1]) > img_1_shape[0]:
+                        print(f"Error cached tps for {img_1_id} (*) and {img_2_id}")
+                        tp_error = True
+                    if np.amax(tps[:, 2]) > img_2_shape[1] or np.amax(tps[:, 3]) > img_2_shape[0]:
+                        print(f"Error cached tps for {img_1_id} and {img_2_id} (*)")
+                        tp_error = True
+
+                    if tp_error is False:
+                        tp_dict[(img_1_id, img_2_id)] = tps
+                        conf_dict[(img_1_id, img_2_id)] = conf
+                        continue
 
         # load image 1
         if img_1_id != old_img_1_id:
@@ -156,6 +167,7 @@ def find_tie_points_for_sfm(img_folder: str,
                 mask1 = li.load_image(path_mask1)
             else:
                 mask1 = None
+                print(f"WARNING: No mask found for image 1 ({img_1_id})")
 
             # save a copy of the image
             orig_image1 = copy.deepcopy(image1)
@@ -175,6 +187,7 @@ def find_tie_points_for_sfm(img_folder: str,
             mask2 = li.load_image(path_mask2)
         else:
             mask2 = None
+            print(f"WARNING: No mask found for image 2 ({img_2_id})")
 
         # save a copy of the image
         orig_image2 = copy.deepcopy(image2)
@@ -201,28 +214,29 @@ def find_tie_points_for_sfm(img_folder: str,
                 rot_dif = abs(tmp1 - tmp2)
 
                 # rotation is only required if both angles are very different
-                if rot_dif > 22.5:
+                if rot_dif > 15:
 
                     # save the rotation angles as well now
                     rot1 = tmp1
                     rot2 = tmp2
 
                     # rotate the images
-                    image1, rot_mat1 = ri.rotate_image(image1, rot1, return_rot_matrix=True)
-                    image2, rot_mat2 = ri.rotate_image(image2, rot2, return_rot_matrix=True)
+                    image1, rot_mat1 = ri.rotate_image(orig_image1, rot1, return_rot_matrix=True)
+                    image2, rot_mat2 = ri.rotate_image(orig_image2, rot2, return_rot_matrix=True)
 
                     # rotate the masks
                     if mask1 is not None:
-                        mask1 = ri.rotate_image(mask1, rot1)
+                        mask1 = ri.rotate_image(orig_mask1, rot1)
                     if mask2 is not None:
-                        mask2 = ri.rotate_image(mask2, rot2)
+                        mask2 = ri.rotate_image(orig_mask2, rot2)
                 else:
                     rot1, rot2 = 0, 0
                     rotmat, rot_mat2 = None, None
 
         # get the tie points
         tps, conf = tpd.find_tie_points(image1, image2,
-                                        mask1=mask1, mask2=mask2)
+                                        mask1=mask1, mask2=mask2,
+                                        image_id_1=img_1_id, image_id_2=img_2_id)
 
         # keep track if we rotated the images
         rotated_1 = False
@@ -240,7 +254,8 @@ def find_tie_points_for_sfm(img_folder: str,
 
             # get image1 and mask1 again
             image1_180 = copy.deepcopy(orig_image1)
-            mask1_180 = copy.deepcopy(orig_mask1)
+            if mask1 is not None:
+                mask1_180 = copy.deepcopy(orig_mask1)
 
             # add 180 degrees to the rotation
             rot1_180 = (rot1_180 + 180) % 360
@@ -248,7 +263,8 @@ def find_tie_points_for_sfm(img_folder: str,
             # rotate image and mask
             image1_180, rot_mat1_180 = ri.rotate_image(image1_180, rot1_180,
                                                          return_rot_matrix=True)
-            mask1_180 = ri.rotate_image(mask1_180, rot1_180)
+            if mask1 is not None:
+                mask1_180 = ri.rotate_image(mask1_180, rot1_180)
 
             # get the tie points
             tps_180, conf_180 = tpd.find_tie_points(image1_180, image2,
@@ -273,7 +289,9 @@ def find_tie_points_for_sfm(img_folder: str,
 
             # get image2 and mask2 again
             image2_180 = copy.deepcopy(orig_image2)
-            mask2_180 = copy.deepcopy(orig_mask2)
+
+            if mask2 is not None:
+                mask2_180 = copy.deepcopy(orig_mask2)
 
             # add 180 degrees to the rotation
             rot2_180 = (rot2_180 + 180) % 360
@@ -281,7 +299,8 @@ def find_tie_points_for_sfm(img_folder: str,
             # rotate image and mask
             image2_180, rot_mat2_180 = ri.rotate_image(image2_180, rot2_180,
                                                        return_rot_matrix=True)
-            mask2_180 = ri.rotate_image(mask2_180, rot2_180)
+            if mask2 is not None:
+                mask2_180 = ri.rotate_image(mask2_180, rot2_180)
 
             # get the tie points
             tps_180, conf_180 = tpd.find_tie_points(image1, image2_180,
@@ -321,7 +340,7 @@ def find_tie_points_for_sfm(img_folder: str,
                            np.hstack((tps_switched, conf[:, None])), fmt='%f')
 
         # skip if still too few tie points are found
-        if tps.shape[0] < min_tps or tps.shape[0] < debug_min_tps:
+        if tps.shape[0] < min_tps:
             continue
 
         if debug_show_final_tps:
@@ -358,6 +377,15 @@ def find_tie_points_for_sfm(img_folder: str,
             top_indices = np.argsort(conf)[-max_tps:][::-1]
             tps = tps[top_indices]
             conf = conf[top_indices]
+
+        if np.amax(tps[:,0]) > image_dims[img_1_id][1] or np.amax(tps[:,1]) > image_dims[img_1_id][0]:
+            print(np.amax(tps[:,0]), np.amax(tps[:,1]))
+            print(image_dims[img_1_id])
+            raise ValueError(f"Error tps for {img_1_id} (*) and {img_2_id}")
+        if np.amax(tps[:,2]) > image_dims[img_2_id][1] or np.amax(tps[:,3]) > image_dims[img_2_id][0]:
+            print(np.amax(tps[:,2]), np.amax(tps[:,3]))
+            print(image_dims[img_2_id])
+            raise ValueError(f"Error tps for {img_1_id} and {img_2_id} (*)")
 
         # save the tie points and conf
         tp_dict[(img_1_id, img_2_id)] = tps
@@ -540,6 +568,6 @@ def _load_cached_tps(tps_fld, img_1_id, img_2_id, cached_tps):
 
     # return the tps and conf if we found a file
     if tps_loaded:
-        return tps, conf  # noqa
+        return tps, conf, file_path  # noqa
     else:
-        return None, None
+        return None, None, None

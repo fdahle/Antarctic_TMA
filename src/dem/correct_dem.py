@@ -84,9 +84,9 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                 # update mask to only keep values above threshold
                 inlier_mask &= (modern_data > threshold_height)
 
-            import src.display.display_images as di
-            di.display_images([historic_dem.data, modern_dem.data],
-                              overlays=[inlier_mask, inlier_mask])
+            #import src.display.display_images as di
+            #di.display_images([historic_dem.data, modern_dem.data],
+            #                  overlays=[inlier_mask, inlier_mask])
 
             print("Fit deramp")
             deramp.fit(modern_dem, historic_dem, inlier_mask, verbose=True)

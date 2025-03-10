@@ -15,7 +15,7 @@ import streamlit as st
 # Local imports
 import base.connect_to_database as ctd  # noqa
 
-BASE_FLD = "/data/ATM/data_1/georef"
+BASE_FLD = "/data/ATM/data_1/georef/"
 
 
 def compute_pie(data):
@@ -85,9 +85,9 @@ def prepare_data():
 
     # load the shapefiles with additional information
     shp_data_sat = gpd.read_file(BASE_FLD + "/" + "sat.shp")
-    #  shp_data_img = gpd.read_file(BASE_FLD + "/" + img.shp)
-    # shp_data_calc = gpd.read_file(BASE_FLD + "/" + "calc.shp")
-    # shp_data = pd.concat([shp_data_sat, shp_data_img, shp_data_calc], ignore_index=True)
+    shp_data_img = gpd.read_file(BASE_FLD + "/" + "img.shp")
+    shp_data_calc = gpd.read_file(BASE_FLD + "/" + "calc.shp")
+    shp_data = pd.concat([shp_data_sat, shp_data_img, shp_data_calc], ignore_index=True)
     shp_data = shp_data_sat
 
     # load images sql data

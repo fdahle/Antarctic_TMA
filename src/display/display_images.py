@@ -215,7 +215,13 @@ def display_images(images: np.ndarray | list[np.ndarray],
         if overlays is not None and idx < len(overlays):
             if overlays[idx] is not None:
                 overlay_img = overlays[idx]
-                ax.imshow(overlay_img, cmap=cmap_red_green,
+
+                if np.amax(overlay_img) == 1:
+                    o_cmap = cmap_red_green
+                else:
+                    o_cmap = "gray"
+
+                ax.imshow(overlay_img, cmap=o_cmap,
                           alpha=style_config['overlay_alpha'])
 
         # Optionally draw tie-points

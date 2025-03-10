@@ -15,7 +15,9 @@ base_style_config = {
     "axis_marker": True,
     "title": None,
     "labels": [],
-    "colors": []
+    "colors": [],
+    "lines": [],
+    "alpha": []
 }
 
 
@@ -64,6 +66,10 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
     # check if the number of colors is equal to the number of shapes
     if style_config['colors'] and len(style_config['colors']) != len(shapes):
         raise ValueError("The number of colors must be equal to the number of shapes")
+
+    # check if the number of lines is equal to the number of shapes
+    if style_config['lines'] and len(style_config['lines']) != len(shapes):
+        raise ValueError("The number of lines must be equal to the number of shapes")
 
     # convert all input data to geo-series but also save the geoms for normalizing
     geoms = []
@@ -125,15 +131,24 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
     if not style_config['axis_marker']:
         ax.axis('off')
 
+    if len(style_config['colors']) == 0:
+        style_config['colors'] = ['gray'] * len(gs_shapes)
+
     # iterate all shapes
     for i, shape in enumerate(gs_shapes):
 
         # determine color
         face_color = style_config['colors'][i] if (
-                    style_config['colors'] and i < len(style_config['colors'])) else 'lightgray'
+                    style_config['colors'] and i < len(style_config['colors']) and style_config['colors'][i] is not None) else "none"
+        edge_color = style_config['lines'][i] if (
+                    style_config['lines'] and i < len(style_config['lines'])) else face_color
+        alpha = style_config['alpha'][i] if (
+                    style_config['alpha'] and i < len(style_config['alpha'])) else 1
+
+        print(face_color, edge_color, alpha)
 
         # plot the shape
-        shape.plot(ax=ax, facecolor=face_color, alpha=1)
+        shape.plot(ax=ax, facecolor=face_color, edgecolor=edge_color, alpha=alpha)
 
         # add label to the shape
         if style_config['labels'] and style_config['labels'][i] is not None:

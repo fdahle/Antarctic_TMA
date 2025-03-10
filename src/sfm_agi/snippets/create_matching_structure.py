@@ -97,6 +97,17 @@ def create_matching_structure(tp_dict, conf_dict,
         points1 = tps[:, :2]
         points2 = tps[:, 2:]
 
+        if np.amax(points1[:, 0]) > img1.shape[1] or np.amax(points1[:, 1]) > img1.shape[0]:
+            print(img1_id, img2_id)
+            print(f"Image 1 shape: {img1.shape}")
+            print(f"Max y: {np.amax(points1[:, 1])}, Max x: {np.amax(points1[:, 0])}")
+            raise ValueError("Points outside the image.")
+        if np.amax(points2[:, 0]) > img2.shape[1] or np.amax(points2[:, 1]) > img2.shape[0]:
+            print(img2_id, img2_id)
+            print(f"Image 2 shape: {img2.shape}")
+            print(f"Max y: {np.amax(points2[:, 1])}, Max x: {np.amax(points2[:, 0])}")
+            raise ValueError("Points outside the image.")
+
         # ensure conf is a column vector for stacking
         conf = conf.reshape(-1, 1)
 

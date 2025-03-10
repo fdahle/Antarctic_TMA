@@ -2,6 +2,8 @@
 import copy
 import glob
 import os.path
+from xmlrpc.client import Fault
+
 import numpy as np
 import pandas as pd
 import shutil
@@ -45,22 +47,23 @@ DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 INPUT_TYPE = "flight_path"  # can be either "bounds" or "ids" or "flight_path" or "all"
 BOUNDS = []  # min_x, min_y, max_x, max_y
 IMAGE_IDS = []
-FLIGHT_PATHS = [1844] # , 2149, 2139, 2142, 2141, 2158, 2140, 1816, 1821]
-
-# 2159 auch gemacht !!!!
+FLIGHT_PATHS = [1815] # , 2149, 2139, 2142, 2141, 2158, 2140, 1816, 1821]
 
 # which type of geo-referencing should be done
 GEOREF_WITH_SATELLITE = False
 GEOREF_WITH_IMAGE = False
 GEOREF_WITH_CALC = True
 
+
 auto_reject=["CA164432V0040", "CA164432V0066", "CA212132V0078", "CA212132V0079", "CA181832V0005", "CA207432V0175",
              "CA184332V0002", "CA184332V0008", "CA214232V0229", "CA196832V0141", "CA214032V0430", "CA216432V0236",
-             "CA216432V0238", "CA216332V0157"]
+             "CA216432V0238", "CA216332V0157", "CA213732V0059", "CA215232V0318", "CA215232V0317"]
 
 # settings for sat
 MIN_COMPLEXITY = 0.05
-VERIFY_IMAGE_POSITIONS = True
+MIN_TPS_SAT = 20
+VERIFY_IMAGE_POSITIONS = False
+VERIFY_IMAGE_GEOMETRY_CALC=False
 
 # settings for verifying
 DISTANCE_THRESHOLD = 100  # TODO UPDATE THIS!
@@ -107,7 +110,7 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
     keyboard_interrupt = False
 
     # init the geo-reference objects
-    georef_sat = gs.GeorefSatellite(min_tps_final=25, enhance_image=False,
+    georef_sat = gs.GeorefSatellite(min_tps_final=MIN_TPS_SAT, enhance_image=False,
                                     locate_image=True, tweak_image=True, filter_outliers=True)
     georef_img = gi.GeorefImage()
     georef_calc = gc.GeorefCalc()
@@ -378,6 +381,9 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
 
             # set image to invalid if position is wrong
             if rejected:
+
+                print("Rejected image", image_id)
+
                 # get datetime
                 now = datetime.now()
                 date_time_str = now.strftime("%d.%m.%Y %H:%M")
@@ -631,7 +637,13 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
             # load csv file
             path_sat_csv = "/data/ATM/data_1/georef/sat_processed_images.csv"
             sat_csv_data = pd.read_csv(path_sat_csv, delimiter=";")
-            valid_sat_csv_data = sat_csv_data[sat_csv_data['status'] != 'invalid']
+
+            # Filter sat_csv_data to only include valid images
+            if verify_image_positions:
+                valid_sat_csv_data = sat_csv_data[sat_csv_data['status'] != 'invalid']
+            else:
+                valid_sat_csv_data = sat_csv_data[
+                    (sat_csv_data['status'] != 'invalid') | (sat_csv_data['reason'] == 'position')]
             valid_sat_ids = valid_sat_csv_data['id'].tolist()
 
             # Filter sat_shapes and sat_ids to only include valid_sat_ids
@@ -699,8 +711,57 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                 rejected = vip.verify_image_position(footprint, line_footprints,
                                                      distance_threshold, flight_path=image_id[2:6])
 
-                if image_id in auto_reject:
-                    rejected = True
+                if rejected is False:
+                    final_ids.append(image_id)
+                    final_footprints.append(footprint)
+                else:
+                    print(f"{image_id} rejected")
+
+            georeferenced_ids = final_ids
+            georeferenced_footprints = final_footprints
+
+        if verify_image_positions:
+
+            final_ids = []
+            final_footprints = []
+
+            # load footprint and ids of images that are already geo-referenced by satellite
+            path_sat_shapefile = "/data/ATM/data_1/georef/footprints/sat_footprints.shp"
+            shape_data = lsd.load_shape_data(path_sat_shapefile)
+            # load footprint and ids of images that are already geo-referenced by iamge
+            if "img" in calc_types:
+                path_img_shapefile = "/data/ATM/data_1/georef/footprints/img_footprints.shp"
+                img_shape_data = lsd.load_shape_data(path_img_shapefile)
+
+                # Merge the shapefiles, prioritizing satellite data
+                merged_shape_data = pd.concat([shape_data, img_shape_data], ignore_index=True)
+                shape_data = merged_shape_data.drop_duplicates(subset='image_id', keep='first')
+
+            if FLIGHT_PATHS is not None:
+                str_fps = [str(fp) for fp in FLIGHT_PATHS]
+                shape_data = shape_data[shape_data['image_id'].str[2:6].isin(str_fps)]
+
+            for image_id in georeferenced_ids:
+
+                # Check based on calc_types
+                if image_id not in shape_data['image_id'].tolist():
+                    continue
+
+                # get number of line footprints
+                num_line_footprints = shape_data.loc[shape_data['image_id'].str[2:6] ==
+                                                         image_id[2:6]].shape[0]
+                if num_line_footprints < 2:
+                    continue
+
+                footprint = shape_data.loc[
+                    shape_data['image_id'] == image_id].geometry.iloc[0]
+                line_footprints = shape_data.loc[
+                    shape_data['image_id'].str[2:6] == image_id[2:6]].geometry
+
+
+
+                rejected = vip.verify_image_position(footprint, line_footprints,
+                                                     distance_threshold, flight_path=image_id[2:6])
 
                 if rejected is False:
                     final_ids.append(image_id)
@@ -710,6 +771,15 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
 
             georeferenced_ids = final_ids
             georeferenced_footprints = final_footprints
+
+        # remove all ids and footprints that are in auto_reject
+        filtered_pairs = [(image_id, footprint) for image_id, footprint in zip(georeferenced_ids, georeferenced_footprints) if image_id not in auto_reject]
+
+        if len(filtered_pairs) == 0:
+            print("All images were rejected")
+            return
+        else:
+            georeferenced_ids, georeferenced_footprints = map(list, zip(*filtered_pairs))
 
         # create a list of image_ids that do not have enough images to calculate the transform
         flight_path_not_enough_images = []
@@ -814,7 +884,11 @@ def georef(input_ids, processed_images_sat=None, processed_images_adapted=None,
                     continue
 
                 # verify the geo-referenced image
-                valid_image, reason = vig.verify_image_geometry(image, transform, min_pixel_size = 0.05)
+                if VERIFY_IMAGE_GEOMETRY_CALC:
+                    valid_image, reason = vig.verify_image_geometry(image, transform, min_pixel_size = 0.05)
+                else:
+                    valid_image = True
+                    reason = ""
 
                 georef_time = round(time.time() - start)
 

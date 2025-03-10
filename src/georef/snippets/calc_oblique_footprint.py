@@ -374,13 +374,29 @@ def calc_oblique_footprint(center: shapely.Point, direction: str, focal_length: 
     polygon, origin = get_bounds(camera_params)
 
     if ADAPT_POLY_WITH_REMA:
+
+        bds = polygon.bounds
+
+        # round bounds to int
+        bds = [int(b) for b in bds]
+
+        # remove from bounds until it fits the REMA size
+        while (bds[2]-bds[0]) % rema_size != 0:
+            bds[2] += 1
+        while (bds[3]-bds[1]) % rema_size != 0:
+            bds[3] += 1
+
         # get average elevation data for this initial footprint
-        rema_data, _ = lr.load_rema(polygon.bounds, auto_download=False,
+        rema_data = lr.load_rema(bds, auto_download=False,
                                     zoom_level=rema_size,
-                                    return_empty_rema=True)
+                                    return_empty_rema=True,
+                                    return_transform=False)
         if rema_data is None:
             return None
         avg_ground_height = np.average(rema_data)
+
+        # minimum ground height is 0
+        avg_ground_height = max(0, avg_ground_height)
 
         # recalculate the height of camera (in relation to the ground)
         altitude_meters = altitude_meters - avg_ground_height

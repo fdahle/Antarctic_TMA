@@ -10,7 +10,7 @@ from tqdm import tqdm
 import src.georef.snippets.calc_camera_position as ccp
 
 # Variables
-georef_types = ["calc"]
+georef_types = ["sat", "img", "calc"]
 overwrite = False
 
 # Constants

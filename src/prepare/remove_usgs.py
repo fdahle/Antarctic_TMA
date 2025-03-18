@@ -7,7 +7,7 @@ import numpy as np
 from typing import Optional
 
 # Constants
-LOGO_HEIGHT = 350  # in px
+LOGO_HEIGHT = 272  # in px WAS 350, but must be 272!!!!
 USE_GPU = False   # should the GPU used for OCR
 
 # variables

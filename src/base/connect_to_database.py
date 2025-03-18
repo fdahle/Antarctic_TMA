@@ -103,5 +103,6 @@ def execute_sql(sql_string: str,
             conn.commit()
         except (Exception,) as e:
             print(sql_string)
+            print(e)
             raise e
         return None

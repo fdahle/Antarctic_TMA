@@ -37,12 +37,6 @@ def load_image(image_id: str | bytes,
             and the image is loaded successfully.
     Raises:
         FileNotFoundError: If the image file does not exist and `catch` is False.
-    Examples:
-        Load an image with default settings:
-        >>> image = load_image("example_image_id")
-        
-        Load an image with a specific path and type:
-        # >>> image = load_image("example_image_id", "/path/to/images", "tif")
     """
 
     # ignore warnings of files not being geo-referenced
@@ -147,3 +141,11 @@ def _read_image(absolute_image_path: str, driver: str) -> tuple[np.ndarray, Unio
 
     else:
         raise ValueError("Unsupported driver. Choose 'rasterio' or 'gdal'.")
+
+
+if __name__ == "__main__":
+    img_id = "CA213733R0020"
+    img = load_image(img_id)
+
+    import src.display.display_images as di
+    di.display_images(img)

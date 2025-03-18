@@ -10,7 +10,7 @@ elif mode == "flight_paths":
     # Ten longest flight paths on the AP
     flight_paths_10 = ["1821", "1816", "1833", "2137", "1825", "2136",
                        "2143", "1826", "1813", "2141"]
-    flight_paths_20 = ["2140", "2073", "1827", "1684", "2142",
+    flight_paths_20 = ["2140", "2073", "1827", "1684", "2142", "1822",
                        "1824", "1846", "2139", "2075"]
 
     flight_paths = flight_paths_10 + flight_paths_20

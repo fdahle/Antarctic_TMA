@@ -231,8 +231,8 @@ def find_gcps_new(dem_old, dem_new,
     tps[:, 3] /= s_y_2
 
     # scale points back I1
-    tps[:, 0] /= s_x_1
-    tps[:, 1] /= s_y_1
+    tps[:, 2] /= s_x_1
+    tps[:, 3] /= s_y_1
 
     # rotate points back
     tps[:,2:4] = rp.rotate_points(tps[:,2:4], rot_mat,
@@ -297,6 +297,22 @@ def find_gcps_new(dem_old, dem_new,
 
     # create np array from list
     tps = np.array(selected_tps)
+
+    # assure our tie-points work
+    if np.amax(tps[:, 0]) > ortho_new.shape[2] or np.amax(tps[:, 1]) > ortho_new.shape[1]:
+        raise ValueError("Tie points exceed image dimensions for ortho new", np.amax(tps[:, 0]), ortho_new.shape[2],
+                         np.amax(tps[:, 1]), ortho_new.shape[1])
+    if np.amax(tps[:, 0]) > dem_new.shape[1] or np.amax(tps[:, 1]) > dem_new.shape[0]:
+        raise ValueError("Tie points exceed image dimensions for dem new", np.amax(tps[:, 0]), dem_new.shape[1],
+                         np.amax(tps[:, 1]), dem_new.shape[0])
+    if np.amax(tps[:, 2]) > ortho_old.shape[1] or np.amax(tps[:, 3]) > ortho_old.shape[0]:
+        raise ValueError("Tie points exceed image dimensions for ortho old", np.amax(tps[:, 2]), ortho_old.shape[1],
+                         np.amax(tps[:, 3]), ortho_old.shape[0])
+    if np.amax(tps[:, 2]) > dem_old.shape[1] or np.amax(tps[:, 3]) > dem_old.shape[0]:
+        raise ValueError("Tie points exceed image dimensions for dem old", np.amax(tps[:, 2]), dem_old.shape[1],
+                         np.amax(tps[:, 3]), dem_old.shape[0])
+    if np.amin(tps) < 0:
+        raise ValueError("Negative tie point value found")
 
     print(tps.shape[0], "tie points left after filtering")
 

@@ -118,7 +118,7 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                 raise e
             if max_slope == 90:
                 raise ValueError("Max slope reached 90. Coreg failed.")
-
+    """
     import matplotlib.pyplot as plt
 
     # get 75th percentile of the difference
@@ -130,7 +130,7 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
     # get absolute v_min and v_max
     vmin = np.min([vmin_before, vmin_after])
     vmax = np.max([vmax_before, vmax_after])
-
+    
     alpha = 0.2
     # Create a figure and two subplots
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
@@ -163,6 +163,7 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
     axes.imshow(inlier_mask, cmap="Greys", alpha=alpha)  # Overlay the mask
     axes.set_title("Inlier Mask")
     plt.show()
+    """
 
     # create new transform
     aligned_transform = Affine(

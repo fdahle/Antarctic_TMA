@@ -46,7 +46,7 @@ def save_sfm_to_db(project_path, images_paths, bbox,
     project_dict = {
         "project_name": project_path.split("/")[-1],
         "status": status,
-        "date": timestamp,
+        "date_time": timestamp,
         "area": bbox,
         "num_images": len(image_names),
         "images": images_str,

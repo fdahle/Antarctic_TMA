@@ -79,14 +79,18 @@ stats_df = pd.DataFrame(stats_table)
 
 stats_df = stats_df.sort_values(by="Flight Path")
 
-# Generate LaTeX table
-latex_table = stats_df.to_latex(
-    index=False,
-    caption="Flight Path Statistics with Camera Directions",
-    label="tab:flight_path_camera_stats",
-    column_format="|l|r|c|c|c|",
-    header=["Flight Path", "Total Images", "Extracted (31L/32V/33R)", "Estimated (31L/32V/33R)", "Missing (31L/32V/33R)"]
-)
+gen_latex=False
+if gen_latex:
+    # Generate LaTeX table
+    latex_table = stats_df.to_latex(
+        index=False,
+        caption="Flight Path Statistics with Camera Directions",
+        label="tab:flight_path_camera_stats",
+        column_format="|l|r|c|c|c|",
+        header=["Flight Path", "Total Images", "Extracted (31L/32V/33R)", "Estimated (31L/32V/33R)", "Missing (31L/32V/33R)"]
+    )
 
-print("\nGenerated LaTeX Table:")
-print(latex_table)
+    print("\nGenerated LaTeX Table:")
+    print(latex_table)
+
+print(stats_df)

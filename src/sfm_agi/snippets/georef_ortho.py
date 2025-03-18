@@ -22,6 +22,8 @@ debug_show_rotated_tie_points = False
 debug_show_patch_tie_points = False
 debug_show_final_tie_points = False
 
+debug_save_sat = True
+
 def georef_ortho(ortho: np.ndarray,
                  image_ids: list[str],
                  footprints: list,
@@ -284,7 +286,7 @@ def georef_ortho(ortho: np.ndarray,
     # that means no tie points were found
     if tps.shape[0] == 0:
         print(f"No tie points found")
-        return None, None, None
+        return None, sat_bounds, best_rot, 0
 
     """
     transform_matching = True
@@ -351,8 +353,17 @@ def georef_ortho(ortho: np.ndarray,
     absolute_points = np.array([sat_transform * tuple(point) for point in tps[:, 0:2]])
     tps[:, 0:2] = absolute_points
 
+    # set start confidence
     conf_val = start_conf
 
+    # save all tps
+    if save_path_tps is not None:
+
+        pth = save_path_tps.replace(".csv", "_all.csv")
+        column_names = "x_abs;y_abs;x_rel;y_rel;conf"
+        np.savetxt(pth, tps, delimiter=';', header=column_names)
+
+    # filter the tie points based on confidence with decreasing confidence
     while conf_val > min_conf:
 
         # remove tie points with low confidence
@@ -366,21 +377,33 @@ def georef_ortho(ortho: np.ndarray,
 
         conf_val -= 0.05
 
+    # use the filtered tie points
     tps = tps_filtered
-
-    # check if we have enough points
-    if tps.shape[0] < min_nr_tps:
-        print(f"Not enough tie points ({tps.shape[0]}) found (min required: {min_nr_tps})")
-        return None, None, None
 
     # save the tie points to a file
     if save_path_tps is not None:
-        np.savetxt(save_path_tps, tps, delimiter=';')
+        pth = save_path_tps.replace(".csv", "_filtered.csv")
+        column_names = "x_abs;y_abs;x_rel;y_rel;conf"
+        np.savetxt(pth, tps, delimiter=';', header=column_names)
+
+    # check if we have enough points
+    if tps.shape[0] < min_nr_tps:
+
+        if debug_save_sat and save_path_ortho is not None:
+            # save the sat image
+            pth = save_path_ortho.replace("ortho_georeferenced", "sat_for_georef")
+            at.apply_transform(sat, sat_transform, save_path=pth)
+
+        print(f"Not enough tie points ({tps.shape[0]}) found (min required: {min_nr_tps})")
+        return None, sat_bounds, best_rot, tps.shape[0]
 
     # calculate the transform
     transform, residuals = ct.calc_transform(ortho, tps,
                                              transform_method="rasterio",
                                              gdal_order=3)
+
+    if transform is None:
+        return None, sat_bounds, best_rot, tps.shape[0]
 
     # apply the transform to the ortho
     if save_path_ortho is not None:
@@ -423,6 +446,7 @@ def georef_ortho(ortho: np.ndarray,
     if save_path_rot is not None:
         np.savetxt(save_path_rot, np.array([rotation]), delimiter=',')
 
+    """
     print("Transform")
     print(transform)
     print("Transformed bounds")
@@ -431,9 +455,10 @@ def georef_ortho(ortho: np.ndarray,
     print(rotation)
     print("ORTHO")
     print(ortho.shape)
+    """
 
     # save the transform
     if save_path_transform is not None:
         np.savetxt(save_path_transform, transform, delimiter=',')
 
-    return transform, transformed_bounds, rotation
+    return transform, transformed_bounds, rotation, tps.shape[0]

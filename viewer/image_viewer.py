@@ -16,21 +16,22 @@ img_path = base_fld + "data_1/aerial/TMA/downloaded/"
 img_path_backup = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 #img_path = "/data/ATM/data_1/sfm/projects/EGU/images_orig"
 input_img_type = "tif"
-img_size = (1200, 1200)
+img_size = (800, 800)
 
-view_directions = ["L"]
+view_directions = ["V"]
 
 #"1833", "2137", "1825", "2136" "2143", "1826", "2141"
 #"2140", "2073", "1827", "2142" "1824", "1846", "2139", "2075"
 #1813, 1816, 1821, 1822
 
-input_ids = [2075]
-input_type = "flight_path"
+input_ids = ["CA182132V0026"]
+input_type = "ids"
 
 shuffle = False
 debug_mode = False
-load_all = True
+load_all = False
 
+highlight_fid_marks = False
 
 class ImageViewer:
 
@@ -56,14 +57,9 @@ class ImageViewer:
         self.image_id = None
         self.img_pos = 0  # position in image_ids we have loaded, start with 0
 
-        # create window
-        self.root = Tk()
-        self.root.title("Image_Viewer")
-        self.root.geometry(f"{self.size[0]}x{self.size[1]+100}")
-
-        # gui elements
+        # Depending on the flag, either use one label or a frame for five thumbnails
         self.img_container = Label()
-        self.img_caption = Label()
+        self.img_container.grid(row=2, column=0, rowspan=4, columnspan=3)
 
         # if we have a flight path get all images from this flight path
         if self.input_type == "flight_path":
@@ -111,6 +107,15 @@ class ImageViewer:
 
         if debug_mode:
             print(f"View images from {self.image_path}")
+
+        # create window
+        self.root = Tk()
+        self.root.title("Image_Viewer")
+        self.root.geometry(f"{self.size[0]}x{self.size[1]+100}")
+
+        # gui elements
+        self.img_container = Label()
+        self.img_caption = Label()
 
         # set position of image name and container
         self.img_caption.grid(row=0, column=0, columnspan=3)

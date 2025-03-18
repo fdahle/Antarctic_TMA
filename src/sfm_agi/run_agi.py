@@ -8,6 +8,7 @@ import math
 import shutil
 import sys
 import time
+import traceback
 from datetime import datetime
 
 # Library imports
@@ -126,14 +127,14 @@ STEPS = {
     "union_masks": False,
     "enhance_photos": False,
     "match_photos": False,
-    "align_cameras": True,
-    "build_depth_maps_relative": True,
-    "build_mesh_relative": True,
-    "build_pointcloud_relative": True,
-    "clean_pointcloud_relative": True,
-    "build_dem_relative": True,
-    "build_orthomosaic_relative": True,
-    "build_confidence_relative": True,
+    "align_cameras": False,
+    "build_depth_maps_relative": False,
+    "build_mesh_relative": False,
+    "build_pointcloud_relative": False,
+    "clean_pointcloud_relative": False,
+    "build_dem_relative": False,
+    "build_orthomosaic_relative": False,
+    "build_confidence_relative": False,
     "georef_ortho": True,
     "create_gcps": True,
     "load_gcps": True,
@@ -166,7 +167,7 @@ DISPLAY_STEPS = {
     "save_thumbnails": False,
     "save_key_points": False,
     "save_tie_points": False,  # WARNING: This can be very slow
-    "save_aoi": True,
+    "save_aoi": False,
 }
 
 CACHE_STEPS = {
@@ -509,6 +510,9 @@ def run_agi(project_name: str, images_paths: list,
 
             start_time = time.time()
 
+            # init variable
+            img = None
+
             # iterate the images
             for i, image_path in (pbar := tqdm(enumerate(images_paths), total=len(images_paths))):
 
@@ -793,9 +797,20 @@ def run_agi(project_name: str, images_paths: list,
                 doc.save()
 
         counter_missing_masks = 0
-        if STEPS["create_masks"] and CACHE_STEPS["use_masks"]:
+        if STEPS["create_masks"] or CACHE_STEPS["use_masks"]:
             # define cache fld
             mask_cache_fld = "/data/ATM/data_1/sfm/agi_data/masks"
+            mask_fld = os.path.join(data_fld, "masks_original")
+            mask_adap_fld = os.path.join(data_fld, "masks_adapted")
+
+            # create folders if required
+            if not os.path.exists(mask_fld):
+                os.makedirs(mask_fld)
+
+            if not os.path.exists(mask_adap_fld):
+                os.makedirs(mask_adap_fld)
+
+            mask_folder = mask_adap_fld
 
             for camera in chunk.cameras:
                 if camera.enabled is False:
@@ -816,10 +831,19 @@ def run_agi(project_name: str, images_paths: list,
                     mask_obj = Metashape.Mask()
                     mask_obj.setImage(mask_m)
 
+                    # copy mask to the mask folder
+                    mask_orig_path = os.path.join(data_fld, "masks_original", f"{camera.label}_mask.tif")
+                    mask_adap_path = os.path.join(data_fld, "masks_adapted", f"{camera.label}_mask.tif")
+                    shutil.copy(mask_cache_pth, mask_orig_path)
+                    shutil.copy(mask_cache_pth, mask_adap_path)
+
                     # set the mask to the camera
                     camera.mask = mask_obj
+
                 else:
                     counter_missing_masks += 1
+
+        print("Number of missing masks:", counter_missing_masks)
 
         if CACHE_STEPS["use_masks"] is False or counter_missing_masks > 0:
 
@@ -935,6 +959,9 @@ def run_agi(project_name: str, images_paths: list,
             for camera in chunk.cameras:
                 if camera.enabled is False:
                     chunk.remove(camera)  # noqa
+
+            # init variables
+            adapted_mask, mask_bytes = None, None
 
             if STEPS["union_masks"]:
 
@@ -1107,6 +1134,9 @@ def run_agi(project_name: str, images_paths: list,
                 # update progressbar in last loop
                 if idx == len(chunk.cameras) - 1:
                     pbar.set_postfix_str("Finished!")
+
+            del mask_bytes
+            del enhanced_image
 
             with open(steps_path, "a") as file:
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1843,6 +1873,24 @@ def run_agi(project_name: str, images_paths: list,
             exec_time = finish_time - start_time
             print(f"Build relative orthomosaic - finished ({exec_time:.4f} s)")
 
+        # save memory consumption
+        """
+        import sys
+        def sizeof_fmt(num, suffix='B'):
+            ''' by Fred Cirera,  https://stackoverflow.com/a/1094933/1870254, modified'''
+            for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+                if abs(num) < 1024.0:
+                    return "%3.1f %s%s" % (num, unit, suffix)
+                num /= 1024.0
+            return "%.1f %s%s" % (num, 'Yi', suffix)
+
+        with open(memory_path, "a") as file:
+            for name, size in sorted(((name, sys.getsizeof(value)) for name, value in list(
+                    locals().items())), key=lambda x: -x[1])[:20]:
+                file.write("{:>30}: {:>8}\n".format(name, sizeof_fmt(size)))
+                print("{:>30}: {:>8}".format(name, sizeof_fmt(size)))
+        """
+
         # build confidence array
         if STEPS["build_confidence_relative"]:
             print("Build relative confidence array")
@@ -1860,21 +1908,6 @@ def run_agi(project_name: str, images_paths: list,
             # load the point cloud
             if point_cloud_rel is None:
                 point_cloud_rel = lpl.load_ply(output_path_pc_rel)
-
-            import sys
-            def sizeof_fmt(num, suffix='B'):
-                ''' by Fred Cirera,  https://stackoverflow.com/a/1094933/1870254, modified'''
-                for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
-                    if abs(num) < 1024.0:
-                        return "%3.1f %s%s" % (num, unit, suffix)
-                    num /= 1024.0
-                return "%.1f %s%s" % (num, 'Yi', suffix)
-
-            with open(memory_path, "a") as file:
-                for name, size in sorted(((name, sys.getsizeof(value)) for name, value in list(
-                        locals().items())), key=lambda x: -x[1])[:20]:
-                    file.write("{:>30}: {:>8}\n".format(name, sizeof_fmt(size)))
-                    print("{:>30}: {:>8}".format(name, sizeof_fmt(size)))
 
             # create the confidence array
             conf_arr_rel = cca.create_confidence_arr(dem_rel,
@@ -1955,6 +1988,10 @@ def run_agi(project_name: str, images_paths: list,
             # create path for best rotation
             rot_path = os.path.join(georef_data_fld, "best_rot.txt")
 
+            transform_georef, bounds_georef, best_rot = None, None, None
+            """
+            # currently skipped, as full rotation is more efficient
+            # try to geo-reference around the best rotation
             transform_georef, bounds_georef, best_rot = go.georef_ortho(ortho_rel,
                                                                         image_ids,
                                                                         list(camera_footprints.values()),
@@ -1971,44 +2008,63 @@ def run_agi(project_name: str, images_paths: list,
                                                                         save_path_ortho=ortho_georef_path,
                                                                         save_path_rot=rot_path,
                                                                         save_path_transform=transform_path)
+            """
 
+            # georef with complete autorotate
+            tpl = go.georef_ortho(ortho_rel,
+                                  image_ids,
+                                  list(camera_footprints.values()),
+                                  aligned,
+                                  azimuth=None, auto_rotate=True,
+                                  trim_image=True,
+                                  min_nr_tps=min_nr_tps,
+                                  tp_type=tp_type,
+                                  min_conf=0.5,
+                                  start_conf=0.9,
+                                  only_vertical_footprints=True,
+                                  save_path_tps=ortho_tps_path,
+                                  save_path_ortho=ortho_georef_path,
+                                  save_path_rot=rot_path,
+                                  save_path_transform=transform_path)
 
-            # try again with complete autorotate (if azimuth was given)
-            if transform_georef is None and azimuth is not None:
-                tpl = go.georef_ortho(ortho_rel,
-                                      image_ids,
-                                      list(camera_footprints.values()),
-                                      aligned,
-                                      azimuth=None, auto_rotate=True,
-                                      trim_image=True,
-                                      min_nr_tps=min_nr_tps,
-                                      tp_type=tp_type,
-                                      min_conf=0.5,
-                                      start_conf=0.9,
-                                      only_vertical_footprints=True,
-                                      save_path_tps=ortho_tps_path,
-                                      save_path_ortho=ortho_georef_path,
-                                      save_path_rot=rot_path,
-                                      save_path_transform=transform_path)
+            transform_georef = tpl[0]
+            bounds_georef = tpl[1]
+            best_rot = tpl[2]
+            num_tps = tpl[3]
 
-                transform_georef = tpl[0]
-                best_rot = tpl[2]
+            if best_rot is None:
+                raise ValueError("No tps found at all. Check the georef_ortho function.")
 
             if transform_georef is None:
-                raise ValueError("Transform is not defined. Check the georef_ortho function.")
+                print("No transformation found with auto-rotation. Trying with georef_ortho2")
 
             georef_2 = True
             if georef_2:
-                gref_ortho, gref_transform = li.load_image(ortho_georef_path, return_transform=True)
-                transform_georef = go2.georef_ortho_2(gref_ortho, gref_transform, best_rot,
-                                   min_nr_tps=min_nr_tps,
-                                   tp_type=tp_type,
-                                   save_path_tps=ortho_tps_path,
-                                   save_path_ortho=ortho_georef_path,
-                                   save_path_transform=transform_path)
+                if os.path.exists(ortho_georef_path):
+                    gref_ortho = li.load_image(ortho_georef_path)
+                else:
+                    gref_ortho = ortho_rel
 
-                if transform_georef is None:
+                t_g, desc = go2.georef_ortho_2(gref_ortho,
+                                               transform_georef, best_rot,
+                                               bounds_georef,
+                                               min_nr_tps=min_nr_tps,
+                                               tps_to_beat=num_tps,
+                                               tp_type=tp_type,
+                                               save_path_tps=ortho_tps_path,
+                                               save_path_ortho=ortho_georef_path,
+                                               save_path_transform=transform_path)
+
+                if desc == "too_few_tps":
+                    print(f"Not enough tie points found in go2")
                     raise ValueError("Transform is not defined. Check the georef_ortho2 function.")
+                elif desc == "no_improvement":
+                    print("No improvement in the transformation")
+                elif desc == "success":
+                    transform_georef = t_g
+
+            if transform_georef is None:
+                raise ValueError("Transform is not defined. Check the georef_ortho function.")
 
             with open(steps_path, "a") as file:
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -2069,20 +2125,14 @@ def run_agi(project_name: str, images_paths: list,
             max_x_r = math.floor(max_x / 10) * 10
             max_y_r = math.floor(max_y / 10) * 10
 
-            # set bounding box to int values
-            min_x = int(min_x)
-            min_y = int(min_y)
-            max_x = int(max_x)
-            max_y = int(max_y)
-
             # calculate new bounds
             bounds_georef = [min_x_r, min_y_r, max_x_r, max_y_r]
 
             # get difference in min_x and min_y
-            diff_min_x = min_x_r - min_x
-            diff_min_y = min_y_r - min_y
-            diff_max_x = max_x_r - max_x
-            diff_max_y = max_y_r - max_y
+            diff_min_x = round(min_x_r - min_x, 2)
+            diff_min_y = round(min_y_r - min_y, 2)
+            diff_max_x = round(max_x_r - max_x, 2)
+            diff_max_y = round(max_y_r - max_y, 2)
             diffs = (diff_min_x, diff_min_y, diff_max_x, diff_max_y)
 
             print("Old bounds:", bounds_georef_old)
@@ -3343,6 +3393,7 @@ def run_agi(project_name: str, images_paths: list,
     except Exception as e:
         print("!!ERROR!!")
         print(e)
+        traceback.print_exc()  # This prints the full stack trace
 
         # set error flag
         error_raised = True

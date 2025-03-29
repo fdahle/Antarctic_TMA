@@ -5,6 +5,7 @@ import Metashape
 def filter_markers(chunk,
                 min_markers=3,
                 max_error_px=1, max_error_m=25,
+                delete=True,
                 verbose=False):
 
     # infinite loop required; we break out when we are done
@@ -14,8 +15,11 @@ def filter_markers(chunk,
         marker_errors_px = {}
         marker_errors_m = {}
 
+        # get number of enabled markers
+        nr_markers = len([m for m in chunk.markers if m.enabled])
+
         # check if there are any markers left
-        if len(chunk.markers) <= min_markers:
+        if nr_markers <= min_markers:
             print("Stop filtering as minimum number of markers is reached")
             break
 
@@ -34,6 +38,9 @@ def filter_markers(chunk,
             # check if marker has a position
             if marker.position is None:
                 print(f" Skip marker '{marker.label}' as it has no position")
+                continue
+
+            if marker.enabled is False:
                 continue
 
             # get position of marker
@@ -104,7 +111,12 @@ def filter_markers(chunk,
             marker = [m for m in chunk.markers if m.label in max_error_px_marker_name]
 
             # remove marker from chunk
-            chunk.remove(marker)
+            if delete:
+                chunk.remove(marker)
+            else:
+                for m in marker:
+                    m.enabled = False
+
             print(f"Remove marker '{max_error_px_marker_name}' with error {max_error_px_value} px")
 
             # update alignment and transform

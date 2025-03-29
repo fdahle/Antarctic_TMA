@@ -9,7 +9,7 @@ from shapely.wkt import loads
 from typing import Union, Optional
 
 
-def export_geometry(geometry: Union[str, shape],
+def export_geometry(geometry: Union[str, shape, list],
                     output_path: str,
                     attributes: pd.DataFrame = None,
                     key_field: Optional[str] = None,
@@ -71,20 +71,24 @@ def export_geometry(geometry: Union[str, shape],
     if file_extension not in ['.shp', '.geojson']:
         raise ValueError(f"File extension '{file_extension}' is not supported.")
 
-    # Convert WKT string to Shapely geometry if necessary
-    if isinstance(geometry, str):
-        geometry = loads(geometry)
+    # Handle list of geometries
+    if isinstance(geometry, list):
+        geometries = [loads(g) if isinstance(g, str) else g for g in geometry]
+    else:
+        # Single geometry
+        geometry = loads(geometry) if isinstance(geometry, str) else geometry
+        geometries = [geometry]
 
-    # Prepare the data for GeoDataFrame
-    data = {'geometry': [geometry]}
+    # Validate attributes
     if attributes is not None:
-        for key, value in attributes.items():
-            if isinstance(value, pd.Series):
-                if not value.empty:
-                    value = value.iloc[0]  # Assuming you want the first item if it's a Series
-                else:
-                    raise ValueError(f"The attribute '{key}' is an empty Series.")
-            data[key] = [value]
+        if not isinstance(attributes, pd.DataFrame):
+            raise ValueError("'attributes' must be a pandas DataFrame.")
+        if len(attributes) != len(geometries):
+            raise ValueError("Length of 'attributes' must match number of geometries.")
+        data = attributes.copy()
+        data["geometry"] = geometries
+    else:
+        data = {"geometry": geometries}
 
     # Create a GeoDataFrame
     gdf = gpd.GeoDataFrame(data, crs=crs)

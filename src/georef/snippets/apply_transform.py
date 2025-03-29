@@ -26,6 +26,22 @@ def apply_transform(image: np.ndarray,
         None
     """
 
+    # Remove batch dimension if image has shape (1, bands, y, x)
+    if image.ndim == 4 and image.shape[0] == 1:
+        image = image[0]
+
+    # Determine image dimensions and number of bands
+    if image.ndim == 2:
+        # Single band image
+        height, width = image.shape
+        count = 1
+    elif image.ndim == 3:
+        # Multiband image (bands, height, width)
+        count, height, width = image.shape
+    else:
+        raise ValueError("Unsupported image shape. Expecting (y, x) or (bands, y, x)")
+
+
     # copy transform to avoid changing the original
     transform = copy.deepcopy(transform)
 
@@ -49,9 +65,14 @@ def apply_transform(image: np.ndarray,
 
     # Save the image as a GeoTIFF
     with rasterio.open(save_path, 'w', driver='GTiff',
-                       height=image.shape[0], width=image.shape[1],
-                       count=1, dtype=image.dtype,
+                       height=height, width=width,
+                       count=count, dtype=image.dtype,
                        crs=crs, transform=r_transform,
                        nodata=0
                        ) as dst:
-        dst.write(image, 1)
+
+        # Write differently depending on number of bands
+        if count == 1:
+            dst.write(image, 1)
+        else:
+            dst.write(image)

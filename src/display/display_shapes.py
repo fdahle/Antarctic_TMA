@@ -145,7 +145,6 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
         alpha = style_config['alpha'][i] if (
                     style_config['alpha'] and i < len(style_config['alpha'])) else 1
 
-        print(face_color, edge_color, alpha)
 
         # plot the shape
         shape.plot(ax=ax, facecolor=face_color, edgecolor=edge_color, alpha=alpha)
@@ -169,7 +168,6 @@ def display_shapes(shapes: Union[List[BaseGeometry], List[str], gpd.GeoDataFrame
         plt.savefig(f"{save_path}.{save_type}", format=save_type)
         plt.close()  # Close the plot explicitly after saving to avoid displaying it
     else:
-        print("PLTSHOW")
         # If no save_path is provided, display the figure
         plt.show()
 

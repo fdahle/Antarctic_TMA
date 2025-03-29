@@ -24,7 +24,7 @@ rema_size=32
 # Constants
 PATH_GEOREF_FLD = "/data/ATM/data_1/georef/"
 
-flight_paths = None
+flight_paths = [2166]
 
 debug_show_footprints = False
 

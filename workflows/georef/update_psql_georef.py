@@ -15,7 +15,7 @@ overwrite_img = True
 overwrite_calc = True
 skip_invalid = True
 
-flight_paths = None # if None, all flight paths are used
+flight_paths = [1833] # if None, all flight paths are used
 
 update_types = ["sat", "img", "calc"]
 
@@ -166,6 +166,7 @@ def update_psql_georef():
                         sql_string += " AND footprint_exact IS NULL"
 
             try:
+                print(sql_string)
                 ctd.execute_sql(sql_string, conn)
             except:
                 print(f"Error with image_id: {image_id}")

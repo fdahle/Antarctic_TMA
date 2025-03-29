@@ -55,6 +55,7 @@ import src.sfm_agi.snippets.filter_markers as fm
 # import src.sfm_agi.snippets.find_gcps as fg
 import src.sfm_agi.snippets.find_gcps_new as fgn
 import src.sfm_agi.snippets.find_tie_points_for_sfm as ftp
+import src.sfm_agi.snippets.fix_ortho as fo
 import src.sfm_agi.snippets.georef_ortho as go
 import src.sfm_agi.snippets.georef_ortho2 as go2
 import src.sfm_agi.snippets.save_key_points as skp
@@ -82,7 +83,7 @@ min_tps = 15  # minimum number of tie points between images
 max_tps = 10000
 min_tp_confidence = 0.9
 tp_type = float
-min_nr_tps = 50
+min_nr_tps = 25 # 50 # for georef ortho
 tp_tolerance = 0.5
 custom_markers = False  # if True, custom markers support the matching of Agisoft
 zoom_level_dem = 10  # in m
@@ -135,25 +136,26 @@ STEPS = {
     "build_dem_relative": False,
     "build_orthomosaic_relative": False,
     "build_confidence_relative": False,
-    "georef_ortho": True,
-    "create_gcps": True,
-    "load_gcps": True,
-    "filter_markers": True,
-    "build_depth_maps_absolute": True,
-    "save_camera_params": True,
-    "build_mesh_absolute": True,
-    "build_pointcloud_absolute": True,
-    "clean_pointcloud_absolute": True,
-    "build_dem_absolute": True,
-    "build_orthomosaic_absolute": True,
-    "export_alignment": True,
-    "build_confidence_absolute": True,
-    "build_difference_dem": True,
-    "evaluate_dem": True,
+    "georef_ortho": False,
+    "create_gcps": False,
+    "load_gcps": False,
+    "filter_markers": False,
+    "build_depth_maps_absolute": False,
+    "save_camera_params": False,
+    "build_mesh_absolute": False,
+    "build_pointcloud_absolute": False,
+    "clean_pointcloud_absolute": False,
+    "build_dem_absolute": False,
+    "build_orthomosaic_absolute": False,
+    "export_alignment": False,
+    "build_confidence_absolute": False,
+    "build_difference_dem": False,
+    "evaluate_dem": False,
     "correct_dem": True,
-    "create_report": True,
-    "compress_images": True,
-    "copy_to_external": True,
+    "create_report": False,
+    "compress_images": False,
+    "fix_ortho": True,
+    "copy_to_external": False,
 }
 
 DEBUG_STEPS = {
@@ -810,8 +812,6 @@ def run_agi(project_name: str, images_paths: list,
             if not os.path.exists(mask_adap_fld):
                 os.makedirs(mask_adap_fld)
 
-            mask_folder = mask_adap_fld
-
             for camera in chunk.cameras:
                 if camera.enabled is False:
                     continue
@@ -821,6 +821,13 @@ def run_agi(project_name: str, images_paths: list,
 
                 if os.path.exists(mask_cache_pth):
                     mask = li.load_image(mask_cache_pth)
+
+                    if mask.shape[0] != image_dims[camera.label][0] or \
+                        mask.shape[1] != image_dims[camera.label][1]:
+                        print("WARNING: Mask dimensions do not match the image dimensions.")
+                        print(f"Mask: {mask.shape}, Image: {image_dims[camera.label]}")
+                        counter_missing_masks += 1
+                        continue
 
                     # convert the mask to a metashape image
                     mask_m = Metashape.Image.fromstring(mask,
@@ -1988,28 +1995,6 @@ def run_agi(project_name: str, images_paths: list,
             # create path for best rotation
             rot_path = os.path.join(georef_data_fld, "best_rot.txt")
 
-            transform_georef, bounds_georef, best_rot = None, None, None
-            """
-            # currently skipped, as full rotation is more efficient
-            # try to geo-reference around the best rotation
-            transform_georef, bounds_georef, best_rot = go.georef_ortho(ortho_rel,
-                                                                        image_ids,
-                                                                        list(camera_footprints.values()),
-                                                                        aligned,
-                                                                        azimuth=azimuth,
-                                                                        auto_rotate=True,
-                                                                        trim_image=True,
-                                                                        tp_type=tp_type,
-                                                                        min_nr_tps=min_nr_tps,
-                                                                        min_conf=0.5,
-                                                                        start_conf=0.9,
-                                                                        only_vertical_footprints = True,
-                                                                        save_path_tps=ortho_tps_path,
-                                                                        save_path_ortho=ortho_georef_path,
-                                                                        save_path_rot=rot_path,
-                                                                        save_path_transform=transform_path)
-            """
-
             # georef with complete autorotate
             tpl = go.georef_ortho(ortho_rel,
                                   image_ids,
@@ -2026,11 +2011,33 @@ def run_agi(project_name: str, images_paths: list,
                                   save_path_ortho=ortho_georef_path,
                                   save_path_rot=rot_path,
                                   save_path_transform=transform_path)
-
             transform_georef = tpl[0]
             bounds_georef = tpl[1]
             best_rot = tpl[2]
             num_tps = tpl[3]
+
+            if transform_georef is None and absolute_bounds is not None:
+                print("Try georef with absolute bounds")
+                tpl = go.georef_ortho(ortho_rel,
+                                      image_ids,
+                                      list(camera_footprints.values()),
+                                      aligned,
+                                      sat_bounds = absolute_bounds,
+                                      azimuth=None, auto_rotate=True,
+                                      trim_image=True,
+                                      min_nr_tps=min_nr_tps,
+                                      tp_type=tp_type,
+                                      min_conf=0.5,
+                                      start_conf=0.9,
+                                      only_vertical_footprints=True,
+                                      save_path_tps=ortho_tps_path,
+                                      save_path_ortho=ortho_georef_path,
+                                      save_path_rot=rot_path,
+                                      save_path_transform=transform_path)
+                transform_georef = tpl[0]
+                bounds_georef = tpl[1]
+                best_rot = tpl[2]
+                num_tps = tpl[3]
 
             if best_rot is None:
                 raise ValueError("No tps found at all. Check the georef_ortho function.")
@@ -2434,7 +2441,8 @@ def run_agi(project_name: str, images_paths: list,
 
             # filter gcps
             fm.filter_markers(chunk, min_markers,
-                              max_marker_error_px, max_marker_error_m)
+                              max_marker_error_px, max_marker_error_m,
+                              delete=False)
 
             # save the project
             doc.save()
@@ -2517,6 +2525,7 @@ def run_agi(project_name: str, images_paths: list,
                 min_y = max(min_y, absolute_bounds[1])
                 max_x = min(max_x, absolute_bounds[2])
                 max_y = min(max_y, absolute_bounds[3])
+
 
             # round values to the next step of 10
             min_x = math.ceil(min_x / 10) * 10
@@ -3385,6 +3394,10 @@ def run_agi(project_name: str, images_paths: list,
             with open(steps_path, "a") as file:
                 current_date_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 file.write(f"FINISHED: compress_images - {current_date_time}\n")
+
+        # fix the output ortho
+        if STEPS["fix_ortho"]:
+            fo.fix_ortho(output_path_ortho_abs, 255)
 
         if STEPS["copy_to_external"]:
             pass

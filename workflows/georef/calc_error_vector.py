@@ -5,7 +5,7 @@ import src.base.connect_to_database as ctd
 
 table = "images_georef"
 overwrite=False
-flight_paths = None
+flight_paths = [1822]
 
 def calc_error_vector():
 

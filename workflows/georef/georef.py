@@ -44,14 +44,14 @@ import src.load.load_transform as lt
 DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 
 # define input bounds or image ids
-INPUT_TYPE = "flight_path"  # can be either "bounds" or "ids" or "flight_path" or "all"
+INPUT_TYPE = "ids"  # can be either "bounds" or "ids" or "flight_path" or "all"
 BOUNDS = []  # min_x, min_y, max_x, max_y
-IMAGE_IDS = []
-FLIGHT_PATHS = [1815] # , 2149, 2139, 2142, 2141, 2158, 2140, 1816, 1821]
+IMAGE_IDS = ['CA183332V0059']
+FLIGHT_PATHS = [2166] # , 2149, 2139, 2142, 2141, 2158, 2140, 1816, 1821]
 
 # which type of geo-referencing should be done
-GEOREF_WITH_SATELLITE = False
-GEOREF_WITH_IMAGE = False
+GEOREF_WITH_SATELLITE = True
+GEOREF_WITH_IMAGE = True
 GEOREF_WITH_CALC = True
 
 
@@ -72,9 +72,9 @@ DISTANCE_THRESHOLD = 100  # TODO UPDATE THIS!
 CALC_TYPES = ["sat", "img"]
 
 # define if images of a certain type should be overwritten
-OVERWRITE_SAT = False
+OVERWRITE_SAT = True
 OVERWRITE_IMG = True
-OVERWRITE_CALC = True
+OVERWRITE_CALC = False
 
 # define if images with missing data should be done again
 RETRY_MISSING_SAT = True

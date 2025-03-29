@@ -100,10 +100,11 @@ class TiePointDetector:
                         mask2: Optional[np.ndarray] = None,
                         mask_base_tps: bool = True,
                         mask_additional_tps: bool = True,
-                        mask_extra_tps: bool = True,
-                        mask_final_tps: bool = False,
-                        image_id_1=None, image_id_2=None,
-                        save_path: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
+                    mask_extra_tps: bool = True,
+                    mask_final_tps: bool = False,
+                    image_id_1=None, image_id_2=None,
+                    save_path: Optional[str] = None) -> tuple[np.ndarray, np.ndarray]:
+
         """
         Finds tie points between two input images, optionally using masks to limit the search area.
 

@@ -104,7 +104,7 @@ glac_names = ["Aagaard Glacier", "Ahlmann Glacier", "Aitkenhead Glacier", "Ajax 
          "Widdowson Glacier", "Wiggins Glacier", "Wilkinson Murphy Glacier", "William Glacier", "Windy Glacier",
          "Woodbury Glacier", "Wyspianski Icefall", "Zalewski Glacier", "Zephyr Glacier", "Zonda Glacier"]
 
-glac_names = ["Mapple Glacier", "Pequod Glacier"]
+glac_names = ["Crane Glacier"]
 
 # create conn to the database
 conn = ctd.establish_connection()
@@ -117,10 +117,15 @@ for i, glac_name in enumerate(glac_names):
         import src.sfm_agi.other.get_images_for_glacier as gifg
         glacier_name = glac_name
         image_ids, bounds = gifg.get_images_for_glacier(glacier_name,
-                                                        min_overlap=0.2,
+                                                        min_overlap_footprint=0.2,
+                                                        min_overlap_glacier=0.3,
                                                         return_bounds=True,
                                                         display_footprints=False,
                                                         conn=conn)
+
+        if len(image_ids) == 0:
+            print(f"No images found for {glacier_name}")
+            continue
 
         # project settings
         project_name = glac_name
@@ -186,6 +191,11 @@ for i, glac_name in enumerate(glac_names):
         # convert the geometries to shapely objects
         data['footprint_exact'] = data['footprint_exact'].apply(wkt.loads)
         data['position_exact'] = data['position_exact'].apply(wkt.loads)
+
+        if data['position_exact'].isnull().sum() > 0:
+            for image_id in data[data['position_exact'].isnull()]['image_id']:
+                print(image_id + " has no position")
+            raise ValueError("Some images have no position")
 
         # print the number of images without positions
         print(f"Number of images without positions: {data['position_exact'].isnull().sum()}/{len(data)}")
@@ -450,6 +460,7 @@ for i, glac_name in enumerate(glac_names):
                    camera_accuracies=accuracy_dict, gcp_accuracy=gcp_accuracy,
                    azimuth=azimuth, absolute_bounds=bounds,
                    overwrite=overwrite, resume=resume)
-    except:
+    except Exception as e:
+        print(e)
         print(f"Failed to create project for glacier {glac_name}")
         continue

@@ -29,7 +29,7 @@ import src.base.load_credentials as lc
 import src.base.resize_image as rei
 import src.base.rotate_image as ri
 import src.dem.correct_dem as cd
-import src.dem.estimate_dem_quality as edq
+import src.dem.estimate_dem_quality_old as edq
 import src.export.export_pointcloud as epc
 import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
@@ -58,6 +58,7 @@ import src.sfm_agi.snippets.find_tie_points_for_sfm as ftp
 import src.sfm_agi.snippets.fix_ortho as fo
 import src.sfm_agi.snippets.georef_ortho as go
 import src.sfm_agi.snippets.georef_ortho2 as go2
+import src.sfm_agi.snippets.get_project_quality as gpq
 import src.sfm_agi.snippets.save_key_points as skp
 import src.sfm_agi.snippets.save_sfm_to_db as sstd  # noqa: SpellingInspection
 import src.sfm_agi.snippets.save_tie_points as stp
@@ -90,6 +91,7 @@ zoom_level_dem = 10  # in m
 use_gcp_mask = True  # filter ground control points with a mask
 mask_type = ["rock", "confidence", "slope"]  # "confidence" or "rock"
 rock_mask_type = "REMA"
+rema_level=10
 mask_resolution = 10
 min_gpc_tp_conf=0.75
 gcp_mask_kernel_conf = 5
@@ -137,25 +139,26 @@ STEPS = {
     "build_orthomosaic_relative": False,
     "build_confidence_relative": False,
     "georef_ortho": False,
-    "create_gcps": False,
-    "load_gcps": False,
-    "filter_markers": False,
-    "build_depth_maps_absolute": False,
-    "save_camera_params": False,
-    "build_mesh_absolute": False,
-    "build_pointcloud_absolute": False,
-    "clean_pointcloud_absolute": False,
-    "build_dem_absolute": False,
-    "build_orthomosaic_absolute": False,
-    "export_alignment": False,
-    "build_confidence_absolute": False,
-    "build_difference_dem": False,
-    "evaluate_dem": False,
+    "create_gcps": True,
+    "load_gcps": True,
+    "filter_markers": True,
+    "build_depth_maps_absolute": True,
+    "save_camera_params": True,
+    "build_mesh_absolute": True,
+    "build_pointcloud_absolute": True,
+    "clean_pointcloud_absolute": True,
+    "build_dem_absolute": True,
+    "build_orthomosaic_absolute": True,
+    "export_alignment": True,
+    "build_confidence_absolute": True,
+    "build_difference_dem": True,
+    "evaluate_dem": True,
     "correct_dem": True,
-    "create_report": False,
-    "compress_images": False,
+    "evaluate_project": False,
+    "create_report": True,
+    "compress_images": True,
     "fix_ortho": True,
-    "copy_to_external": False,
+    "copy_to_external": True,
 }
 
 DEBUG_STEPS = {
@@ -414,6 +417,7 @@ def run_agi(project_name: str, images_paths: list,
         bounding_box_abs = None
         quality_dict = None
         quality_dict_corr = None
+        proj_qual_dict = None
 
         # create the metashape project
         doc = Metashape.Document(read_only=False)  # noqa
@@ -799,7 +803,7 @@ def run_agi(project_name: str, images_paths: list,
                 doc.save()
 
         counter_missing_masks = 0
-        if STEPS["create_masks"] or CACHE_STEPS["use_masks"]:
+        if STEPS["create_masks"] and CACHE_STEPS["use_masks"]:
             # define cache fld
             mask_cache_fld = "/data/ATM/data_1/sfm/agi_data/masks"
             mask_fld = os.path.join(data_fld, "masks_original")
@@ -2149,6 +2153,7 @@ def run_agi(project_name: str, images_paths: list,
             # load modern dem
             print("  Load modern DEM")
             dem_modern, transform_rema = lr.load_rema(bounds_georef,
+                                                      zoom_level=rema_level,
                                                       auto_download=True,
                                                       return_transform=True)
 
@@ -2270,6 +2275,7 @@ def run_agi(project_name: str, images_paths: list,
                                   ortho_rel, ortho_modern,
                                   transform_modern,
                                   resolution, bounding_box_rel,
+                                  bounds=absolute_bounds,
                                   rotation=best_rot,
                                   min_conf=min_gpc_tp_conf,
                                   mask_old=mask_rel, mask_new=mask_modern,
@@ -3048,7 +3054,8 @@ def run_agi(project_name: str, images_paths: list,
             # load the modern dem
             if dem_modern is None:
                 bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
-                dem_modern = lr.load_rema(bounds, auto_download=True)
+                dem_modern = lr.load_rema(bounds,
+                                          zoom_level=rema_level, auto_download=True)
 
             # get the bounds of the absolute dem
             bounds_abs = cb.calc_bounds(transform_abs, dem_abs.shape)
@@ -3099,7 +3106,9 @@ def run_agi(project_name: str, images_paths: list,
             # load the modern dem
             if dem_modern is None:
                 bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
-                dem_modern, transform_rema = lr.load_rema(bounds, return_transform=True,
+                dem_modern, transform_rema = lr.load_rema(bounds,
+                                                          zoom_level=rema_level,
+                                                          return_transform=True,
                                                           auto_download=True)
             if ortho_modern is None:
                 bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
@@ -3166,7 +3175,9 @@ def run_agi(project_name: str, images_paths: list,
             # load the modern dem
             print("  Load REMA")
             bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
-            dem_modern, transform_rema = lr.load_rema(bounds, auto_download=True, return_transform=True)
+            dem_modern, transform_rema = lr.load_rema(bounds,
+                                                      zoom_level=rema_level,
+                                                      auto_download=True, return_transform=True)
 
             # load the modern ortho
             ortho_modern = ls.load_satellite(bounds, return_transform=False)
@@ -3261,7 +3272,8 @@ def run_agi(project_name: str, images_paths: list,
             bounds_corrected = cb.calc_bounds(transform_corrected, dem_corrected.shape)
 
             # load the modern dem again (for corrected values)
-            dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
+            dem_modern = lr.load_rema(bounds_corrected, zoom_level=rema_level,
+                                      auto_download=True)
 
             # get relative dem and define the output path
             difference_dem_rela_c = cdd.create_difference_dem(dem_corrected,
@@ -3312,7 +3324,8 @@ def run_agi(project_name: str, images_paths: list,
                                               dem_corrected.shape)
 
             # load the modern dem
-            dem_modern = lr.load_rema(bounds_corrected, auto_download=True)
+            dem_modern = lr.load_rema(bounds_corrected, zoom_level=rema_level,
+                                      auto_download=True)
 
             if rock_mask_type == "REMA":
                 rock_mask = lrm.load_rock_mask(bounds_corrected, mask_resolution,
@@ -3346,6 +3359,9 @@ def run_agi(project_name: str, images_paths: list,
             finish_time = time.time()
             exec_time = finish_time - start_time
             print(f"Evaluate corrected dem - finished ({exec_time:.4f} s)")
+
+        if STEPS["evaluate_project"]:
+            proj_qual_dict = gpq.get_project_quality(chunk)
 
         # create a report of the project
         if STEPS["create_report"]:
@@ -3480,7 +3496,9 @@ def run_agi(project_name: str, images_paths: list,
         # save to psql
         if save_to_psql:
             sstd.save_sfm_to_db(project_name, images_paths,
-                                bounding_box_abs, status, quality_dict, quality_dict_corr,
+                                bounding_box_abs, status,
+                                quality_dict, quality_dict_corr,
+                                proj_qual_dict,
                                 status_message=status_message, conn=conn)
 
         # close the text output

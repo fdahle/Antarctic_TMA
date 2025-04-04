@@ -15,7 +15,7 @@ overwrite_img = True
 overwrite_calc = True
 skip_invalid = True
 
-flight_paths = [1833] # if None, all flight paths are used
+flight_paths = [1847] # if None, all flight paths are used
 
 update_types = ["sat", "img", "calc"]
 

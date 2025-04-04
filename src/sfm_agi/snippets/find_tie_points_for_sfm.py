@@ -382,7 +382,7 @@ def find_tie_points_for_sfm(img_folder: str,
             print(np.amax(tps[:,0]), np.amax(tps[:,1]))
             print(image_dims[img_1_id])
             raise ValueError(f"Error tps for {img_1_id} (*) and {img_2_id}")
-        if np.amax(tps[:,2]) > image_dims[img_2_id][1] or np.amax(tps[:,3]) > image_dims[img_2_id][0]:
+        if np.amax(tps[:,0]) > image_dims[img_1_id][1] or np.amax(tps[:,1]) > image_dims[img_1_id][0]:
             print(np.amax(tps[:,2]), np.amax(tps[:,3]))
             print(image_dims[img_2_id])
             raise ValueError(f"Error tps for {img_1_id} and {img_2_id} (*)")

@@ -129,8 +129,11 @@ for i, glac_name in enumerate(glac_names):
 
         # project settings
         project_name = glac_name
-        overwrite = True
-        resume = False
+        overwrite = False
+        resume = True
+
+        print("TEEEMP")
+        project_name = project_name + "_new"
 
         print(f"Start Project '{project_name}'")
         print("Bounds:", bounds)

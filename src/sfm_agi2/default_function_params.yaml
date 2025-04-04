@@ -1,0 +1,49 @@
+enhance_images: true
+
+combination_params:
+  matching_method: combined  # can be 'all', 'sequential', 'overlap', 'combined'
+  max_step_range: 3  # max number of steps between images in 'sequential' mode
+  min_overlap: 0.2  # min overlap between images for 'overlap' and 'combined'
+
+custom_matching: true
+
+custom_matching_params:
+  max_degree_diff: 10  # TODO
+  min_tps: 5  # min number of tie points between images
+  max_tps: 10000  # max number of tie points between images
+  min_tp_confidence: 0.9  # min confidence for tie points
+  tp_type: float  # Could be 'float' or 'int' depending on keypoint type
+
+create_bundler_params: {}
+
+create_conf_arr_params:
+  interpolate: true
+  distance: 10
+  chunk_size: 5000
+  buffer: 100
+  min_confidence: 0
+
+georef_ortho_params:
+  auto_rotate: true
+  rotation_step: 5
+  min_nr_tps: 25  # minimum number of tie points required to georef the orthomosaic
+  min_conf: 0.5  # absolute minimum confidence for the tie points
+  start_conf: 0.9  # starting confidence for the tie points
+
+find_gcp_params:
+  min_gcps_required: 5
+  use_rock_mask: true
+  use_slope_mask: true
+  max_gcp_slope: 30
+  min_gcp_confidence: 0.9
+
+add_markers_params:
+  accuracy: (10, 10, 10)  # accuracy of the markers in meters
+  reset_markers: true  # reset existing markers
+  min_z: -50  # min z value for markers when they are disregarded
+
+filter_markers_params:
+  min_required_markers: 5
+  max_marker_error_px: 1
+  max_marker_error_m: 10
+

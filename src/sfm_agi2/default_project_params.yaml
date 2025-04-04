@@ -1,0 +1,14 @@
+# general project params
+compress_images: true
+compress_output: true
+epsg_code: 3031  # for Antarctica
+dem_mask:
+  use_rock: true
+  use_confidence: true
+  min_confidence: 2
+  use_slope: true
+  slope_min: 0
+  slope_max: 60
+no_data_val: -9999
+rema_zoom_level: 2  # can be 2m, 10m, 32m
+rema_buffer: 2 # buffer around the rocks in m

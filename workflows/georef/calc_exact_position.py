@@ -6,7 +6,7 @@ import src.georef.snippets.calc_camera_position as ccp
 
 table = "images_georef"
 overwrite = True
-flight_paths = [1822]
+flight_paths = [1847]
 
 def calc_exact_position():
     nr_updated = 0

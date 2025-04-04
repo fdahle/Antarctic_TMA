@@ -66,6 +66,10 @@ def filter_markers(chunk,
                 # remove z coordinate from proj
                 proj = Metashape.Vector([proj.x, proj.y])  # noqa
 
+                if proj is None or reproj is None:
+                    print(f"  Skip camera {camera.label} as it has no projection")
+                    continue
+
                 # calculate px error
                 error_norm_px = (reproj - proj).norm()
 

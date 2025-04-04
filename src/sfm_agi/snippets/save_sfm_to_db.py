@@ -8,6 +8,7 @@ import src.base.connect_to_database as ctd
 def save_sfm_to_db(project_path, images_paths, bbox,
                    status,
                    quality_dict=None, quality_dict_c=None,
+                   project_qual_dict=None,
                    status_message="", conn=None):
 
     if conn is None:
@@ -101,6 +102,17 @@ def save_sfm_to_db(project_path, images_paths, bbox,
             "c_mask_mae": quality_dict_c["mask_mae"],
             "c_mask_mad": quality_dict_c["mask_mad"],
             "c_mask_corr": quality_dict_c["mask_correlation"]
+        }
+
+        # append temp_dict to project_dict
+        project_dict = {**project_dict, **temp_dict}
+
+    if project_qual_dict is not None:
+        temp_dict = {
+            "aligned_images": project_qual_dict["aligned_images"],
+            "nr_markers": project_qual_dict["nr_markers"],
+            "marker_errors_px": project_qual_dict["marker_errors_px"],
+            "marker_errors_m": project_qual_dict["marker_errors_m"]
         }
 
         # append temp_dict to project_dict

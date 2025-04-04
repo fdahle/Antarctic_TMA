@@ -46,7 +46,7 @@ DEFAULT_SAVE_FOLDER = "/data/ATM/data_1/georef"
 # define input bounds or image ids
 INPUT_TYPE = "ids"  # can be either "bounds" or "ids" or "flight_path" or "all"
 BOUNDS = []  # min_x, min_y, max_x, max_y
-IMAGE_IDS = ['CA183332V0059']
+IMAGE_IDS = ["CA214232V0196"]
 FLIGHT_PATHS = [2166] # , 2149, 2139, 2142, 2141, 2158, 2140, 1816, 1821]
 
 # which type of geo-referencing should be done

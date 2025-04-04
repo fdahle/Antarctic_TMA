@@ -1,0 +1,38 @@
+# Default parameters for Agisoft Metashape functions
+
+detectFiducials:
+  generate_masks: true
+  generic_detector: false
+  frame_detector: true
+  fiducial_position_corners: false
+
+alignCameras:
+  accuracy: high  # Options: highest, high, medium, low
+  generic_preselection: false
+  reference_preselection: false
+  adaptive_fitting: false
+  reset_align: false
+
+buildDepthMaps: {}  # Add parameters as needed
+
+buildModel:
+  source_data: ""  # e.g. 'depth maps'
+  surface_type: Metashape.Arbitrary
+  quality: Metashape.MediumQuality
+  face_count: high
+  interpolation: Metashape.EnabledInterpolation
+  depth_filtering: Metashape.MildFiltering
+
+exportModel: {}
+
+buildPointCloud: {}
+
+exportPointCloud: {}
+
+buildDem: {}
+
+exportDem: {}
+
+buildOrthoMosaic: {}
+
+exportOrthoMosaic: {}

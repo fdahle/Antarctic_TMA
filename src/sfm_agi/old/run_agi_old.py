@@ -26,7 +26,7 @@ import src.base.load_credentials as lc
 import src.base.rotate_image as ri
 import src.base.resize_image as rei
 import src.dem.correct_dem as cd
-import src.dem.estimate_dem_quality as edq
+import src.dem.estimate_dem_quality_old as edq
 import src.export.export_thumbnail as eth
 import src.export.export_tiff as eti
 import src.load.load_image as li

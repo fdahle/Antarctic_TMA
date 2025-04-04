@@ -9,7 +9,7 @@ import src.base.rotate_points as rp
 import src.display.display_images as di
 
 debug_display_input_data = False
-debug_display_cell_gcps = False
+debug_display_cell_gcps = True
 debug_show_empty_cells = True
 
 debug_check_unmasked_tps = True
@@ -20,6 +20,7 @@ def find_gcps_new(dem_old, dem_new,
                   transform,
                   resolution, bounding_box,
                   rotation,
+                  bounds=None,
                   mask_old=None, mask_new=None,
                   min_conf=0.9,
                   cell_size = 2500,
@@ -339,6 +340,21 @@ def find_gcps_new(dem_old, dem_new,
     ones = np.ones((tps.shape[0], 1))
     abs_px = np.hstack([tps[:, 0:2], ones])
     absolute_coords = abs_px @ transform.T[:, :2]
+
+    # remove tie points where absolute coords are outside the bounds
+    if bounds is not None:
+        min_x = bounds[0]
+        min_y = bounds[1]
+        max_x = bounds[2]
+        max_y = bounds[3]
+
+        # remove tie points outside the bounding box
+        mask = (absolute_coords[:, 0] >= min_x) & (absolute_coords[:, 0] <= max_x) & \
+               (absolute_coords[:, 1] >= min_y) & (absolute_coords[:, 1] <= max_y)
+        tps = tps[mask]
+        elevations_old = elevations_old[mask]
+        elevations_new = elevations_new[mask]
+        absolute_coords = absolute_coords[mask]
 
 
     # convert the old coords to relative coords

@@ -1,78 +1,81 @@
 import numpy as np
-from shapely.geometry import box
-from rasterio import features
+import xdem
+import src.display.display_images as di
 
-import src.base.resize_image as ri
-import src.load.load_rema as lr
-import src.load.load_shape_data as lsd
+debug_plot = False
 
-# CONSTANTS
-PATH_ROCK_MASK = "/data/ATM/data_1/quantarctica/Quantarctica3/Geology/ADD/ADD_RockOutcrops_Landsat8.shp"
+def estimate_dem_quality(dem, modern_dem,
+                         mask=None, max_slope=None,
+                         slope_transform=None):
 
+    # copy to not change original
+    dem = dem.copy()
 
-def estimate_dem_quality(dem_abs, modern_dem=None,
-                         mask=None):
+    if dem.shape != modern_dem.shape:
+        raise ValueError("The DEMs must have the same shape.")
 
-    # init quality dict
-    quality_dict = {}
-
-    # get the quality of the whole dem
-    quality_dict = _calc_stats("all", modern_dem, dem_abs, quality_dict)
-
-    # apply the mask
     if mask is not None:
+        if mask.shape != dem.shape:
+            raise ValueError("The mask must have the same shape as the DEMs.")
+    else:
+        mask = np.ones(dem.shape, dtype=bool)
 
-        modern_dem[mask == 0] = np.nan
-        quality_dict = _calc_stats("mask", modern_dem, dem_abs, quality_dict)
+    mask[np.isnan(dem)] = 0
+    mask[np.isnan(modern_dem)] = 0
 
-    # Convert all numpy float32 values in quality_dict to standard Python float
-    quality_dict = {key: float(value) if isinstance(value, np.float32) else value for key, value in
-                    quality_dict.items()}
+    if max_slope is not None:
+        if slope_transform is None:
+            raise ValueError("Transform must be provided if max_slope is specified.")
 
-    return quality_dict
+    if max_slope is not None:
+
+        dem_arr = xdem.DEM.from_array(dem, slope_transform, crs=3031)
+
+        # get slope
+        slope = xdem.terrain.slope(dem_arr)
+        slope_mask = slope < max_slope
+        slope_mask = slope_mask.data
+        slope_mask = np.ma.getdata(slope_mask)
 
 
-def _calc_stats(calc_type, modern_dem, historic_dem, quality_dict):
-    # get a difference map
-    difference = modern_dem - historic_dem
+        mask[slope_mask == 0] = 0
+
+    if debug_plot:
+        if max_slope is None:
+            di.display_images([dem, modern_dem, mask] )
+        else:
+            di.display_images([dem, modern_dem, slope.data, mask] )
+
+    # print percentage of masked pixels
+    print(f"  Percentage of masked pixels: { 100 - (np.count_nonzero(mask) / mask.size * 100):.2f}%")
+
+    # apply the mask to the DEMs
+    dem[mask == 0] = np.nan
+
+    # get the difference between the two DEMs
+    difference = modern_dem - dem
     abs_difference = np.abs(difference)
 
-    # calculate the mean difference
-    mean_difference = np.nanmean(difference)
-    median_difference = np.nanmedian(difference)
-    std_difference = np.nanstd(difference)
-    abs_mean_difference = np.nanmean(abs_difference)
-    abs_median_difference = np.nanmedian(abs_difference)
-    abs_std_difference = np.nanstd(abs_difference)
+    quality_dict = {
+        "mean_difference": np.nanmean(difference),
+        "median_difference": np.nanmedian(difference),
+        "std_difference": np.nanstd(difference),
+        "mean_difference_abs": np.nanmean(abs_difference),
+        "median_difference_abs": np.nanmedian(abs_difference),
+        "difference_abs_std": np.nanstd(abs_difference),
+        "rmse": np.sqrt(np.nanmean(difference**2)),
+        "mae": np.nanmean(abs_difference),
+        "mad": np.nanmedian(np.abs(difference - np.nanmedian(difference)))
+    }
 
-    quality_dict[f"{calc_type}_mean_difference"] = mean_difference
-    quality_dict[f"{calc_type}_median_difference"] = median_difference
-    quality_dict[f"{calc_type}_std_difference"] = std_difference
-    quality_dict[f"{calc_type}_mean_difference_abs"] = abs_mean_difference
-    quality_dict[f"{calc_type}_median_difference_abs"] = abs_median_difference
-    quality_dict[f"{calc_type}_difference_abs_std"] = abs_std_difference
+    # Correlation (only valid values)
+    flat_modern = modern_dem.flatten()
+    flat_historic = dem.flatten()
+    valid = ~np.isnan(flat_modern) & ~np.isnan(flat_historic)
 
-    rmse = np.sqrt(np.nanmean((modern_dem - historic_dem) ** 2))
-    mae = np.nanmean(np.abs(modern_dem - historic_dem))
-    mad = np.nanmedian(np.abs(modern_dem - historic_dem - np.nanmedian(modern_dem - historic_dem)))
-
-    quality_dict[f"{calc_type}_rmse"] = rmse
-    quality_dict[f"{calc_type}_mae"] = mae
-    quality_dict[f"{calc_type}_mad"] = mad
-
-    # Flatten the DEM arrays
-    modern_dem_flat = modern_dem.flatten()
-    historic_dem_flat = historic_dem.flatten()
-
-    # Create a mask for valid (non-NaN) values in both DEMs
-    valid_mask = ~np.isnan(modern_dem_flat) & ~np.isnan(historic_dem_flat)
-
-    # Apply the mask to filter out NaNs
-    modern_dem_valid = modern_dem_flat[valid_mask]
-    historic_dem_valid = historic_dem_flat[valid_mask]
-
-    # Calculate the correlation coefficient on the valid data
-    correlation = np.corrcoef(modern_dem_valid, historic_dem_valid)[0, 1]
-    quality_dict[f"{calc_type}_correlation"] = correlation
+    if np.count_nonzero(valid) > 1:
+        quality_dict["correlation"] = np.corrcoef(flat_modern[valid], flat_historic[valid])[0, 1]
+    else:
+        quality_dict["correlation"] = np.nan
 
     return quality_dict

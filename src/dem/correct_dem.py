@@ -222,9 +222,9 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
 
     return output_arr, aligned_transform, max_slope
 
-"""if __name__ == "__main__":
+if __name__ == "__main__":
 
-    project_name = "test3"
+    project_name = "getman_ice_piedmont"
 
     import os
     project_folder = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
@@ -234,6 +234,7 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
     import src.load.load_image as li
     dem_abs, transform_abs = li.load_image(path_hist_dem,
                                            return_transform=True)
+    old_shape = dem_abs.shape
 
     import src.base.calc_bounds as cb
     bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
@@ -241,22 +242,57 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
     import src.load.load_rema as lr
     print(bounds)
     dem_modern, transform_rema = lr.load_rema(bounds,
-                                              output_resolution=2,
+                                              zoom_level=10,
                                               auto_download=True,
                                               return_transform=True)
 
-    #import src.load.load_rock_mask as lrm
-    #mask_resolution = 10
-    #rock_mask = lrm.load_rock_mask(bounds, mask_resolution)
+    # resize the old dem to the modern dem shape
+    import src.base.resize_image as rei
+    dem_abs_resized = rei.resize_image(dem_abs, dem_modern.shape)
 
-    print(dem_abs.shape, dem_modern.shape)
+    # update the transform as well
+    from affine import Affine
+
+    transform_abs_resized = Affine(
+        transform_rema.a,  # New x-scale
+        transform_abs.b,  # Original x-skew
+        transform_abs.c,  # Original x-offset
+        transform_abs.d,  # Original y-skew
+        transform_rema.e,  # New y-scale
+        transform_abs.f  # Original y-offset
+    )
+
+    import src.load.load_rock_mask as lrm
+    mask_resolution = 10
+    rock_mask = lrm.load_rock_mask(bounds, mask_resolution)
+
+    print(dem_abs_resized.shape, dem_modern.shape)
     print(transform_abs, transform_rema)
 
-    import src
-    exit()
-
-    dem_corrected = correct_dem(dem_abs, dem_modern,
-                                   transform_abs, transform_rema,
+    dem_corrected, transform_corrected, new_max_slope = correct_dem(dem_abs_resized, dem_modern,
+                                   transform_abs_resized, transform_rema,
                                    mask=rock_mask,
+                                   adapt_mask=True,
                                    max_slope=20)
-"""
+
+    # resize back to the original shape
+    dem_corrected = rei.resize_image(dem_corrected, old_shape)
+
+    # adapt transform to reflect original pixel size
+    transform_corrected = Affine(
+        transform_abs.a,
+        transform_corrected.b,
+        transform_corrected.c,
+        transform_corrected.d,
+        transform_abs.e,
+        transform_corrected.f
+    )
+
+    # adapt output path
+    output_path_dem_corr = path_hist_dem.replace(".tif",
+                                                       f"_{new_max_slope}.tif")
+
+    import src.export.export_tiff as eti
+    eti.export_tiff(dem_corrected, output_path_dem_corr,
+                    transform=transform_corrected, overwrite=True,
+                    use_lzw=True, no_data=-9999)

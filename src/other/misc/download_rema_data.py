@@ -1,9 +1,14 @@
 """download the reference elevation data of antarctica"""
 
 import os
+import rasterio
+import requests
 import sys
 import tarfile
-import wget
+import time 
+from rasterio.merge import merge
+from glob import glob
+from tqdm import tqdm
 
 import src.load.load_shape_data as lsd
 
@@ -104,14 +109,24 @@ def download_rema_data(tile, zoom_level,
             max_retries = 5
             retry_delay = 5  # seconds
 
-            # download file
-            import time
             for _ in range(max_retries):
                 try:
-                    wget.download(url, out=file_path_gz, bar=bar_progress)
-                    break  # Successful download, exit the loop
-                except (Exception,) as e:
-                    print("Download failed. Retrying in {} seconds...".format(retry_delay))
+                    response = requests.get(url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    total_size = int(response.headers.get('content-length', 0))
+                    block_size = 1024 * 1024  # 1 MB
+
+                    tqdm_bar = tqdm(total=total_size, unit='MB', unit_scale=True, desc=f"Downloading {tile}{sub_tile}",
+                                    ncols=80)
+
+                    with open(file_path_gz, 'wb') as f:
+                        for data in response.iter_content(block_size):
+                            f.write(data)
+                            tqdm_bar.update(len(data))
+                    tqdm_bar.close()
+                    break  # Successful download
+                except Exception as e:
+                    print(f"Download failed. Retrying in {retry_delay} seconds...")
                     print(e)
                     time.sleep(retry_delay)
 
@@ -131,6 +146,54 @@ def download_rema_data(tile, zoom_level,
                 return False
             else:
                 raise e
+
+    # for sub tiles we need to merge the files into a single file
+    if zoom_level == 2:
+        # Search all the individual sub-tiles just downloaded
+        pattern = os.path.join(destination_folder, f"{tile}_*_2m.tif")
+        sub_tile_paths = sorted(glob(pattern))
+
+        if not sub_tile_paths:
+            print(f"Warning: no sub-tiles found for {tile}")
+            return False
+
+        print(f"Found {len(sub_tile_paths)} sub-tile(s) for {tile}, proceeding with merge.")
+
+        # Open only available sub-tile datasets
+        src_files_to_mosaic = []
+        for fp in sub_tile_paths:
+            try:
+                src_files_to_mosaic.append(rasterio.open(fp))
+            except rasterio.errors.RasterioIOError:
+                print(f"Could not open {fp}, skipping.")
+
+        if not src_files_to_mosaic:
+            print(f"Warning: no valid sub-tile datasets found for {tile}")
+            return False
+
+        # Merge them
+        mosaic, out_trans = merge(src_files_to_mosaic)
+
+        # Write merged file
+        out_meta = src_files_to_mosaic[0].meta.copy()
+        out_meta.update({
+            "driver": "GTiff",
+            "height": mosaic.shape[1],
+            "width": mosaic.shape[2],
+            "transform": out_trans,
+            "compress": "lzw",
+            "BIGTIFF": "YES",
+        })
+
+        merged_tile_path = os.path.join(destination_folder, f"{tile}_2m.tif")
+        with rasterio.open(merged_tile_path, "w", **out_meta) as dest:
+            dest.write(mosaic)
+
+        for src in src_files_to_mosaic:
+            src.close()
+
+        for f in sub_tile_paths:
+            os.remove(f)
 
     # restore original stdout and stderr
     sys.stdout = original_stdout

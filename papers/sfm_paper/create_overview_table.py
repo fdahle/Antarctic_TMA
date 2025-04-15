@@ -34,12 +34,12 @@ def get_data_from_table(project_name, conn=None):
     if conn is None:
         conn = ctd.establish_connection()
 
-    sql_string = (f"SELECT num_images, st_area(area) / 1000000 as area, "
-                  f"num_gcps, gcps_rmse, "
-                  f"c_all_diff_abs_median, c_mask_diff_abs_median, "
-                  f"c_all_rmse, c_mask_rmse, "
-                  f"c_mask_mad, c_all_mad "
-                  f"FROM sfm_projects WHERE project_name='{project_name}' "
+    sql_string = (f"SELECT nr_images, st_area(area) / 1000000 as area, "
+                  f"nr_markers, marker_errors_px, marker_errors_m, "
+                  f"c_all_diff_abs_median, c_mask_diff_abs_median, c_slope_diff_abs_median, "
+                  f"c_all_rmse, c_mask_rmse, c_slope_rmse, "
+                  f"c_mask_mad, c_all_mad, c_slope_mad "
+                  f"FROM sfm_projects2 WHERE project_name='{project_name}' "
                   f"AND status='finished' "
                   f"ORDER BY date_time DESC LIMIT 1"
                  )
@@ -75,33 +75,52 @@ if __name__ == "__main__":
     column_order = [
         "project",
         "area",
-        "num_images",
+        "nr_images",
+        "nr_markers",
+        "marker_errors_px",
+        "marker_errors_m",
         "c_all_diff_abs_median",
         "c_mask_diff_abs_median",
+        "c_slope_diff_abs_median",
         "c_all_rmse",
         "c_mask_rmse",
+        "c_slope_rmse",
         "c_all_mad",
-        "c_mask_mad"
+        "c_mask_mad",
+        "c_slope_mad",
     ]
 
     # Reorder DataFrame columns
     full_df = full_df[column_order]
 
     # Cast num_images to int
-    full_df["num_images"] = full_df["num_images"].astype(int)
+    full_df["nr_images"] = full_df["nr_images"].astype(int)
+    full_df["nr_markers"] = full_df["nr_markers"].astype(int)
+
+    # convert nan values to 0
+    full_df.fillna(0, inplace=True)
 
     # Format float columns to 2 decimal places
     float_cols = [
         "area",
+        "marker_errors_px",
+        "marker_errors_m",
         "c_all_diff_abs_median",
         "c_mask_diff_abs_median",
+        "c_slope_diff_abs_median",
         "c_all_rmse",
         "c_mask_rmse",
+        "c_slope_rmse",
         "c_all_mad",
-        "c_mask_mad"
+        "c_mask_mad",
+        "c_slope_mad",
     ]
     for col in float_cols:
-        full_df[col] = full_df[col].map(lambda x: f"{x:.1f}")
+        if col == "marker_errors_px":
+            full_df[col] = full_df[col].map(lambda x: f"{x:.2f}")
+        else:
+            full_df[col] = full_df[col].astype(int)
+
 
     # Replace underscores with spaces and capitalize each word
     full_df["project"] = full_df["project"].str.replace("_", " ").str.title()
@@ -111,3 +130,5 @@ if __name__ == "__main__":
 
     latex_code = full_df.to_latex(index=False)
     print(latex_code)
+
+    print(full_df.shape)

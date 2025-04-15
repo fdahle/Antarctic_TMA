@@ -1,17 +1,29 @@
 """the complete mega function to do SfM automatically"""
-
-import json
-import numpy as np
-import Metashape
+import sys
 import os
+from contextlib import contextmanager, redirect_stdout
+
+# ignore some warnings
+os.environ['KMP_WARNINGS'] = '0'
+os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
+
+import gc
+import hashlib
+import json
+import Metashape
+import numpy as np
 import shutil
 import yaml
 
-from affine import Affine
 from pathlib import Path
+from rasterio.transform import Affine
+from scipy.ndimage import binary_dilation
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
+from tqdm import tqdm
+from time import sleep
 
 # base modules
-import src.base.enhance_image as ei
 import src.base.load_credentials as lc
 
 # load modules
@@ -26,6 +38,7 @@ import src.export.export_tiff as eti
 
 # snippets for prepare_images
 import src.sfm_agi2.snippets.create_combinations as cc
+import src.sfm_agi2.snippets.enhance_images as ei
 import src.sfm_agi2.snippets.find_tie_points_for_sfm as ftp
 import src.sfm_agi2.snippets.union_masks as um
 
@@ -33,9 +46,11 @@ import src.sfm_agi2.snippets.union_masks as um
 import src.sfm_agi2.snippets.create_confidence_arr as cca
 
 # snippets for georef_project
+import src.sfm_agi2.snippets.adapt_bounds as ab
 import src.sfm_agi2.snippets.add_markers as am
 import src.sfm_agi2.snippets.create_bundler as cb
 import src.sfm_agi2.snippets.create_slope as cs
+import src.sfm_agi2.snippets.crop_output as co
 import src.sfm_agi2.snippets.georef_ortho as go
 import src.sfm_agi2.snippets.find_gcps as fg
 import src.sfm_agi2.snippets.filter_markers as fm
@@ -46,16 +61,65 @@ import src.sfm_agi2.snippets.correct_dem as cd
 # snippets for evaluate_project
 import src.sfm_agi2.snippets.estimate_dem_quality as edq
 
+# other imports
+from src.sfm_agi2.SfMError import SfMError
+
 # constants
 DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 
+@contextmanager
+def redirect_output_to_file(log_path, debug: bool = False):
+    """
+    Redirects both Python-level and C-level (file descriptor)
+    output to a log file.
+    """
+    if debug:
+        class Tee:
+            def __init__(self, *streams):
+                self.streams = streams
+
+            def write(self, data):
+                for s in self.streams:
+                    s.write(data)
+                    s.flush()
+
+            def flush(self):
+                for s in self.streams:
+                    s.flush()
+
+        with open(log_path, 'a') as logfile:
+            tee = Tee(sys.stdout, logfile)
+            with redirect_stdout(tee):
+                yield
+    else:
+        # Save original file descriptors for stdout (1)
+        original_stdout_fd = os.dup(1)
+
+        # Open the log file for writing/appending
+        log_fd = os.open(log_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+
+        # Redirect file descriptors 1 (stdout)
+        os.dup2(log_fd, 1)
+
+        try:
+            yield
+        finally:
+            # Restore the original file descriptors
+            os.dup2(original_stdout_fd, 1)
+            os.close(original_stdout_fd)
+            os.close(log_fd)
+
 
 class AgiProject:
+    """
+    The AgiProject class is used to create and manage an Agisoft project.
+    """
 
     def __init__(self, project_name: str, base_fld: str,
                  agi_params: dict | None = None,
                  project_params: dict | None = None,
                  function_params: dict | None = None,
+                 cache_params: dict | None = None,
                  resume: bool = False, overwrite: bool = False,
                  debug: bool = False) -> None:
         """
@@ -84,6 +148,7 @@ class AgiProject:
 
             # we overwrite the project folder
             if overwrite:
+                print(f"[INFO] Remove existing project folder at {self.project_fld}")
                 shutil.rmtree(self.project_fld)
                 os.makedirs(self.project_fld)
             # we resume the project
@@ -104,7 +169,8 @@ class AgiProject:
         self.data_fld = os.path.join(self.project_fld, "data")
         self.output_fld = os.path.join(self.project_fld, "output")
         self.log_fld = os.path.join(self.project_fld, "log")
-        self.display_fld = os.path.join(self.project_fld, "display")
+        self.params_fld = os.path.join(self.project_fld, "params")
+        self.debug_fld = os.path.join(self.project_fld, "debug")
 
         ##
         # steps
@@ -136,32 +202,58 @@ class AgiProject:
             self.status_flags = self._load_status_flag_file()
 
         ##
+        # project folders
+        ##
+
+        # create the folder structure
+        for fld in [self.data_fld, self.output_fld,
+                    self.log_fld, self.params_fld,
+                    self.debug_fld]:
+            os.makedirs(fld, exist_ok=True)
+
+        ##
         # params
         ##
 
         # load project_params (default if not provided)
         if project_params is None:
-            path_default_project_params = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
-                                           "src/sfm_agi2/default_project_params.yaml")
-            self.project_params = self._load_params(path_default_project_params)
+            default_pth = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
+                           "src/sfm_agi2/default_project_params.yaml")
+            new_pth = os.path.join(self.params_fld, "project_params.yaml")
+            shutil.copy(default_pth, new_pth)
+            self.project_params = self._load_params(new_pth)
         else:
             self.project_params = project_params
 
         # load agi_params (default if not provided)
         if agi_params is None:
-            path_default_agi_params = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
-                                       "src/sfm_agi2/default_agi_params.yaml")
-            self.agi_params = self._load_params(path_default_agi_params)
+            default_pth = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
+                           "src/sfm_agi2/default_agi_params.yaml")
+            new_pth = os.path.join(self.params_fld, "agi_params.yaml")
+            shutil.copy(default_pth, new_pth)
+            self.agi_params = self._load_params(new_pth)
         else:
             self.agi_params = agi_params
 
         # load function params (default if not provided)
         if function_params is None:
-            path_default_function_params = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
-                                             "src/sfm_agi2/default_function_params.yaml")
-            self.function_params = self._load_params(path_default_function_params)
+            default_pth = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
+                           "src/sfm_agi2/default_function_params.yaml")
+            new_pth = os.path.join(self.params_fld, "function_params.yaml")
+            shutil.copy(default_pth, new_pth)
+            self.function_params = self._load_params(new_pth)
         else:
             self.function_params = function_params
+
+        # load cache params (default if not provided)
+        if cache_params is None:
+            default_pth = ("/home/fdahle/Documents/GitHub/Antarctic_TMA/"
+                           "src/sfm_agi2/default_cache_params.yaml")
+            new_pth = os.path.join(self.params_fld, "cache_params.yaml")
+            shutil.copy(default_pth, new_pth)
+            self.cache_params = self._load_params(new_pth)
+        else:
+            self.cache_params = cache_params
 
         ##
         # availability flags for input data
@@ -171,29 +263,46 @@ class AgiProject:
         self.json_data_availability_path = os.path.join(self.project_fld,
                                                         "data_availability.json")
 
-        # create a default data availability file
-        # create a default step order
-        self.data_availability = {
-            "images": False,
-            "images_enhanced": False,
-            "masks": False,
-            "masks_adapted": False,
-            "camera_positions": False,
-            "camera_accuracies": False,
-            "camera_rotations": False,
-            "focal_lengths": False,
-            "absolute_bounds": False,
-        }
-
         # status flags to check data availability
         if overwrite or resume is False:
 
+            # create a default data availability file
+            self.data_availability = {
+                "images": False,
+                "images_enhanced": False,
+                "masks": False,
+                "masks_adapted": False,
+                "camera_accuracies": False,
+                "camera_footprints": False,
+                "camera_positions": False,
+                "camera_rotations": False,
+                "focal_lengths": False,
+                "absolute_bounds": False,
+                "custom_ortho": False,
+                "custom_dem": False
+            }
+
             # save the data availability to a json file
             self._update_data_availability_file()
-
         else:
-            # load status flags from flags.json
+            # load data availability from json file
             self.data_availability = self._load_data_availability_file()
+
+        ##
+        # bounds
+        ##
+        self.relative_bounds = None
+        self.absolute_bounds = None
+
+        ##
+        # optional data
+        #
+
+        self.camera_accuracies = None  # dict with camera accuracies
+        self.camera_positions = None
+        self.camera_footprints = None
+        self.camera_rotations = None
+        self.focal_lengths = None
 
         ###
         # intermediate data that we need at some point
@@ -201,9 +310,6 @@ class AgiProject:
 
         # the name of all images
         self.image_names = []
-
-        # bounds of the project
-        self.absolute_bounds = None  # absolute bounds of the project
 
         # DEMs
         self._dem_new = None  # e.g REMA
@@ -215,11 +321,19 @@ class AgiProject:
         self._dem_new_transform = None  # transform of the modern DEM
         self._dem_old_abs_transform = None  # transform of the absolute DEM
         self._dem_old_rel_transform = None  # transform of the relative DEM
+        self._dem_old_corrected_transform = None  # transform of the corrected DEM
 
         # masks of DEM
         self._dem_mask_new = None  # mask of the modern DEM
         self._dem_mask_old_abs = None  # mask of the old DEM (absolute one)
         self._dem_mask_old_rel = None  # mask of the old DEM (relative one)
+
+        # attribute related to the masks of the dem
+        self.min_slope = self.project_params["dem_mask"]["slope_min"]
+        self.max_slope = self.project_params["dem_mask"]["slope_max"]
+        self.active_slope = "gcps"  # can be "gcps" or "eval"
+        self.gcp_slope = self.min_slope
+        self.eval_slope = self.min_slope
 
         # Orthomosaics
         self._ortho_new = None  # e.g Sentinel-2
@@ -265,6 +379,8 @@ class AgiProject:
         self.pth_pc_abs = os.path.join(self.output_fld,
                                        self.project_name + "_pc_abs.ply")
 
+        self.pth_log = os.path.join(self.log_fld, "output.log")
+
         ##
         # Metashape initialization
         ##
@@ -289,17 +405,12 @@ class AgiProject:
             self.doc.open(self.project_psx_path, ignore_lock=True)
             self.chunk = self.doc.chunks[0]
         else:
-            print("[INFO] Creating new project at {}.".format(self.project_psx_path))
+            print("[INFO] Create new project at {}.".format(self.project_psx_path))
+
+            # !IMPORTANT: doc must be saved before adding a chunk, otherwise
+            # the chunk will not be saved
             self.doc.save(self.project_psx_path)
             self.chunk = self.doc.addChunk()
-
-        ##
-        # project folder
-        ##
-
-        # create the folder structure
-        for fld in [self.data_fld, self.output_fld, self.log_fld, self.display_fld]:
-            os.makedirs(fld, exist_ok=True)
 
     @property
     def conf_arr_abs(self):
@@ -331,14 +442,28 @@ class AgiProject:
         return self._conf_arr_rel
 
     @property
-    def dem_new(self):
+    def dem_new(self) -> (np.ndarray, Affine):
+        """
+        Lazy-loads the modern DEM and its associated affine transform from
+        REMA if not already loaded. It will be downloaded automatically
+        if not available locally.
+
+        Returns:
+            _dem_new np.ndarray: The modern DEM.
+            _dem_new_transform: The affine transformation matrix
+                associated with the DEM.
+        Raises:
+            ValueError: If `absolute_bounds` is not set.
+        """
 
         if self.absolute_bounds is None:
             raise ValueError("Absolute bounds are required to load the modern DEM")
 
         if self._dem_new is None:
+            zoom_lvl = self.project_params["rema"]["zoom_level"]
+            print(f"[INFO] Load modern elevation data from REMA ({zoom_lvl}m) with", self.absolute_bounds)
             self._dem_new, self._dem_new_transform = lr.load_rema(self.absolute_bounds,
-                                         zoom_level=self.project_params["rema_zoom_level"],
+                                         zoom_level=zoom_lvl,
                                          auto_download=True,
                                          return_transform=True)
         return self._dem_new, self._dem_new_transform
@@ -357,6 +482,7 @@ class AgiProject:
         """
 
         if self._dem_old_abs is None:
+            print(f"[INFO] Load historical absolute DEM")
             self._dem_old_abs, self._dem_old_abs_transform = li.load_image(self.pth_dem_abs,
                                                                    return_transform=True)
         return self._dem_old_abs, self._dem_old_abs_transform
@@ -374,31 +500,55 @@ class AgiProject:
         """
 
         if self._dem_old_rel is None:
+            print(f"[INFO] Load historical relative DEM")
             self._dem_old_rel, self._dem_old_rel_transform = li.load_image(self.pth_dem_rel,
                                                                    return_transform=True)
         return self._dem_old_rel, self._dem_old_rel_transform
 
     @property
-    def dem_mask_new(self, max_slope=90):
+    def dem_mask_new(self):
 
         if self._dem_mask_new is None:
 
-            self._dem_mask_new = np.ones(self._dem_new.shape, dtype=bool)
+            print("[INFO] Create mask for the modern DEM")
+
+            # get the modern dem
+            dem_new, _ = self.dem_new
+
+            if self._dem_new is None:
+                raise ValueError("The modern DEM is required to create the mask")
+
+            self._dem_mask_new = np.ones(dem_new.shape, dtype=bool)
 
             if self.project_params["dem_mask"]["use_rock"]:
                 self._dem_mask_new[self.rock_mask == 0] = 0
 
             if self.project_params["dem_mask"]["use_slope"]:
+                print(f"[INFO] Use slope of {self.gcp_slope}° for the mask "
+                      f"({self.active_slope})")
+
+                if self.active_slope == "gcps":
+                    input_slope = self.gcp_slope
+                elif self.active_slope == "eval":
+                    input_slope = self.eval_slope
+                else:
+                    raise ValueError("active_slope must be 'gcps' or 'eval'")
+
                 # load slope and apply to mask
-                slope = self.slope_new
-                self._dem_mask_new[slope > max_slope] = 0
+                self._dem_mask_new[self.slope_new > input_slope] = 0
 
         return self._dem_mask_new
 
     @property
     def dem_mask_old_abs(self):
 
+        if self._dem_old_abs is None:
+            raise ValueError("The absolute DEM is required to create the mask")
+
         if self._dem_mask_old_abs is None:
+
+            print("[INFO] Create mask for the absolute DEM")
+
             self._dem_mask_old_abs = np.ones(self.dem_old_abs.shape, dtype=bool)
 
             # filter based on confidence
@@ -411,24 +561,55 @@ class AgiProject:
     @property
     def dem_mask_old_rel(self):
 
+        if self._dem_old_rel is None:
+            raise ValueError("The relative DEM is required to create the mask")
+
         if self._dem_mask_old_rel is None:
-            self._dem_mask_old_rel = np.ones(self.dem_old_rel.shape, dtype=bool)
+
+            print("[INFO] Create mask for the relative DEM")
+
+            # get the old dem_rel
+            dem_old_rel, _ = self.dem_old_rel
+
+            # create initial mask
+            self._dem_mask_old_rel = np.ones(dem_old_rel.shape, dtype=bool)
 
             # filter based on confidence
             if self.project_params["dem_mask"]["use_confidence"]:
                 self._dem_mask_old_rel[self.conf_arr_rel <
-                         self.function_params["dem_mask"]["min_confidence"]] = 0
+                         self.project_params["dem_mask"]["min_confidence"]] = 0
 
+            if self.project_params["dem_mask"]["confidence_buffer_px"] > 0:
+                buffer_px = self.project_params["dem_mask"]["confidence_buffer_px"]
+                self._dem_mask_old_rel = binary_dilation(self._dem_mask_old_rel,
+                                                         structure=np.ones((2 * buffer_px + 1, 2 * buffer_px + 1)))
+
+            # release some memory
+            del self._conf_arr_rel
+            gc.collect()
 
         return self._dem_mask_old_rel
 
     @property
     def ortho_new(self):
+        """
+        Lazy-loads the modern ortho and its associated affine transform from
+        Sentinel-2 if not already loaded. It will be downloaded automatically
+        if not available locally.
 
+        Returns:
+            _ortho_new np.ndarray: The modern ortho.
+            _ortho_new_transform: The affine transformation matrix
+                associated with the ortho.
+        Raises:
+            ValueError: If `absolute_bounds` is not set.
+
+        """
         if self.absolute_bounds is None:
             raise ValueError("Absolute bounds are required to load the modern ortho")
 
         if self._ortho_new is None:
+            print("[INFO] Load modern ortho from Sentinel-2 with", self.absolute_bounds)
             self._ortho_new, self._ortho_new_transform = ls.load_satellite(self.absolute_bounds,
                                                                            return_transform=True)
         return self._ortho_new, self._ortho_new_transform
@@ -490,19 +671,24 @@ class AgiProject:
             _point_cloud_rel (np.ndarray): The relative point cloud generated
                 after relative SFM.
         """
-
-
         if self._point_cloud_rel is None:
             self._point_cloud_rel = lpl.load_ply(self.pth_pc_rel)
         return self._point_cloud_rel
 
     @property
     def rock_mask(self):
+
+        if self.absolute_bounds is None:
+            raise ValueError("Absolute bounds are required to load the rock mask")
+
         if self._rock_mask is None:
+
+            print("[INFO] Load rock mask from Quantarctica with", self.absolute_bounds)
+
             # load rock mask and apply to mask
             self._rock_mask = lrm.load_rock_mask(self.absolute_bounds,
-                                           self.project_params["rema_zoom_level"],
-                                           self.project_params["rema_buffer"])
+                                           self.project_params["rema"]["zoom_level"],
+                                           self.project_params["rema"]["buffer"])
         return self._rock_mask
 
     @property
@@ -515,16 +701,19 @@ class AgiProject:
         """
 
         if self._slope_new is None:
+
+            print("[INFO] Create slope map of the modern DEM")
+
             # get dem and transform
             d_new, t_new = self.dem_new
             self._slope_new = cs.create_slope(d_new, t_new,
                                               self.project_params["epsg_code"],
-                                              self.function_params["no_data"])
+                                              self.project_params["no_data_val"])
         return self._slope_new
 
     def set_input_images(self, image_names: list[str],
                          src_folder: str | None = None,
-                         extension: str = ".tif") -> None:
+                         extension: str = "tif") -> None:
         """
         Set and copy input images into the project folder.
 
@@ -543,13 +732,16 @@ class AgiProject:
             FileNotFoundError: If a source image does not exist in the source folder.
         """
 
-        print("[INFO] Setting {} input images.".format(len(image_names)))
+        print("[INFO] Set {} input images.".format(len(image_names)))
 
         if len(image_names) < 3:
             raise ValueError("At least 3 images are required for SFM.")
 
         if src_folder is None:
             src_folder = DEFAULT_IMAGE_FLD
+
+        # remove extension from image names
+        image_names = [name.split(".")[0] for name in image_names]
 
         # save the images
         self.image_names = image_names
@@ -561,9 +753,8 @@ class AgiProject:
         # copy images to the data folder
         for image_name in self.image_names:
 
-            # check if the image name is correct
-            if image_name.endswith("."+ extension) is False:
-                image_name = image_name + "." + extension
+            # add extension to image name
+            image_name = image_name + "." + extension
 
             # set the correct path
             source_path = str(os.path.join(src_folder, image_name))
@@ -578,58 +769,149 @@ class AgiProject:
         self._update_data_availability_file("images")
 
     def set_optional_data(self,
-                          absolute_bounds=None,
-                          ortho_new=None, ortho_new_transform=None,
-                          dem_new=None, dem_new_transform=None,
-                          masks=None, mask_src_folder: str | None = None,
-                          camera_positions=None, camera_footprints=None,
-                          camera_accuracies=None,
-                          focal_lengths = None):
-
-        # define paths for the optional data
-        mask_folder = os.path.join(self.data_fld, "masks")
+                          absolute_bounds: tuple[int, int, int, int] | None = None,
+                          mask_src_folder: str | None = None,
+                          ortho_new: np.ndarray | None =None,
+                          ortho_new_transform: Affine | None = None,
+                          dem_new: np.ndarray | None =None,
+                          dem_new_transform: Affine | None = None,
+                          camera_accuracies: dict[str, tuple[int, int, int]] | None = None,
+                          camera_footprints: dict[str, BaseGeometry] | None = None,
+                          camera_positions: dict[str, tuple[int, int, int]] | None = None,
+                          camera_rotations: dict[str, tuple[int, int, int]] | None = None,
+                          focal_lengths: dict[str, float] | None = None):
 
         # before optional data can be set, check if images are set
         if len(self.image_names) < 3:
             raise ValueError("Images must be set before setting input data.")
 
+        # some attributes are required to be set together
+        if ortho_new is not None and ortho_new_transform is None:
+            raise ValueError("Ortho new transform must be set if ortho new is set.")
+        if dem_new is not None and dem_new_transform is None:
+            raise ValueError("DEM new transform must be set if DEM new is set.")
+
+        # set some attributes directly
         if absolute_bounds is not None:
             self.absolute_bounds = absolute_bounds
+        if ortho_new is not None:
+            self._ortho_new = ortho_new
+        if ortho_new_transform is not None:
+            self._ortho_new_transform = ortho_new_transform
+        if dem_new is not None:
+            self._dem_new = dem_new
+        if dem_new_transform is not None:
+            self._dem_new_transform = dem_new_transform
 
-        if masks is not None:
-            if mask_src_folder is None:
-                raise ValueError("Mask source folder must be set if masks "
-                                 "are provided.")
+        if mask_src_folder is not None:
+
+            # get all tif files in the mask folder and only keep the ones that
+            # are in the image folder
+            all_masks = [str(p.resolve()) for p in Path(mask_src_folder).glob('*.tif')]
+
+            # only keep masks that are in image folder
+            masks = [mask for mask in all_masks if mask.split("/")[-1].split(".")[0] in self.image_names]
+            masks = [Path(m).stem for m in masks]
 
             if len(masks) != len(self.image_names):
                 raise ValueError("Number of masks must match number of images.")
 
-            # copy masks to the data folder
+            # define path to copy the masks
+            mask_folder = os.path.join(self.data_fld, "masks_custom")
+
+            # create folder
+            os.makedirs(mask_folder, exist_ok=True)
+
+            # copy masks to the mask folder
             for mask_name in masks:
-                source_path = str(os.path.join(mask_src_folder, mask_name))
-                dest_path = str(os.path.join(mask_folder, mask_name))
+                source_path = str(os.path.join(mask_src_folder, mask_name + ".tif"))
+                dest_path = str(os.path.join(mask_folder, mask_name + ".tif"))
                 shutil.copy(source_path, dest_path)
 
             self._update_data_availability_file("masks")
+
+        if camera_accuracies is not None:
+            if len(camera_accuracies) != len(self.image_names):
+                raise ValueError("Number of camera accuracies must match "
+                                 "number of images.")
+            self.camera_accuracies = camera_accuracies
+            self._update_data_availability_file("camera_accuracies")
+
+        if camera_footprints is not None:
+            if len(camera_footprints) != len(self.image_names):
+                raise ValueError("Number of camera footprints must match "
+                                 "number of images.")
+            self.camera_footprints = camera_footprints
+            self._update_data_availability_file("camera_footprints")
 
         if camera_positions is not None:
 
             if len(camera_positions) != len(self.image_names):
                 raise ValueError("Number of camera positions must match "
                                  "number of images.")
+            self.camera_positions = camera_positions
             self._update_data_availability_file("camera_positions")
 
-        if camera_accuracies is not None:
-            if len(camera_accuracies) != len(self.image_names):
-                raise ValueError("Number of camera accuracies must match "
+        if camera_rotations is not None:
+            if len(camera_rotations) != len(self.image_names):
+                raise ValueError("Number of camera rotations must match "
                                  "number of images.")
-            self._update_data_availability_file("camera_accuracies")
+            self.camera_rotations = camera_rotations
+            self._update_data_availability_file("camera_rotations")
 
         if focal_lengths is not None:
             if len(focal_lengths) != len(self.image_names):
                 raise ValueError("Number of focal lengths must match "
                                  "number of images.")
+            self.focal_lengths = focal_lengths
             self._update_data_availability_file("focal_lengths")
+
+        # use camera_footprints to possibly update the absolute bounds
+        if self.data_availability['camera_footprints']:
+            footprints = self.camera_footprints
+            if self.project_params["bounding_box"]["only_vertical"]:
+                # Filter polygons with "V" in the key
+                footprints = {k: v for k, v in footprints.items() if "V" in k}
+                if not footprints:
+                    raise ValueError("No vertical camera footprints "
+                                     "(with 'V' in the key) found.")
+
+            # Combine all polygons into one & get the bounding box
+            combined = unary_union(list(footprints.values()))
+            absolute_footprint_bounds = combined.bounds
+            if self.project_params["bounding_box"]["source"] == "footprints":
+                self.absolute_bounds = absolute_footprint_bounds
+            if self.project_params["bounding_box"]["source"]  == "combined":
+                absolute_bounds = self.absolute_bounds
+                if absolute_bounds is None:
+                    self.absolute_bounds = absolute_footprint_bounds
+                else:
+
+                    # get the difference between the two bounds
+                    diff_min_x = abs(absolute_bounds[0] - absolute_footprint_bounds[0])
+                    diff_min_y = abs(absolute_bounds[1] - absolute_footprint_bounds[1])
+                    diff_max_x = abs(absolute_bounds[2] - absolute_footprint_bounds[2])
+                    diff_max_y = abs(absolute_bounds[3] - absolute_footprint_bounds[3])
+
+                    # raise warning if any of the differences are larger than the warning value
+                    warning_val = self.project_params["bounding_box"]["max_difference"]
+                    if diff_min_x > warning_val or diff_min_y > warning_val or \
+                        diff_max_x > warning_val or diff_max_y > warning_val:
+                        print("[WARNING] The absolute bounds differ from the camera footprints by more than "
+                              "{} m.".format(warning_val))
+                        print("       ", self.absolute_bounds)
+                        print("       ", absolute_footprint_bounds)
+
+                    self.absolute_bounds = (min(absolute_bounds[0], absolute_footprint_bounds[0]),
+                                            min(absolute_bounds[1], absolute_footprint_bounds[1]),
+                                            max(absolute_bounds[2], absolute_footprint_bounds[2]),
+                                            max(absolute_bounds[3], absolute_footprint_bounds[3]))
+            self.data_availability["absolute_bounds"] = True
+
+        # adapt the absolute bounds for rema
+        if self.data_availability["absolute_bounds"]:
+            rema_lvl = self.project_params["rema"]["zoom_level"]
+            self.absolute_bounds = ab.adapt_bounds(self.absolute_bounds, rema_lvl)
 
     def run_project(self):
         """run project with all steps"""
@@ -641,28 +923,88 @@ class AgiProject:
         self.correct_data()
         self.evaluate_project()
 
-    def prepare_images(self):
+    def prepare_images(self) -> None:
+        """
+        Prepares images for Structure-from-Motion (SfM) processing.
+
+        This includes:
+        - Adding photos to the Metashape chunk.
+        - Optionally setting focal lengths and fixed camera parameters.
+        - Detecting fiducials and creating masks.
+        - Saving original and adapted masks to disk.
+        - Optionally enhancing images using provided masks.
+        - Matching images via custom or built-in matching of Metashape.
+        - Creating a bundler file and importing cameras if custom matching is enabled.
+
+        Raises:
+            FileNotFoundError: If any required input files (images or masks)
+                are not located in the data folder.
+            ValueError: If parameters are inconsistent or insufficient
+                (e.g., missing or fewer than 3 images).
+        """
+
         # check overwrite (no need checking for previous steps, as first step)
         if self.status_flags["prepare_images"]:
             if self.overwrite is False:
                 print("[INFO] Images already prepared. Skipping preparation.")
                 return
 
+        print("[STEAP] Prepare images.")
+
         # check image availability
         if self.data_availability["images"] is False:
-            raise RuntimeError("No images available. Please set images first.")
+            raise ValueError("No images available. Please set images first.")
 
-        # set path to the possible folder
+        # set path to the possible folders
         image_folder = os.path.join(self.data_fld, "images")
-        enhanced_folder = os.path.join(self.data_fld, "enhanced_images")
-        orig_mask_folder = os.path.join(self.data_fld, "masks")
+        enhanced_folder = os.path.join(self.data_fld, "images_enhanced")
+        agi_mask_folder = os.path.join(self.data_fld, "masks_agi")
         adapted_mask_folder = os.path.join(self.data_fld, "masks_adapted")
+        bundler_folder = os.path.join(self.data_fld, "bundler")
 
-        # get all tif files in the image folder
-        lst_images = [p.resolve() for p in Path(image_folder).glob('*.tif')]
+        # set lzw
+        if self.project_params["compress_output"]:
+            use_lzw= True
+        else:
+            use_lzw= False
 
+        # get all images
+        lst_image_paths = [str(p.resolve()) for p in Path(image_folder).glob('*.tif')]
+        if len(lst_image_paths) == 0:
+            raise FileNotFoundError("No images found in the image folder.")
+
+        # TODO TEMP
         # add the images to the chunk
-        self.chunk.addPhotos(lst_images)
+        #with redirect_output_to_file(self.pth_log):
+        #    progress_callback = self._create_progress_bar("Add Photos")
+        #    self.chunk.addPhotos(lst_image_paths, progress=progress_callback)
+
+        #
+
+        self.chunk.addPhotos(lst_image_paths, strip_extensions=True)
+
+        # set the focal length of the images
+        if self.data_availability["focal_lengths"]:
+            for camera in self.chunk.cameras:
+
+                # skip cameras that are not enabled
+                if camera.enabled is False:
+                    continue
+
+                print(camera.label, self.focal_lengths[camera.label])
+
+                # set the focal length
+                camera.sensor.focal_length = self.focal_lengths[camera.label]
+
+        # get fixed parameters as list
+        fixed_params = [k for k, v in self.project_params["fixed_parameters"].items() if v]
+
+        # set camera params to fixed
+        for camera in self.chunk.cameras:
+            # skip cameras that are not enabled
+            if camera.enabled is False:
+                continue
+            camera.sensor.fixed_params = fixed_params
 
         # set images to film cameras (for finding fiducials)
         for camera in self.chunk.cameras:
@@ -675,102 +1017,270 @@ class AgiProject:
             camera.sensor.film_camera = True
             camera.sensor.fixed_calibration = True
 
-        # find fiducials
-        arguments = self.agi_params["detectFiducials"]
-        self.chunk.detectFiducials(**arguments)
+            # set pixel size
+            pixel_size = self.project_params["pixel_size"]
+            camera.sensor.pixel_size = (pixel_size, pixel_size)  # noqa
 
-        # create folder for adapted masks
-        os.makedirs(adapted_mask_folder, exist_ok=True)
+        # save all changes to camera
+        self.doc.save()
+
+        # find fiducials
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Detect Fiducials")
+            arguments = self.agi_params["detectFiducials"]
+            arguments["progress"] = progress_callback
+            self.chunk.detectFiducials(**arguments)
+            self.agi_pbar.close()
+
+        # check if we created masks for all images
+        if arguments["generate_masks"]:
+            self._update_data_availability_file("masks")
+
+        # save agi masks to file
+        if self.data_availability["masks"]:
+            # create progressbar
+            pbar = tqdm(total=len(self.image_names), desc="Save original masks",
+                        position=0, leave=True)
+
+            # save the original masks to file
+            os.makedirs(agi_mask_folder, exist_ok=True)
+            for camera in self.chunk.cameras:
+
+                # update the progress bar description
+                pbar.set_postfix_str(camera.label)
+
+                # skip cameras that are not enabled
+                if camera.enabled is False:
+                    pbar.update(1)
+                    continue
+
+                # save the original mask to file
+                mask = camera.mask.image()
+                mask_bytes = mask.tostring()
+                existing_mask = (np.frombuffer(mask_bytes, dtype=np.uint8).
+                                 reshape((mask.height, mask.width)))
+                pth_mask = os.path.join(agi_mask_folder, camera.label + ".tif")
+                eti.export_tiff(existing_mask, pth_mask, use_lzw=use_lzw)
+
+                # update progress bar
+                pbar.update(1)
+
+            # close progress bar
+            pbar.set_postfix_str("- Finished -")
+            pbar.close()
 
         # union masks to create adapted masks
         if self.data_availability["masks"]:
 
-            # union masks
-            um.union_masks(self.chunk, orig_mask_folder, adapted_mask_folder)
-            self._update_data_availability_file("adapted_masks")
+            # define path to the custom mask folder
+            custom_mask_folder = os.path.join(self.data_fld, "masks_custom")
 
+            # union masks
+            arguments = self.function_params["union_masks_params"]
+            um.union_masks(self.chunk, agi_mask_folder,
+                           custom_mask_folder, adapted_mask_folder,
+                           **arguments)
+            self._update_data_availability_file("masks_adapted")
+
+            tqdm.write("[INFO] Mask folder changed to {}".format(adapted_mask_folder))
+            sleep(0.1)
             mask_folder = adapted_mask_folder
         else:
-            mask_folder = orig_mask_folder
+            mask_folder = agi_mask_folder
 
+        # set cameras back to normal
+        if self.project_params["film_cameras"] is False:
+            for camera in self.chunk.cameras:
+                # skip cameras that are not enabled
+                if camera.enabled is False:
+                    continue
+
+                # set camera back to normal camera
+                camera.sensor.film_camera = False
+                camera.sensor.fixed_calibration = False
+
+        # save changes to cameras
+        self.doc.save()
 
         # enhance the images
         if self.project_params["enhance_images"]:
 
-            # create folder for enhanced images
-            os.makedirs(enhanced_folder, exist_ok=True)
+            arguments = {}
+            if self.cache_params["use_cache"]:
+                enhanced_cache_folder = os.path.join(self.cache_params["cache_folder"],
+                                                     "enhanced")
+                arguments["cache_folder"] = enhanced_cache_folder
+                arguments["use_cached_images"] = self.cache_params["use_enhanced"]
+                arguments["save_cached_images"] = self.cache_params["save_enhanced"]
 
-            # iterate all tif files in image folder
-            for img_pth in lst_images:
+            ei.enhance_images(enhanced_folder, image_folder,
+                              mask_folder, self.image_names, **arguments)
 
-                # get the base name of the image
-                base_name = os.path.basename(img_pth)
+            # after importing the cameras, set images to enhanced folder
+            for camera in self.chunk.cameras:
+                # skip cameras that are not enabled
+                if camera.enabled is False:
+                    continue
 
-                # load the image
-                image = li.load_image(img_pth)
+                # get image_path
+                img_pth = os.path.join(enhanced_folder, camera.label + ".tif")
 
-                # load the mask
-                mask_path = os.path.join(mask_folder, base_name)
-                mask = li.load_image(mask_path)
+                # update camera path
+                photo = camera.photo.copy()
+                photo.path = img_pth
+                camera.photo = photo
 
-                # enhance the image
-                enhanced_image = ei.enhance_image(image, mask)
+            # update the path to image folder to use the enhanced images
+            image_folder = enhanced_folder
 
-                # save the enhanced image
-                enhanced_path = os.path.join(enhanced_folder, base_name)
-                eti.export_tiff(enhanced_image, enhanced_path, use_lzw=True)
+            self.doc.save()
 
             # set flag for enhanced images
-            self._update_data_availability_file("enhanced_images")
+            self._update_data_availability_file("images_enhanced")
 
+        # no need for matching if there is a cached bundler file
+        do_matching = True  # variable to check if we need to match the images
+        if self.cache_params["use_cache"] and self.cache_params["use_bundler"]:
+            bundler_cache_file_pth = os.path.join(self.cache_params["cache_folder"],
+                                                  "bundler", f"{self.project_name}_bundler.txt")
+            bundler_cache_hash_pth = os.path.join(self.cache_params["cache_folder"],
+                                                  "bundler", f"{self.project_name}_bundler_hash.txt")
+            # check if bundler file exists
+            if os.path.exists(bundler_cache_file_pth):
 
-        # check if images must be rotated (for tp matching)
+                # calculate hash of image names
+                sorted_list = sorted(self.image_names)
+                list_str = json.dumps(sorted_list, separators=(',', ':'))
+                hash_str = hashlib.sha256(list_str.encode('utf-8')).hexdigest()
 
-        # get the combinations for matching
-        arguments = self.project_params["combinations_params"]
-        combinations = cc.create_combinations(**arguments)
+                # check if hash file exists
+                if os.path.exists(bundler_cache_hash_pth):
+                    with open(bundler_cache_hash_pth, "r") as f:
+                        bundler_hash = f.read().strip()
 
+                    # if the hash matches, copy the bundler file to the bundler folder
+                    if hash_str == bundler_hash:
+                        os.makedirs(bundler_folder, exist_ok=True)
+                        path_bundler_file = os.path.join(bundler_folder, "bundler.txt")
+
+                        # copy bundler file to the bundler folder
+                        shutil.copy(bundler_cache_file_pth, path_bundler_file)
+                        do_matching = False
 
         # match the images
+        if do_matching:
+            if self.project_params["custom_matching"]:
+
+                # get the combinations for matching
+                arguments = self.function_params["combination_params"]
+                combinations = cc.create_combinations(self.image_names,
+                                                      footprint_dict=self.camera_footprints,
+                                                      **arguments)
+
+                # find tie points with our own custom matching
+                arguments = self.function_params["custom_matching_params"]
+                if self.debug:
+                    arguments["debug"] = True
+                    arguments["debug_folder"] = os.path.join(self.debug_fld, "tie_points")
+                if self.cache_params["use_cache"]:
+                    tp_cache_folder = os.path.join(self.cache_params["cache_folder"], "tie_points")
+                    arguments["cache_folder"] = tp_cache_folder
+                    arguments["use_cached_tps"] = self.cache_params["use_tps"]
+                    arguments["save_cached_tps"] = self.cache_params["save_tps"]
+
+                tp_dict, conf_dict = ftp.find_tie_points_for_sfm(image_folder, combinations,
+                                                                 mask_folder=mask_folder,
+                                                                 rotation_dict=self.camera_rotations,
+                                                                 **arguments)
+
+                # create the bundler file from the tie points
+                os.makedirs(bundler_folder, exist_ok=True)
+                path_bundler_file = cb.create_bundler(image_folder,
+                                                      bundler_folder,
+                                                      tp_dict, conf_dict)
+
+                # save the bundler file to the cache
+                if self.cache_params["use_cache"] and self.cache_params["save_bundler"]:
+                    bundler_cache_folder = os.path.join(self.cache_params["cache_folder"], "bundler")
+                    os.makedirs(bundler_cache_folder, exist_ok=True)
+
+                    # copy the bundler file
+                    bundler_cache_file_pth = os.path.join(bundler_cache_folder,
+                                                          f"{self.project_name}_bundler.txt")
+                    shutil.copy(path_bundler_file, bundler_cache_file_pth)
+
+                    # calculate hash of image names
+                    sorted_list = sorted(self.image_names)
+                    list_str = json.dumps(sorted_list, separators=(',', ':'))
+                    hash_str = hashlib.sha256(list_str.encode('utf-8')).hexdigest()
+
+                    # write hash to file
+                    bundler_cache_hash_pth = os.path.join(bundler_cache_folder,
+                                                            f"{self.project_name}_bundler_hash.txt")
+                    with open(bundler_cache_hash_pth, "w") as f:
+                        f.write(hash_str)
+
+            else:
+
+                # get the combinations for matching as pairs
+                arguments = self.project_params["combinations_params"]
+                arguments["pairwise"] = True
+                pairs = cc.create_combinations(self.image_names,
+                                                      self.camera_footprints,
+                                                      **arguments)
+
+
+                # match the images with agisoft
+                with redirect_output_to_file(self.pth_log, self.debug):
+                    progress_callback = self._create_progress_bar("Match Photos")
+                    arguments = self.agi_params["matchPhotos"]
+                    arguments["pairs"] = pairs
+                    arguments["progress"] = progress_callback
+                    self.chunk.matchPhotos(**arguments)
+
+        # if custom matching import the bundler file
         if self.project_params["custom_matching"]:
-
-            # find tie points with our own custom matching
-            arguments = self.project_params["custom_matching_params"]
-            tp_dict, conf_dict = ftp.find_tie_points_for_sfm(image_folder, combinations,
-                                                             mask_folder=mask_folder,
-                                                             rotation_dict=rotation_dict,
-                                                             **arguments)
-
-            # create the bundler file from the tie points
-            path_bundler_file = cb.create_bundler(tp_dict, conf_dict)
-
             # import the bundler file
-            self.chunk.importCameras(path_bundler_file,
-                                     format=Metashape.CamerasFormatBundler)
+            with redirect_output_to_file(self.pth_log, self.debug):
+                progress_callback = self._create_progress_bar("Import Cameras")
+                self.chunk.importCameras(path_bundler_file,  # noqa
+                                         format=Metashape.CamerasFormatBundler,
+                                         progress=progress_callback)
 
-        else:
 
-            arguments = self.agi_params["matchPhotos"]
-            self.chunk.matchPhotos(**arguments)
-            self.doc.save()
+        self.doc.save()
 
         # set status flag to true
         self._update_status_flag_file("prepare_images")
 
-    def apply_rel_sfm(self):
+    def apply_rel_sfm(self) -> None:
+
         # check previous steps and also overwrite
         self._check_previous_steps("apply_rel_sfm")
         if self.status_flags["apply_rel_sfm"]:
             if self.overwrite is False:
-                print("[INFO] Relative SFM already applied. Skipping.")
+                tqdm.write("[INFO] Relative SFM already applied. Skipping.")
+                sleep(0.5)
                 return
 
+        tqdm.write("[STEP] Apply relative SFM.")
+        sleep(0.5)
+
+        # set lzw
+        if self.project_params["compress_output"]:
+            use_lzw= True
+        else:
+            use_lzw= False
+
         # align cameras
-        arguments = self.agi_params["alignCameras_relative"]
+        arguments = self.agi_params["alignCamerasRelative"]
         # we need to reset the alignment if custom matching was used
         if self.project_params["custom_matching"]:
             arguments['reset_alignment'] = True
-        self.chunk.alignCameras(**arguments)
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Align Cameras")
+            arguments["progress"] = progress_callback
+            self.chunk.alignCameras(**arguments)
         self.doc.save()
 
         # check if cameras are aligned
@@ -781,45 +1291,145 @@ class AgiProject:
                 num_aligned += 1
 
         if num_aligned < 3:
-            raise RuntimeError("Not enough cameras aligned. "
+            raise SfMError("Not enough cameras are aligned. "
                                "Please check the input images.")
         else:
             print(f"[INFO] {num_aligned}/{num_cameras} cameras aligned.")
 
         # build depth maps
-        arguments = self.agi_params["buildDepthMaps_relative"]
-        self.chunk.buildDepthMaps(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildDepthMapsRelative"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build relative Depth Maps")
+            arguments["progress"] = progress_callback
+            self.chunk.buildDepthMaps(**arguments)
+            self.doc.save()
 
         # build mesh
-        arguments = self.agi_params["buildModel_relative"]
-        self.chunk.buildModel(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildModelRelative"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build relative Model")
+            arguments["progress"] = progress_callback
+            self.chunk.buildModel(**arguments)
+            self.doc.save()
 
         # build point cloud
-        arguments = self.agi_params["buildPointCloud_relative"]
-        self.chunk.buildPointCloud(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildPointCloudRelative"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build relative Point Cloud")
+            arguments["progress"] = progress_callback
+            self.chunk.buildPointCloud(**arguments)
+            self.doc.save()
+
+        # export point cloud
+        arguments = self.agi_params["exportPointCloudRelative"]
+        arguments['path'] = self.pth_pc_rel
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export relative Point Cloud")
+            arguments["progress"] = progress_callback
+            self.chunk.exportPointCloud(**arguments)
+
+        # we need to build already a bounding box for building DEM and ortho
+        # this is based on the center and size of the chunk
+        center = self.chunk.region.center
+        size = self.chunk.region.size
+
+        # Calculate the minimum and maximum corners of the bounding box
+        min_corner = Metashape.Vector([center.x - size.x / 2,  # noqa
+                                       center.y - size.y / 2,
+                                       center.z - size.z / 2])
+        max_corner = Metashape.Vector([center.x + size.x / 2,  # noqa
+                                       center.y + size.y / 2,
+                                       center.z + size.z / 2])
+        # create 2d versions of the corners
+        min_corner_2d = Metashape.Vector([min_corner.x, min_corner.y])  # noqa
+        max_corner_2d = Metashape.Vector([max_corner.x, max_corner.y])  # noqa
+
+        # temporary bbox
+        temp_rel_bbox = Metashape.BBox(min_corner_2d, max_corner_2d)  # noqa
 
         # build DEM
-        arguments = self.agi_params["buildDem_relative"]
-        self.chunk.buildDem(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildDemRelative"]
+        arguments["region"] = temp_rel_bbox
+        arguments["resolution"] = self.project_params["resolution_relative"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build relative DEM")
+            arguments["progress"] = progress_callback
+            self.chunk.buildDem(**arguments)
+            self.doc.save()
 
         # build ortho
-        arguments = self.agi_params["buildOrthomosaic_relative"]
-        self.chunk.buildOrthomosaic(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildOrthoMosaicRelative"]
+        arguments["region"] = temp_rel_bbox
+        arguments["resolution_x"] = self.project_params["resolution_relative"]
+        arguments["resolution_y"] = self.project_params["resolution_relative"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build relative Ortho")
+            arguments["progress"] = progress_callback
+            self.chunk.buildOrthomosaic(**arguments)
+            self.doc.save()
+
+        # get relative bounds based on DEM and ortho
+        ortho_left, ortho_right = self.chunk.orthomosaic.left, self.chunk.orthomosaic.right
+        ortho_top, ortho_bottom = self.chunk.orthomosaic.top, self.chunk.orthomosaic.bottom
+        dem_left, dem_right = self.chunk.elevation.left, self.chunk.elevation.right
+        dem_top, dem_bottom = self.chunk.elevation.top, self.chunk.elevation.bottom
+        self.relative_bounds = (min(ortho_left, dem_left),
+                                min(ortho_top, dem_top),
+                                max(ortho_right, dem_right),
+                                max(ortho_bottom, dem_bottom))
+
+        # export DEM
+        arguments = self.agi_params["exportDemRelative"]
+        arguments["path"] = self.pth_dem_rel
+        arguments["save_alpha"] = False
+        arguments["resolution_x"] = self.project_params["resolution_relative"]
+        arguments["resolution_y"] = self.project_params["resolution_relative"]
+        arguments["nodata_value"] = self.project_params["no_data_val"]
+        arguments["region"] = temp_rel_bbox
+        arguments["clip_to_boundary"] = True
+
+        if self.project_params["compress_output"]:
+            arguments["image_compression"] = self.compression
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export relative DEM")
+            arguments["progress"] = progress_callback
+            self.chunk.exportRaster(**arguments)
+
+        # export ortho
+        arguments = self.agi_params["exportOrthoMosaicRelative"]
+        arguments["path"] = self.pth_ortho_rel
+        arguments["save_alpha"] = False
+        arguments["resolution"] = self.project_params["resolution_relative"]
+        arguments["region"] = temp_rel_bbox
+        arguments["clip_to_boundary"] = True
+
+        if self.project_params["compress_output"]:
+            arguments["image_compression"] = self.compression
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export relative Ortho")
+            arguments["progress"] = progress_callback
+            self.chunk.exportRaster(**arguments)
+
+        # crop empty borders from output
+        self.relative_bounds = co.crop_output(self.pth_dem_rel, self.pth_ortho_rel,
+                               self.project_params["no_data_val"],255,
+                               self.project_params["compress_output"],
+                               self.project_params["epsg_code"],
+                               self.project_params["crop_method"])
+
+        # reset relative output values because we changed them
+        self._dem_old_rel = None
+        self._ortho_old_rel = None
 
         # build confidence arr
         d_rel, t_rel = self.dem_old_rel
-        arguments = self.function_params["create_confidence_arr"]
-        arguments["no_data_val"] = self.function_params["no_data"]
-        conf_arr_rel = cca.create_confidence_arr(d_rel, self.point_cloud_rel, t_rel,
-                                  **arguments)
+        arguments = self.function_params["create_conf_arr_params"]
+        arguments["no_data_val"] = self.project_params["no_data_val"]
+        conf_arr_rel = cca.create_confidence_arr(d_rel, self.point_cloud_rel,
+                                                 t_rel, **arguments)
 
-        eti.export_tiff(conf_arr_rel, self.pth_conf_arr_rel,
-                        transform=t_rel, use_lzw=True)
+        # export confidence arr
+        eti.export_tiff(conf_arr_rel, self.pth_conf_arr_rel, use_lzw=use_lzw)
 
         # set status flag to true
         self._update_status_flag_file("apply_rel_sfm")
@@ -832,42 +1442,91 @@ class AgiProject:
                 print("[INFO] Geo-referencing already applied. Skipping.")
                 return
 
-        # stop if we are missing absolute bounds or camera footprints
-        if self.data_availability["absolute_bounds"] is False or \
-            self.data_availability["camera_footprints"] is False:
-            raise ValueError("Missing absolute bounds or camera footprints "
-                             "for geo-referencing.")
+        print("[STEP] Georef project.")
 
-        # get orthos
+        # stop if we are missing absolute bounds or camera footprints
+        if self.data_availability["absolute_bounds"] is False:
+            raise ValueError("Missing absolute bounds for geo-referencing.")
+
+        # create data folder for geo-referencing
+        georef_data_folder = os.path.join(self.data_fld, "georef")
+
+        # get ortho-photos
         ortho_old_rel, _ = self.ortho_old_rel
-        ortho_new, transform_new = self.ortho_new
+        ortho_new, ortho_new_transform = self.ortho_new
 
         # georeference the relative ortho
         arguments = self.function_params["georef_ortho_params"]
-        arguments["tp_type"] = self.project_params["tp_type"]
+        if self.debug:
+            arguments["debug"] = True
+            arguments["debug_folder"] = os.path.join(self.debug_fld, "georef_ortho")
         tpl = go.georef_ortho(relative_ortho=ortho_old_rel,
                               absolute_ortho=ortho_new,
-                              absolute_transform=transform_new,
+                              absolute_transform=ortho_new_transform,
                               **arguments)
 
         # extract values from return object
         transform_georef = tpl[0]
         bounds_georef = tpl[1]
+        rotation_georef = tpl[2]
 
-        # get dems
+        # adapt the bounds for rema
+        bounds_georef = ab.adapt_bounds(bounds_georef,
+                                        self.project_params["rema"]["zoom_level"])
+
+        # set the new absolute bounds based on the georeferenced ortho
+        self.absolute_bounds = bounds_georef
+
+        # reset modern input data
+        self._ortho_new = None
+        self._dem_new = None
+
+        # get modern data again
+        ortho_new, ortho_new_transform = self.ortho_new
+        dem_new, _ = self.dem_new
+
+        # get historic dem
         dem_old_rel, _ = self.dem_old_rel
-        dem_new, transform_new = self.dem_new
-
-        # get dem masks
 
         # find gcps
-        gcps = fg.find_gcps(ortho_old_rel, ortho_new,
-                            self.dem_old_rel, self.dem_new,
-                            self.dem_mask_old_rel, self.dem_mask_new
-                            )
+        arguments = self.function_params["find_gcps_params"]
+        if self.debug:
+            arguments["debug"] = True
+            arguments["debug_folder"] = os.path.join(self.debug_fld, "gcps")
+        tps, conf = None, None
+        while True:
+            tpl = fg.find_gcps(ortho_old_rel, ortho_new,
+                                dem_old_rel, dem_new,
+                                rotation_georef,
+                                ortho_new_transform,
+                                georef_data_folder,
+                                self.project_params["resolution_relative"],
+                                self.dem_mask_old_rel, self.dem_mask_new,
+                                existing_tps=tps, existing_conf=conf,
+                                **arguments)
+            # extract values from return object
+            gcps = tpl[0]
+            tps, conf = tpl[1], tpl[2]
 
-        # set expected accuracy of the markers in px
-        self.chunk.marker_projection_accuracy = gcp_accuracy_px
+            print("[INFO] Found {} GCPs.".format(gcps.shape[0]))
+
+            # check for minimum amount of gcps
+            if gcps.shape[0] >= self.project_params["gcps"]["min_gcps"]:
+                break
+
+            # increase allowed slope
+            self.gcp_slope = self.gcp_slope + 5
+
+            # check if we reached the maximum slope
+            if self.gcp_slope > self.max_slope:
+                raise SfMError("Not enough GCPs found. Please check the input data.")
+
+            # reset the new mask
+            self._dem_mask_new = None
+
+        # set expected accuracy of the markers in px and m
+        self.chunk.marker_location_accuracy = self.project_params["gcps"]["accuracy_m"]
+        self.chunk.marker_projection_accuracy = self.project_params["gcps"]["accuracy_px"]
 
         # add gcps as markers
         arguments = self.function_params["add_markers_params"]
@@ -878,7 +1537,7 @@ class AgiProject:
         # set complete project to absolute coordinates
         epsg_code = self.project_params["epsg_code"]
         self.chunk.crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
-        chunk.camera_crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
+        self.chunk.camera_crs = Metashape.CoordinateSystem(f"EPSG::{epsg_code}")  # noqa
         self.doc.save()
 
         # filter markers
@@ -896,7 +1555,6 @@ class AgiProject:
         self._update_status_flag_file("georef_project")
 
     def apply_abs_sfm(self):
-
         # check previous steps and also overwrite
         self._check_previous_steps("apply_abs_sfm")
         if self.status_flags["apply_abs_sfm"]:
@@ -904,74 +1562,136 @@ class AgiProject:
                 print("[INFO] Absolute SFM already applied. Skipping.")
                 return
 
+        print("[STEP] Apply absolute SFM.")
+
+        # set lzw
+        if self.project_params["compress_output"]:
+            use_lzw= True
+        else:
+            use_lzw= False
+
         # build depth maps
-        arguments = self.agi_params["buildDepthMaps_absolute"]
-        self.chunk.buildDepthMaps(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildDepthMapsAbsolute"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build absolute Depth Maps")
+            arguments["progress"] = progress_callback
+            self.chunk.buildDepthMaps(**arguments)
+            self.doc.save()
 
         # build mesh
-        arguments = self.agi_params["buildModel_absolute"]
-        self.chunk.buildModel(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildModelAbsolute"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build absolute Model")
+            arguments["progress"] = progress_callback
+            self.chunk.buildModel(**arguments)
+            self.doc.save()
+
+        # export Model
+        arguments = self.agi_params["exportModelAbsolute"]
+        arguments["crs"] = Metashape.CoordinateSystem(f"EPSG::{self.project_params['epsg_code']}")  # noqa
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export absolute Model")
+            arguments["progress"] = progress_callback
+            self.chunk.exportModel(**arguments)
 
         # build point cloud
-        arguments = self.agi_params["buildPointCloud_absolute"]
-        self.chunk.buildPointCloud(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildPointCloudAbsolute"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build absolute Point Cloud")
+            arguments["progress"] = progress_callback
+            self.chunk.buildPointCloud(**arguments)
+            self.doc.save()
 
         # export point cloud
-        arguments = self.agi_params["exportPointCloud_absolute"]
+        arguments = self.agi_params["exportPointCloudAbsolute"]
         arguments['path'] = self.pth_pc_abs
-        self.chunk.exportPointCloud(**arguments)
+        arguments['crs'] = Metashape.CoordinateSystem(f"EPSG::{self.project_params['epsg_code']}")  # noqa
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export absolute Point Cloud")
+            arguments["progress"] = progress_callback
+            self.chunk.exportPointCloud(**arguments)
 
         # build DEM
-        arguments = self.agi_params["buildDem_absolute"]
-        self.chunk.buildDem(**arguments)
-        self.doc.save()
-
-        # export DEM
-        arguments = self.agi_params["exportDem_absolute"]
-        arguments['path'] = self.pth_dem_abs
-        self.chunk.exportRaster(**arguments)
+        arguments = self.agi_params["buildDemAbsolute"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build absolute DEM")
+            arguments["progress"] = progress_callback
+            self.chunk.buildDem(**arguments)
+            self.doc.save()
 
         # build ortho
-        arguments = self.agi_params["buildOrthomosaic_absolute"]
-        self.chunk.buildOrthomosaic(**arguments)
-        self.doc.save()
+        arguments = self.agi_params["buildOrthomosaicAbsolute"]
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Build absolute Ortho")
+            arguments["progress"] = progress_callback
+            self.chunk.buildOrthomosaic(**arguments)
+            self.doc.save()
 
-        # adapt arguments for export
-        arguments = self.agi_params["exportOrthomosaic_absolute"]
-        arguments['path'] = self.pth_ortho_abs
-
+        # export DEM
+        arguments = self.agi_params["exportDemAbsolute"]
+        arguments['path'] = self.pth_dem_abs
+        arguments["save_alpha"] = False
+        arguments['resolution_x'] = self.project_params["resolution_absolute"]
+        arguments['resolution_y'] = self.project_params["resolution_absolute"]
+        arguments["nodata_value"] = self.project_params["no_data_val"]
         if self.project_params["compress_output"]:
-            arguments['compression'] = self.compression
-
+            arguments["image_compression"] = self.compression
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export absolute DEM")
+            arguments["progress"] = progress_callback
+            self.chunk.exportRaster(**arguments)
 
         # export ortho
-        self.chunk.exportRaster(**arguments)
+        arguments = self.agi_params["exportOrthomosaicAbsolute"]
+        arguments['path'] = self.pth_ortho_abs
+        arguments["save_alpha"] = False
+        arguments["resolution_x"] = self.project_params["resolution_absolute"]
+        arguments["resolution_y"] = self.project_params["resolution_absolute"]
+        if self.project_params["compress_output"]:
+            arguments['compression'] = self.compression
+        arguments["save_alpha"] = False
+        with redirect_output_to_file(self.pth_log, self.debug):
+            progress_callback = self._create_progress_bar("Export absolute Ortho")
+            arguments["progress"] = progress_callback
+            self.chunk.exportRaster(**arguments)
+
+        # no data settings must be done extra for the ortho
+        ortho_abs, ortho_abs_transform = li.load_image(self.pth_ortho_abs,
+                                                       return_transform=True)
+        ortho_abs[ortho_abs == 255] = self.project_params["no_data_val"]
+        eti.export_tiff(ortho_abs, self.pth_ortho_abs,
+                        transform=ortho_abs_transform,
+                        overwrite=True, use_lzw=use_lzw)
 
         # build confidence arr
         d_abs, t_abs = self.dem_old_abs
         arguments = self.function_params["create_confidence_arr"]
-        arguments["no_data_val"] = self.function_params["no_data"]
+        arguments["no_data_val"] = self.project_params["no_data_val"]
         conf_arr_abs = cca.create_confidence_arr(d_abs, self.point_cloud_abs, t_abs,
                                   **arguments)
 
         # export confidence arr
         eti.export_tiff(conf_arr_abs, self.pth_conf_arr_abs,
-                        transform=t_abs, use_lzw=True)
+                        transform=t_abs, use_lzw=use_lzw)
 
         # set status flag to true
         self._update_status_flag_file("apply_abs_sfm")
 
     def correct_data(self):
-
         # check previous steps and also overwrite
         self._check_previous_steps("correct_data")
         if self.status_flags["correct_data"]:
             if self.overwrite is False:
                 print("[INFO] Data already corrected. Skipping.")
                 return
+
+        print("[STEP] Correct data.")
+
+        # set lzw
+        if self.project_params["compress_output"]:
+            use_lzw= True
+        else:
+            use_lzw= False
 
         # correct dem
         tpl = cd.correct_dem(self.dem_old_abs, self.dem_new, self.slope_new)
@@ -982,13 +1702,12 @@ class AgiProject:
         # export corrected DEM
         eti.export_tiff(self._dem_old_corrected, self.pth_dem_corrected,
                         self._dem_old_corrected_transform,
-                        use_lzw=True)
+                        use_lzw=use_lzw)
 
         # set status flag to true
         self._update_status_flag_file("correct_data")
 
     def evaluate_project(self):
-
         # check previous steps and also overwrite
         self._check_previous_steps("evaluate_project")
         if self.status_flags["evaluate_project"]:
@@ -996,10 +1715,27 @@ class AgiProject:
                 print("[INFO] Project already evaluated. Skipping.")
                 return
 
+        print("[STEP] Evaluate project.")
+
         edq.estimate_dem_quality(self.dem_old_abs, self.dem_new)
 
         # set status flag to true
         self._update_status_flag_file("evaluate_project")
+
+    def _create_progress_bar(self, desc: str = "Processing", total: int = 100):
+        """
+        Initializes a tqdm progress bar and returns a callback for Metashape progress tracking.
+        """
+        self.agi_pbar = tqdm(total=total, desc=desc, unit="%",
+                         bar_format="{desc}: {percentage:3.0f}% |{bar}|"
+                                    " [{elapsed}<{remaining}, {rate_fmt}]",
+                             position=0, leave=True)
+
+        def progress_callback(progress: float):
+            self.agi_pbar.n = int(progress)
+            self.agi_pbar.refresh()
+
+        return progress_callback
 
     def _check_previous_steps(self, current_step: str) -> None:
         """
@@ -1066,7 +1802,20 @@ class AgiProject:
             json.dump(self.status_flags, f, indent=2)  # noqa
 
     def _load_data_availability_file(self) -> dict[str, bool]:
-        pass
+        """
+        Load data availability from disk if available, otherwise initialize
+            dict with all steps set to False.
+
+        Returns:
+            dict[str, bool]: Dictionary of data availability flags.
+        """
+        if not os.path.exists(self.json_data_availability_path):
+            print("[WARNING] Data availability file not found, "
+                  "initializing default flags.")
+            return {step: False for step in self.data_availability}
+
+        with open(self.json_data_availability_path, "r") as f:
+            return json.load(f)
 
     def _update_data_availability_file(self,
                                        data_type: str | None = None) -> None:
@@ -1079,32 +1828,56 @@ class AgiProject:
             self.data_availability[data_type] = True
 
         with open(self.json_data_availability_path, "w") as f:
-            json.dump(self.data_availability, f, indent=2)
+            json.dump(self.data_availability, f, indent=2)  # type: ignore[arg-type]
 
     def _load_params(self, yaml_path: str) -> dict:
+        """
+        Load a YAML parameter file and resolve any Metashape constants.
 
-        def __resolve(value):
-            if isinstance(value, str) and value.startswith("Metashape."):
-                return getattr(Metashape, value.split(".")[1])
+        This function recursively parses the YAML structure and replaces any
+        string starting with 'Metashape.' with the corresponding Metashape enum
+        or constant.
 
+        Args:
+            yaml_path (str): Path to the YAML file.
+
+        Returns:
+            dict: Dictionary of parameters with resolved Metashape constants.
+        """
+
+        type_map = {
+            "float": float,
+            "int": int,
+            "str": str,
+        }
+
+        def __resolve(obj):
+            # Recursively resolve entries in a dictionary
+            if isinstance(obj, dict):
+                return {k: __resolve(v) for k, v in obj.items()}
+
+            # Recursively resolve entries in a list
+            elif isinstance(obj, list):
+                return [__resolve(v) for v in obj]
+
+            # If the value is a string we have different action
+            elif isinstance(obj, str):
+                if obj.startswith("Metashape."):
+                    parts = obj.split(".")[1:]  # skip "Metashape"
+                    attr = Metashape
+                    for p in parts:
+                        attr = getattr(attr, p)
+                    return attr
+                elif obj in type_map:
+                    return type_map[obj]
+                else:
+                    return obj
+            # Return the value unchanged if it's not a string we care about
+            else:
+                return obj
+
+        # Load YAML file into a Python dictionary
         with open(yaml_path, "r") as f:
             raw = yaml.safe_load(f)
 
         return __resolve(raw)
-
-
-if __name__ == "__main__":
-
-    # create a new AgiProject
-    _project_name = "test"
-    _base_fld = "/data/ATM/data_1/sfm/agi_projects2"
-
-    input_images = ["CA215332V0419", "CA215332V0420", "CA215332V0421",
-                    "CA215332V0422", "CA215332V0423", "CA215332V0424",
-                    "CA215332V0425"]
-
-    for img in input_images:
-        li.load_image(img)
-
-    ap = AgiProject(_project_name, _base_fld, overwrite=True)
-    ap.set_input_images(input_images)

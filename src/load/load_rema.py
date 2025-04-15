@@ -1,14 +1,15 @@
 """Load REMA height data"""
 
 # Library imports
+import gc
 import geopandas as gpd
 import os
 import numpy as np
 import rasterio
 import shapely
-from rasterio import mask, merge
-from skimage.transform import resize
-from typing import Tuple, Optional
+from rasterio import mask
+from rasterio.merge import merge as merge_arrays
+from rasterio.io import MemoryFile
 
 import src.other.misc.download_rema_data as drd
 
@@ -17,7 +18,7 @@ DEFAULT_REMA_FLD = "/data/ATM/data_1/DEM/REMA/mosaic"
 DEFAULT_REMA_SHP = "/data/ATM/data_1/DEM/REMA/overview/REMA_Mosaic_Index_v2"
 
 
-def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,
+def load_rema(bounds: tuple[float, float, float, float] or shapely.geometry.base.BaseGeometry,
               rema_shape_file: str = DEFAULT_REMA_SHP,
               rema_folder: str = DEFAULT_REMA_FLD,
               zoom_level: int = 10,
@@ -54,100 +55,74 @@ def load_rema(bounds: Tuple[float, float, float, float] or shapely.geometry.base
     width = bounds[2] - bounds[0]
     height = bounds[3] - bounds[1]
     if width % zoom_level != 0 or height % zoom_level != 0:
-        print(bounds)
-        print(width, height, zoom_level)
         raise ValueError("Zoom level does not fit the bounding box")
 
     # check if we have the right folder
     if os.path.isdir(rema_folder) is False:
         raise FileNotFoundError(f"'{rema_folder}' is not a valid folder")
 
-    # convert bounds to shapely polygon if not already polygon
-    if isinstance(bounds, shapely.geometry.base.BaseGeometry) is False:
-        bounds = shapely.geometry.box(*bounds)
-
-    # load the mosaic tiles from shape file
-    mosaic_data = gpd.read_file(rema_shape_file + f"_{str(zoom_level)}m.shp")
-
-    # find which mosaic tiles are intersecting with the polygon
-    intersects = mosaic_data.intersects(bounds)
-    indices = intersects[intersects].index
-    tiles = mosaic_data["dem_id"].iloc[indices].tolist()
-
-    # adapt rema-folder to zoom level
-    zoom_rema_folder = rema_folder + f"/{str(zoom_level)}m"
-
-    # here we save all rema files we want to merge
-    mosaic_files = []
-
-    # iterate through all image files in the rema folder
-    for tile in tiles:
-
-        # we only need the first part of the tile
-        tile_parts = tile.split("_")
-        tile = tile_parts[0] + "_" + tile_parts[1]
-
-        # create the file path
-        rema_tile_path = zoom_rema_folder + "/" + tile + "_" + str(zoom_level) + "m.tif"
-
-        # open the image file
-        try:
-            src = rasterio.open(rema_tile_path)
-        except (Exception,):
-            # download the rema tile
-            if auto_download:
-                drd.download_rema_data(tile, zoom_level)
-                src = rasterio.open(rema_tile_path)
-            else:
-                if return_empty_rema:
-                    if return_transform:
-                        return None, None
-                    else:
-                        return None
-                else:
-                    raise ValueError("Couldn't download REMA")
-
-        # add the file to the list
-        mosaic_files.append(src)
-
-    # what happens if no rema files are found
-    if len(mosaic_files) == 0:
-        if return_empty_rema:
-            if return_transform:
-                return None, None
-            else:
-                return None
-        else:
-            raise ValueError("No satellite images were found")
-
-    # merge the rema tiles
-    merged, transform_merged = rasterio.merge.merge(mosaic_files)
-
-    # close the connection to the mosaic files
-    for file in mosaic_files:
-        file.close()
-
-    # get first band
-    merged = merged[0, :, :]
-
-    # crop merged files to the bounds
-    with rasterio.io.MemoryFile() as mem_file:
-        with mem_file.open(
-                driver="GTiff",
-                height=merged.shape[0],
-                width=merged.shape[1],
-                count=1,
-                dtype=merged.dtype,
-                transform=transform_merged,
-        ) as dataset:
-            dataset.write(merged, 1)
-        with mem_file.open() as dataset:
-            cropped, transform_cropped = rasterio.mask.mask(dataset, [bounds], crop=True)
-
-    cropped = cropped[0, :, :]
-
-    if return_transform:
-        return cropped, transform_cropped
+    # Convert bounds to shapely geometry if needed
+    if not isinstance(bounds, shapely.geometry.base.BaseGeometry):
+        bounds_geom = shapely.geometry.box(*bounds)
     else:
-        return cropped
+        bounds_geom = bounds
+        bounds = bounds.bounds  # convert to tuple for later use
 
+    # Load shapefile and filter using spatial index for speed
+    shp_path = f"{rema_shape_file}_{zoom_level}m.shp"
+    mosaic_data = gpd.read_file(shp_path)
+    possible_matches_index = mosaic_data.sindex.intersection(bounds)
+    possible_matches = mosaic_data.iloc[list(possible_matches_index)]
+    intersects = possible_matches[possible_matches.intersects(bounds_geom)]
+    tiles = intersects["dem_id"].tolist()
+
+
+    if not tiles:
+        if return_empty_rema:
+            return (None, None) if return_transform else None
+        raise FileNotFoundError("No REMA tiles found for the given bounds.")
+
+    # Prepare tile folder
+    zoom_folder = os.path.join(rema_folder, f"{zoom_level}m")
+    memory_pairs = []
+
+    try:
+        for tile in tiles:
+            tile_base = "_".join(tile.split("_")[:2])
+            tile_path = os.path.join(zoom_folder, f"{tile_base}_{zoom_level}m.tif")
+
+            if not os.path.exists(tile_path):
+                if auto_download:
+                    drd.download_rema_data(tile_base, zoom_level)
+                elif return_empty_rema:
+                    return (None, None) if return_transform else None
+                else:
+                    raise FileNotFoundError(f"Missing REMA tile: {tile_path}")
+
+            with rasterio.open(tile_path) as src:
+                cropped, transform = mask.mask(src, [bounds_geom], crop=True, all_touched=True)
+
+                memfile = MemoryFile()
+                dataset = memfile.open(driver="GTiff",
+                                       height=cropped.shape[1],
+                                       width=cropped.shape[2],
+                                       count=1,
+                                       dtype=cropped.dtype,
+                                       crs=src.crs,
+                                       transform=transform)
+                dataset.write(cropped)
+                dataset.close()
+                memory_pairs.append((memfile, memfile.open()))  # reopen for merge
+
+        datasets = [ds for _, ds in memory_pairs]
+        merged, merged_transform = merge_arrays(datasets)
+        merged = merged[0, :, :]  # first band
+
+    finally:
+        for memfile, dataset in memory_pairs:
+            dataset.close()
+            memfile.close()
+        memory_pairs.clear()
+        gc.collect()
+
+    return (merged, merged_transform) if return_transform else merged

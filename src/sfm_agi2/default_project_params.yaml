@@ -1,14 +1,46 @@
 # general project params
-compress_images: true
-compress_output: true
+bounding_box:
+  source: "combined"  # can be 'bounds', 'footprints', 'combined'
+  only_vertical: false  # only use vertical images for the bounding box
+  max_difference: 1000
+compress_images: true  # if input images should be compressed with jpeg after successful processing
+compress_output: true  # if output images should be compressed with lossless lzw
+crop_method: "smallest"
+custom_matching: true  # use own matching based on lightglue
+debug:
+  print: false
+  save: false
 epsg_code: 3031  # for Antarctica
+enhance_images: true
+film_cameras: false  # WARNING: true will not work as metashape is buggy
+fixed_parameters:
+  f: true
+  cx: false
+  cy: false
+  k1: false
+  k2: false
+  k3: false
+  k4: false
+  p1: false
+  p2: false
+  b1: false
+  b2: false
 dem_mask:
   use_rock: true
   use_confidence: true
   min_confidence: 2
+  confidence_buffer_px: 5
   use_slope: true
-  slope_min: 0
+  slope_min: 10
   slope_max: 60
-no_data_val: -9999
-rema_zoom_level: 2  # can be 2m, 10m, 32m
-rema_buffer: 2 # buffer around the rocks in m
+gcps:
+  min_gcps: 5
+  accuracy_m: (10, 10, 10)
+  accuracy_px: 2
+no_data_val: -9999  # no data value for the dem (ortho is unfortunately fixed at 255)
+pixel_size: 0.025 # pixel size in m
+rema:
+  zoom_level: 2  # can be 2m, 10m, 32m
+  buffer: 2 # buffer around the rocks in m
+resolution_relative: 0.001  # output resolution in m for relative dem and ortho
+resolution_absolute: 2  # output resolution in m for absolute dem and ortho

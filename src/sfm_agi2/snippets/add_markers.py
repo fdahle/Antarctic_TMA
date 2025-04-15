@@ -8,7 +8,6 @@ from tqdm import tqdm
 def add_markers(chunk: Metashape.Chunk,
                 markers: pd.DataFrame,
                 epsg_code: int,
-                accuracy: tuple[float, float, float] | None = None,
                 reset_markers: bool = False,
                 min_z: int =- 50):
     """
@@ -24,8 +23,6 @@ def add_markers(chunk: Metashape.Chunk,
             ['GCP', 'x_rel', 'y_rel', 'z_rel', 'x_abs', 'y_abs', 'z_abs'].
         epsg_code (int):
             The EPSG code for the marker coordinate system (e.g., 4326 for WGS 84).
-        accuracy (tuple[float, float, float] | None, optional):
-            If provided, sets the reference accuracy for each marker in (x, y, z).
         reset_markers (bool, optional):
             If True, removes all existing markers before adding new ones.
                 Defaults to False.
@@ -169,9 +166,6 @@ def add_markers(chunk: Metashape.Chunk,
                 marker.label = row['GCP']
                 marker.reference.location = Metashape.Vector(
                     [row['x_abs'], row['y_abs'], row['z_abs']])  # noqa
-                if accuracy is not None:
-                    marker.reference.accuracy = Metashape.Vector(
-                        [accuracy[0], accuracy[1], accuracy[2]])  # noqa
                 pbar.set_postfix_str(f"Created marker {num_markers} at "
                                      f"({row['x_abs']}, {row['y_abs']}, {row['z_abs']})")
 

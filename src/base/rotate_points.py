@@ -26,8 +26,15 @@ def rotate_points(points: list[(float, float)] | np.ndarray,
     if not isinstance(rotation_matrix, np.ndarray):
         raise ValueError("Rotation matrix must be a numpy array.")
 
+    if rotation_matrix.shape == (3, 3):
+        rotation_matrix = rotation_matrix[:2, :]
+
     # Convert points to numpy array if not already
     points = np.array(points, dtype=np.float32)
+
+    # no need to rotate if no points
+    if points.shape[0] == 0:
+        return points
 
     # Invert the rotation matrix
     if invert:

@@ -1,20 +1,26 @@
-enhance_images: true
+union_masks_params:  # related to the masks for finding tie points
+  use_database: true  # use the database to adapt masks (e. g text-boxes and fid marks)
+  adapt_custom_masks: true  #
+  tolerance_value: 2
 
 combination_params:
   matching_method: combined  # can be 'all', 'sequential', 'overlap', 'combined'
-  max_step_range: 3  # max number of steps between images in 'sequential' mode
+  step_range: 3  # number of steps between images in 'sequential' mode
+  max_step_difference: 5  # max number of steps between images (when using 'overlap')
   min_overlap: 0.2  # min overlap between images for 'overlap' and 'combined'
-
-custom_matching: true
 
 custom_matching_params:
   max_degree_diff: 10  # TODO
-  min_tps: 5  # min number of tie points between images
-  max_tps: 10000  # max number of tie points between images
+  rotate_180: true  # TODO
+  min_tps: 25  # min number of tie points between images
+  max_tps: 25000  # max number of tie points between images
   min_tp_confidence: 0.9  # min confidence for tie points
   tp_type: float  # Could be 'float' or 'int' depending on keypoint type
 
-create_bundler_params: {}
+create_bundler_params:
+  min_tps: 25  # min number of tie points between images that these are added to the bundle
+  s_min:
+  s_max:
 
 create_conf_arr_params:
   interpolate: true
@@ -29,16 +35,16 @@ georef_ortho_params:
   min_nr_tps: 25  # minimum number of tie points required to georef the orthomosaic
   min_conf: 0.5  # absolute minimum confidence for the tie points
   start_conf: 0.9  # starting confidence for the tie points
+  tp_type: float
 
-find_gcp_params:
-  min_gcps_required: 5
-  use_rock_mask: true
-  use_slope_mask: true
-  max_gcp_slope: 30
-  min_gcp_confidence: 0.9
+find_gcps_params:
+  resize_mode: 'rel'  # can be 'none', 'abs', 'rel'
+  cell_size: 2000
+  min_conf: 0.75  # minimum confidence for the GCPs when tp matching
+  selection_radius: 100 # minimum distance between GCPs in px
+  tp_type: float
 
 add_markers_params:
-  accuracy: (10, 10, 10)  # accuracy of the markers in meters
   reset_markers: true  # reset existing markers
   min_z: -50  # min z value for markers when they are disregarded
 

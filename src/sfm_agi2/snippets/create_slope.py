@@ -4,6 +4,7 @@ import numpy as np
 import xdem
 
 from affine import Affine
+from scipy.ndimage import convolve
 
 
 def create_slope(dem: np.ndarray,
@@ -28,9 +29,41 @@ def create_slope(dem: np.ndarray,
     """
 
     # convert dem to xdem
-    dem = xdem.DEM.from_array(dem, transform, epsg_code, nodata=no_data)
+    #dem = xdem.DEM.from_array(dem, transform, epsg_code, nodata=no_data)
 
     # get slope
-    slope = xdem.terrain.slope(dem)
+    #slope = xdem.terrain.slope(dem).data
 
-    return slope.data
+    # Get pixel resolution
+    pixel_size = transform.a
+
+    # Prepare mask for no-data
+    if np.isnan(no_data):
+        valid_mask = ~np.isnan(dem)
+    else:
+        valid_mask = dem != no_data
+        dem[~valid_mask] = np.nan
+
+    # Horn's method convolution kernels
+    kernel_x = np.array([
+        [-1, 0, 1],
+        [-2, 0, 2],
+        [-1, 0, 1]
+    ]) / (8 * pixel_size)
+
+    kernel_y = np.array([
+        [-1, -2, -1],
+        [ 0,  0,  0],
+        [ 1,  2,  1]
+    ]) / (8 * pixel_size)
+
+    # NaN-safe convolution
+    dz_dx = convolve(np.nan_to_num(dem, nan=0.0), kernel_x, mode='nearest')
+    dz_dy = convolve(np.nan_to_num(dem, nan=0.0), kernel_y, mode='nearest')
+
+    # Convolve while ignoring NaNs
+    slope = np.arctan(np.hypot(dz_dx, dz_dy))
+    slope_deg = np.degrees(slope).astype(np.float32)
+
+    slope_deg[~valid_mask] = np.nan  # Apply no-data mask
+    return slope_deg

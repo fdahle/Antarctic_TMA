@@ -51,7 +51,7 @@ def export_tiff(img: np.ndarray, output_path: LiteralString | str | bytes,
         'width': img.shape[1],
         'height': img.shape[0],
         'count': 1 if len(img.shape) == 2 else img.shape[2],  # Handle both single band and multi-band images
-        'crs': crs if transform else None,
+        'crs': crs if transform and crs else None,
         'transform': transform if transform else Affine.identity()
     }
 

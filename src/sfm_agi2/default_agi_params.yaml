@@ -4,35 +4,135 @@ detectFiducials:
   generate_masks: true
   generic_detector: false
   frame_detector: true
-  fiducial_position_corners: false
+  fiducials_position_corners: false
 
-alignCameras:
-  accuracy: high  # Options: highest, high, medium, low
-  generic_preselection: false
-  reference_preselection: false
-  adaptive_fitting: false
-  reset_align: false
+matchPhotos:
+  mask_tiepoints: true
+  filter_stationary_points: true
+  tie_point_limit: 15000
 
-buildDepthMaps: {}  # Add parameters as needed
+alignCameras: &alignCamerasBase
+  adaptive_fitting: true
+  subdivide_task: false
 
-buildModel:
-  source_data: ""  # e.g. 'depth maps'
-  surface_type: Metashape.Arbitrary
-  quality: Metashape.MediumQuality
-  face_count: high
-  interpolation: Metashape.EnabledInterpolation
-  depth_filtering: Metashape.MildFiltering
+alignCamerasRelative:
+  <<: *alignCamerasBase
+  reset_alignment: false
 
-exportModel: {}
+alignCamerasAbsolute:
+  <<: *alignCamerasBase
+  reset_alignment: true
 
-buildPointCloud: {}
+buildDepthMaps: &buildDepthMapsBase {}
+  # no arguments
 
-exportPointCloud: {}
+buildDepthMapsRelative:
+  <<: *buildDepthMapsBase
+  # no extra arguments
 
-buildDem: {}
+buildDepthMapsAbsolute:
+  <<: *buildDepthMapsBase
+  # no extra arguments
 
-exportDem: {}
+buildModel: &buildModelBase
+  source_data: Metashape.DataSource.DepthMapsData
+  surface_type: Metashape.SurfaceType.Arbitrary
+  face_count: Metashape.FaceCount.HighFaceCount
+  interpolation: Metashape.EnabledInterpolation # or Metashape.DisabledInterpolation
 
-buildOrthoMosaic: {}
+buildModelRelative:
+  <<: *buildModelBase
+  # no extra arguments
 
-exportOrthoMosaic: {}
+buildModelAbsolute:
+  <<: *buildModelBase
+  # no extra arguments
+
+exportModel: &exportModelBase
+  format: Metashape.ModelFormatOBJ
+  save_confidence: true
+
+exportModelRelative:
+  <<: *exportModelBase
+  # no extra arguments
+
+exportModelAbsolute:
+  <<: *exportModelBase
+  # no extra arguments
+
+buildPointCloud: &buildPointCloudBase
+  source_data: Metashape.DataSource.DepthMapsData
+  point_colors: true
+  point_confidence: true
+
+buildPointCloudRelative:
+  <<: *buildPointCloudBase
+  # no extra arguments
+
+buildPointCloudAbsolute:
+  <<: *buildPointCloudBase
+  # no extra arguments
+
+exportPointCloud: &exportPointCloudBase
+  format: Metashape.PointCloudFormatPLY
+  save_point_color: true
+  save_point_normal: true
+  save_point_confidence: true
+
+exportPointCloudRelative:
+  <<: *exportPointCloudBase
+  # no extra arguments
+
+exportPointCloudAbsolute:
+    <<: *exportPointCloudBase
+    # no extra arguments
+
+buildDem: &buildDemBase
+  {}
+
+buildDemRelative:
+  <<: *buildDemBase
+  # no extra arguments
+
+buildDemAbsolute:
+    <<: *buildDemBase
+    # no extra arguments
+
+exportDem: &exportDemBase
+  source_data: Metashape.ElevationData
+  image_format: Metashape.ImageFormatTIFF
+  raster_transform: Metashape.RasterTransformNone
+
+exportDemRelative:
+  <<: *exportDemBase
+  # no extra arguments
+
+exportDemAbsolute:
+  <<: *exportDemBase
+  # no extra arguments
+
+buildOrthoMosaic: &buildOrthoMosaicBase
+  surface_data: Metashape.DataSource.ModelData
+  blending_mode: Metashape.BlendingMode.MosaicBlending
+
+buildOrthoMosaicRelative:
+  <<: *buildOrthoMosaicBase
+  # no extra arguments
+
+buildOrthoMosaicAbsolute:
+  <<: *buildOrthoMosaicBase
+  # no extra arguments
+
+exportOrthoMosaic: &exportOrthoMosaicBase
+  source_data: Metashape.OrthomosaicData
+  image_format: Metashape.ImageFormatTIFF
+  raster_transform: Metashape.RasterTransformNone
+  white_background: true
+
+exportOrthoMosaicRelative:
+  <<: *exportOrthoMosaicBase
+  # no extra arguments
+
+exportOrthoMosaicAbsolute:
+    <<: *exportOrthoMosaicBase
+    # no extra arguments

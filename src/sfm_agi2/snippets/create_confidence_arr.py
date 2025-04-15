@@ -1,16 +1,19 @@
 """ Create a confidence map from a DEM and a point cloud."""
 import numpy as np
-
+import open3d as o3d
+import rasterio
+from scipy import ndimage
 from tqdm import tqdm
 
-def create_confidence_arr(dem: np.ndarray, point_cloud,
+def create_confidence_arr(dem: np.ndarray,
+                          point_cloud,
                           transform,
-                          interpolate=False,
-                          distance=25,
-                          no_data_val = -9999,
-                          chunk_size=5000,
-                          buffer=100,
-                          min_confidence=0
+                          interpolate: bool = False,
+                          distance: int = 25,
+                          no_data_val: int | float = -9999,
+                          chunk_size:int = 5000,
+                          buffer: int = 100,
+                          min_confidence:int = 0
                           ):
 
     # check if the point cloud is from open3d

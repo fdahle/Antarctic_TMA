@@ -15,6 +15,10 @@ def calc_bounds(transform, shape):
     # convert to rasterio transform if numpy array
     if isinstance(transform, np.ndarray):
 
+        if transform.shape == (9,):
+            # reshape to 3x3
+            transform = transform.reshape(3, 3)
+
         if transform.shape == (3, 3):
             # remove the last row
             transform = transform[:-1, :]

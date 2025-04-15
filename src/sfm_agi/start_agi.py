@@ -104,7 +104,7 @@ glac_names = ["Aagaard Glacier", "Ahlmann Glacier", "Aitkenhead Glacier", "Ajax 
          "Widdowson Glacier", "Wiggins Glacier", "Wilkinson Murphy Glacier", "William Glacier", "Windy Glacier",
          "Woodbury Glacier", "Wyspianski Icefall", "Zalewski Glacier", "Zephyr Glacier", "Zonda Glacier"]
 
-glac_names = ["Crane Glacier"]
+glac_names = ["Sikorsky Glacier"]
 
 # create conn to the database
 conn = ctd.establish_connection()
@@ -313,6 +313,9 @@ for i, glac_name in enumerate(glac_names):
 
         if use_rotations is False:
             rotation_dict = None
+
+        print(rotation_dict)
+        exit()
 
         print("TEEEMP")
         accuracy_dict = None

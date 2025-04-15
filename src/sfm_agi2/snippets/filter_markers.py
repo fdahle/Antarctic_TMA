@@ -1,8 +1,9 @@
 """" Filters markers in a chunk """
 
-
 import math
 import Metashape
+
+from src.sfm_agi2.SfMError import SfMError
 
 
 def filter_markers(chunk: Metashape.Chunk,
@@ -110,6 +111,10 @@ def filter_markers(chunk: Metashape.Chunk,
 
         # if we reach this point, we are done
         break
+
+    # just raise an error if we have no markers left
+    if len(chunk.markers) == 0:
+        raise SfMError("No markers left in chunk after filtering")
 
     nr_markers = len(chunk.markers)
     print(f"{nr_markers} markers survived the purge")

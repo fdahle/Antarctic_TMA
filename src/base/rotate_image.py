@@ -190,7 +190,6 @@ if __name__ == "__main__":
 
     rotated_img, rot_mat = rotate_image(img, angle, return_rot_matrix=True, expand=expand, force_pyvips=False)
     rotated_img2, rot_mat2 = rotate_image(img, angle, return_rot_matrix=True, expand=expand, force_pyvips=True)
-    print(rot_mat)
 
 
     import src.display.display_images as di

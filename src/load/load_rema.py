@@ -10,6 +10,7 @@ import shapely
 from rasterio import mask
 from rasterio.merge import merge as merge_arrays
 from rasterio.io import MemoryFile
+from tqdm import tqdm
 
 import src.other.misc.download_rema_data as drd
 
@@ -87,6 +88,10 @@ def load_rema(bounds: tuple[float, float, float, float] or shapely.geometry.base
     memory_pairs = []
 
     try:
+
+        pbar = tqdm(total=len(tiles), desc="Load tiles for REMA",
+                    position=0, leave=True)
+
         for tile in tiles:
             tile_base = "_".join(tile.split("_")[:2])
             tile_path = os.path.join(zoom_folder, f"{tile_base}_{zoom_level}m.tif")
@@ -113,6 +118,12 @@ def load_rema(bounds: tuple[float, float, float, float] or shapely.geometry.base
                 dataset.write(cropped)
                 dataset.close()
                 memory_pairs.append((memfile, memfile.open()))  # reopen for merge
+
+            pbar.update(1)
+
+        # close progress bar
+        pbar.set_postfix_str("- Finished -")
+        pbar.close()
 
         datasets = [ds for _, ds in memory_pairs]
         merged, merged_transform = merge_arrays(datasets)

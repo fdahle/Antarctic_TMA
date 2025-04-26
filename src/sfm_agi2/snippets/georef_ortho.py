@@ -6,6 +6,7 @@ import os
 from rasterio.transform import Affine
 from tqdm import tqdm
 
+import src.georef.snippets.apply_transform as at
 import src.base.calc_bounds as cb
 import src.base.find_tie_points as ftp
 import src.base.resize_image as rei
@@ -16,35 +17,84 @@ import src.georef.snippets.calc_transform as ct
 from src.sfm_agi2.SfMError import SfMError
 
 debug_show_rotation = False
+debug_min_tps = 25
 
 def georef_ortho(relative_ortho: np.ndarray,
                  absolute_ortho: np.ndarray,
                  absolute_transform: Affine,
+                 input_rotation: int | None = None,
                  auto_rotate: bool = False,
                  rotation_step: int = 10,
                  min_nr_tps: int = 0,
                  min_conf: float = 0.0,
                  start_conf: float = 0.9,
+                 trim_image: bool = True,
+                 trim_threshold: float = 0.75,
                  tp_type: type =float,
                  debug: bool = False,
                  debug_folder: str | None = None,
+                 data_folder: str | None = None
                  ):
 
+    # check shape of ortho abs
+    if absolute_ortho.ndim == 2:
+        absolute_ortho = absolute_ortho[np.newaxis, :, :]
+    elif absolute_ortho.ndim == 3:
+        if absolute_ortho.shape[0] > 10:
+            raise ValueError("Bands for the modern ortho should be in the "
+                             "first dimension!")
 
     # create debug folder if needed
     if debug and debug_folder is not None:
         os.makedirs(debug_folder, exist_ok=True)
+
+    # create data folder if needed
+    if data_folder is not None:
+        os.makedirs(data_folder, exist_ok=True)
+
+    # get 2d shape of ortho abs
+    absolute_ortho_shape = (absolute_ortho.shape[1], absolute_ortho.shape[2])
 
     # init tie point detector
     tpd = ftp.TiePointDetector('lightglue',
                                min_conf=min_conf,
                                tp_type=tp_type)
 
-    relative_ortho_resized, s_x, s_y = rei.resize_image(relative_ortho,
-                                      absolute_ortho.shape[-2:],
+    # already init trim vars
+    trimmed_ortho = relative_ortho
+    trim_x_min = 0
+    trim_y_min = 0
+
+    # trim the image if needed
+    if trim_image:
+        # Calculate the fraction of white pixels for each row and column
+        row_white_fraction = np.mean(relative_ortho == 255, axis=1)
+        col_white_fraction = np.mean(relative_ortho == 255, axis=0)
+
+        # Identify rows and columns that are not mostly white
+        rows_to_keep = np.where(row_white_fraction < trim_threshold)[0]
+        cols_to_keep = np.where(col_white_fraction < trim_threshold)[0]
+
+        if rows_to_keep.size and cols_to_keep.size:
+            # Determine the bounding box for rows and columns to keep
+            trim_y_min = rows_to_keep[0]
+            trim_y_max = rows_to_keep[-1] + 1  # +1 to include the last index
+            trim_x_min = cols_to_keep[0]
+            trim_x_max = cols_to_keep[-1] + 1
+
+            # Trim the image using the calculated indices
+            trimmed_ortho = relative_ortho[trim_y_min:trim_y_max,
+                            trim_x_min:trim_x_max]
+
+    # resize the ortho to the absolute ortho size
+    relative_ortho_resized, s_x, s_y = rei.resize_image(trimmed_ortho,
+                                      absolute_ortho_shape,
                                       return_scale_factor=True)  # noqa
 
-    if auto_rotate:
+    # get the rotation values
+    if input_rotation is not None:
+        rotation_values = [input_rotation]
+    elif auto_rotate:
         rotation_values = list(range(0, 360, rotation_step))
     else:
         rotation_values = [0]
@@ -74,6 +124,8 @@ def georef_ortho(relative_ortho: np.ndarray,
         tps, conf = tpd.find_tie_points(absolute_ortho, rotated_ortho)
 
         if debug_show_rotation:
+            if tps.shape[0] < debug_min_tps:
+                continue
             style_config = {
                 'title': f"Rotation: {rotation}°: {tps.shape[0]} tie points",
             }
@@ -124,6 +176,11 @@ def georef_ortho(relative_ortho: np.ndarray,
     tps[:, 2] = tps[:, 2] / s_x
     tps[:, 3] = tps[:, 3] / s_y
 
+    # account for the trimming
+    tps[:, 2] = tps[:, 2] + trim_x_min
+    tps[:, 3] = tps[:, 3] + trim_y_min
+
+
     if debug:
         dbg_file_name = "georef_ortho.png"
         dbg_img_path = os.path.join(debug_folder, dbg_file_name)
@@ -134,8 +191,8 @@ def georef_ortho(relative_ortho: np.ndarray,
     if tps.shape[0] < min_nr_tps:
         raise SfMError(f"Not enough tie points found: {tps.shape[0]} < {min_nr_tps}")
 
-    print("Found {} tie points with a confidence of min {}".format(
-        tps.shape[0], conf_val))
+    print("[INFO] Found {} tie points with a confidence of min {} at rotation".format(
+        tps.shape[0], round(conf_val, 2), rotation))
 
     # convert points to absolute values
     absolute_points = np.array([absolute_transform * tuple(point) for point in tps[:, 0:2]])
@@ -145,13 +202,19 @@ def georef_ortho(relative_ortho: np.ndarray,
                                              transform_method="rasterio",
                                              gdal_order=3)
 
-    if debug:
-        pass
-        # TODO
+    if data_folder is not None:
+
+        # save the geo-referenced ortho
+        georef_data_pth = os.path.join(data_folder, "ortho_georef.tif")
+        at.apply_transform(relative_ortho, transform,
+                           georef_data_pth)
+
         # save the tie points
-
-        # save the georef image
-
+        conf = conf.reshape(-1, 1)  # Converts shape from (N,) to (N, 1)
+        tps_conf = np.hstack((tps, conf))
+        tps_data_path = os.path.join(data_folder, "tie_points.csv")
+        col_names = "x_abs; y_abs; x_rel; y_rel; conf"
+        np.savetxt(tps_data_path, tps_conf, delimiter=";", header=col_names)
 
     # get bounds from the transform
     bounds = cb.calc_bounds(transform, relative_ortho.shape)

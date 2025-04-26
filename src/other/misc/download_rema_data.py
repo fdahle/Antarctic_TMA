@@ -112,6 +112,9 @@ def download_rema_data(tile, zoom_level,
             for _ in range(max_retries):
                 try:
                     response = requests.get(url, stream=True, timeout=30)
+                    if response.status_code == 404:
+                        print(f"{tile}{sub_tile} not found on server (404). Skipping.")
+                        continue
                     response.raise_for_status()
                     total_size = int(response.headers.get('content-length', 0))
                     block_size = 1024 * 1024  # 1 MB

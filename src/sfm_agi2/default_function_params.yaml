@@ -19,8 +19,8 @@ custom_matching_params:
 
 create_bundler_params:
   min_tps: 25  # min number of tie points between images that these are added to the bundle
-  s_min:
-  s_max:
+  s_min: 1
+  s_max: 50
 
 create_conf_arr_params:
   interpolate: true
@@ -35,13 +35,18 @@ georef_ortho_params:
   min_nr_tps: 25  # minimum number of tie points required to georef the orthomosaic
   min_conf: 0.5  # absolute minimum confidence for the tie points
   start_conf: 0.9  # starting confidence for the tie points
+  trim_image: true  # trim white space from the relative ortho
+  trim_threshold: 0.75 # threshold (number of white pixels) for trimming the ortho
   tp_type: float
 
 find_gcps_params:
   resize_mode: 'rel'  # can be 'none', 'abs', 'rel'
   cell_size: 2000
   min_conf: 0.75  # minimum confidence for the GCPs when tp matching
-  selection_radius: 100 # minimum distance between GCPs in px
+  extensive_search: True
+  extensive_subset: 500
+  extensive_distance: 5
+  quadrant_size: 2000 # minimum distance between GCPs in px
   tp_type: float
 
 add_markers_params:
@@ -49,7 +54,7 @@ add_markers_params:
   min_z: -50  # min z value for markers when they are disregarded
 
 filter_markers_params:
-  min_required_markers: 5
-  max_marker_error_px: 1
-  max_marker_error_m: 10
+  min_markers: 5
+  max_error_px: 1
+  max_error_m: 10
 

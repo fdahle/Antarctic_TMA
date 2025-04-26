@@ -32,5 +32,5 @@ def modify_zip(path_file):
 
 
 if __name__ == '__main__':
-    pth = "/data/ATM/colombia/yellowscan/d6_f4.zip"
+    pth = "/data/ATM/colombia/flight_2.zip"
     modify_zip(pth)

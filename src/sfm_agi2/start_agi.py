@@ -6,8 +6,8 @@ mode = "glaciers"   # "glaciers" or "images"
 
 input_glaciers = ["Crane Glacier"]
 
-#project_name = "test"
-#input_images = ["CA215332V0419", "CA215332V0420", "CA215332V0421", "CA215332V0422"]
+project_name = "test2"
+input_images = ["CA215332V0419", "CA215332V0420", "CA215332V0421", "CA215332V0422"]
 
 from shapely import wkt
 import src.base.connect_to_database as ctd
@@ -43,6 +43,7 @@ for glacier in input_glaciers:  # noqa
     focal_length_dict = {}
     rotation_dict = {}
     footprint_dict = {}
+    valid_images = []
 
     # get image attributes
     for img_id in input_images:  # noqa
@@ -90,13 +91,25 @@ for glacier in input_glaciers:  # noqa
         footprint_dict[img_id] = wkt.loads(data['footprint'][0])
 
         # just to make sure that the image is copied from backup folder to download folder
-        li.load_image(img_id)
+        try:
+            li.load_image(img_id)
+            valid_images.append(img_id)
+        except:
+
+            print("removing {} from input images".format(img_id))
+
+            # remove the image from the dict
+            rotation_dict.pop(img_id)
+            footprint_dict.pop(img_id)
+            focal_length_dict.pop(img_id)
+
+
 
     # create the project
     ap = AgP.AgiProject(project_name, base_fld,
                         overwrite=True, resume=False,
                         debug=True)
-    ap.set_input_images(input_images)
+    ap.set_input_images(valid_images)
 
     # set optional data
     ap.set_optional_data(

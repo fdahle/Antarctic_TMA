@@ -1,11 +1,21 @@
 use_cache: True
 cache_folder: "/data/ATM/data_1/sfm/agi_data2"
 
+# GLOBAL CACHE PARAMETERS (saved in cache folder)
+
 use_bundler: True
 save_bundler: True
 
 use_enhanced: True,
 save_enhanced: True
 
+# for tie-point matching between images
 use_tps: True
 save_tps: True
+
+# LOCAL CACHE PARAMETERS (saved in data folder)
+use_rema: True
+save_rema: True
+
+use_rotation: True
+save_rotation: True

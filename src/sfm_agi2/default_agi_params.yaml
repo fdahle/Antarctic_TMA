@@ -23,7 +23,9 @@ alignCamerasAbsolute:
   <<: *alignCamerasBase
   reset_alignment: true
 
-buildDepthMaps: &buildDepthMapsBase {}
+buildDepthMaps: &buildDepthMapsBase
+  downscale: 2
+  filter_mode: Metashape.FilterMode.AggressiveFiltering
   # no arguments
 
 buildDepthMapsRelative:

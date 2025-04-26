@@ -8,6 +8,7 @@ from tqdm import tqdm
 def add_markers(chunk: Metashape.Chunk,
                 markers: pd.DataFrame,
                 epsg_code: int,
+                accuracy_dict: dict,
                 reset_markers: bool = False,
                 min_z: int =- 50):
     """
@@ -50,6 +51,11 @@ def add_markers(chunk: Metashape.Chunk,
 
     # init marker variable
     marker = None
+
+    # extract x/y accuracy once
+    x_acc = accuracy_dict["x"]
+    y_acc = accuracy_dict["y"]
+    z_acc = accuracy_dict["z"]
 
     # Counter for successfully created markers.
     num_markers = 0
@@ -168,6 +174,11 @@ def add_markers(chunk: Metashape.Chunk,
                     [row['x_abs'], row['y_abs'], row['z_abs']])  # noqa
                 pbar.set_postfix_str(f"Created marker {num_markers} at "
                                      f"({row['x_abs']}, {row['y_abs']}, {row['z_abs']})")
+
+                if z_acc == "auto":
+                    z_acc = row.get("accuracy_z", 5.0)  # fallback if missing
+
+                marker.reference.accuracy = Metashape.Vector([x_acc, y_acc, z_acc])
 
             # Add the projection for the current camera to the marker.
             pbar.set_postfix_str(f"Add marker {num_markers} to "

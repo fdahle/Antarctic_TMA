@@ -3,6 +3,8 @@ import sys
 import os
 from contextlib import contextmanager, redirect_stdout
 
+from numpy.core.numeric import isscalar
+
 # ignore some warnings
 os.environ['KMP_WARNINGS'] = '0'
 os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
@@ -10,6 +12,7 @@ os.environ["OMP_MAX_ACTIVE_LEVELS"] = "1"
 import gc
 import hashlib
 import json
+import math
 import Metashape
 import numpy as np
 import shutil
@@ -53,6 +56,7 @@ import src.sfm_agi2.snippets.create_slope as cs
 import src.sfm_agi2.snippets.crop_output as co
 import src.sfm_agi2.snippets.georef_ortho as go
 import src.sfm_agi2.snippets.find_gcps as fg
+import src.sfm_agi2.snippets.find_gcps2 as fg2
 import src.sfm_agi2.snippets.filter_markers as fm
 
 # snippets for correct_data
@@ -158,6 +162,12 @@ class AgiProject:
             else:
                 raise FileExistsError(f"'{self.project_fld}' already exists. Use 'overwrite=True' or 'resume=True'.")
         else:
+
+            # change status flag as folder is not existing
+            overwrite = True
+            resume = False
+
+            # create folder
             os.makedirs(self.project_fld)
 
         # extended project information
@@ -460,12 +470,45 @@ class AgiProject:
             raise ValueError("Absolute bounds are required to load the modern DEM")
 
         if self._dem_new is None:
+
+            # get rema zoom level
             zoom_lvl = self.project_params["rema"]["zoom_level"]
-            print(f"[INFO] Load modern elevation data from REMA ({zoom_lvl}m) with", self.absolute_bounds)
-            self._dem_new, self._dem_new_transform = lr.load_rema(self.absolute_bounds,
-                                         zoom_level=zoom_lvl,
-                                         auto_download=True,
-                                         return_transform=True)
+
+            # check if we can use a cached version
+            if self.cache_params["use_rema"] and self.cache_params["use_cache"]:
+
+                # define path to cached file
+                file_name = f"rema_{self.absolute_bounds[0]}_{self.absolute_bounds[1]}_" \
+                    f"{self.absolute_bounds[2]}_{self.absolute_bounds[3]}_{zoom_lvl}m.tif"
+                pth_cached_file= os.path.join(self.data_fld, "rema", file_name)
+
+                # check if there is a cached version
+                if os.path.isfile(pth_cached_file):
+                    print(f"[INFO] Load cached modern elevation data")
+                    self._dem_new, self._dem_new_transform = li.load_image(pth_cached_file,
+                                                                         return_transform=True)
+
+            # need to load the rema data directly if dem_new is still none
+            if self._dem_new is None:
+
+                print(f"[INFO] Load modern elevation data from REMA ({zoom_lvl}m) with", self.absolute_bounds)
+                self._dem_new, self._dem_new_transform = lr.load_rema(self.absolute_bounds,
+                                             zoom_level=zoom_lvl,
+                                             auto_download=True,
+                                             return_transform=True)
+
+            # save the dem to the cache
+            if self.cache_params["save_rema"] and self.cache_params["use_cache"]:
+                print(f"[INFO] Save cached modern elevation data")
+                file_name = f"rema_{self.absolute_bounds[0]}_{self.absolute_bounds[1]}_" \
+                    f"{self.absolute_bounds[2]}_{self.absolute_bounds[3]}_{zoom_lvl}m.tif"
+                pth_cached_file= os.path.join(self.data_fld, "rema", file_name)
+                os.makedirs(os.path.dirname(pth_cached_file), exist_ok=True)
+                eti.export_tiff(self._dem_new, pth_cached_file,
+                                overwrite=True,
+                                transform=self._dem_new_transform,
+                                use_lzw=True)
+
         return self._dem_new, self._dem_new_transform
 
     @property
@@ -683,12 +726,14 @@ class AgiProject:
 
         if self._rock_mask is None:
 
-            print("[INFO] Load rock mask from Quantarctica with", self.absolute_bounds)
+            print("[INFO] Load rock mask from Quantarctica with",
+                  self.absolute_bounds)
 
             # load rock mask and apply to mask
             self._rock_mask = lrm.load_rock_mask(self.absolute_bounds,
                                            self.project_params["rema"]["zoom_level"],
-                                           self.project_params["rema"]["buffer"])
+                                           self.project_params["dem_mask"]["rock_buffer"])
+
         return self._rock_mask
 
     @property
@@ -1030,6 +1075,7 @@ class AgiProject:
             arguments = self.agi_params["detectFiducials"]
             arguments["progress"] = progress_callback
             self.chunk.detectFiducials(**arguments)
+            self.agi_pbar.set_postfix_str("- Finished -")
             self.agi_pbar.close()
 
         # check if we created masks for all images
@@ -1195,9 +1241,11 @@ class AgiProject:
 
                 # create the bundler file from the tie points
                 os.makedirs(bundler_folder, exist_ok=True)
+                arguments = self.function_params["create_bundler_params"]
                 path_bundler_file = cb.create_bundler(image_folder,
                                                       bundler_folder,
-                                                      tp_dict, conf_dict)
+                                                      tp_dict, conf_dict,
+                                                      **arguments)
 
                 # save the bundler file to the cache
                 if self.cache_params["use_cache"] and self.cache_params["save_bundler"]:
@@ -1237,6 +1285,8 @@ class AgiProject:
                     arguments["pairs"] = pairs
                     arguments["progress"] = progress_callback
                     self.chunk.matchPhotos(**arguments)
+                    self.agi_pbar.set_postfix_str("- Finished -")
+                    self.agi_pbar.close()
 
         # if custom matching import the bundler file
         if self.project_params["custom_matching"]:
@@ -1246,7 +1296,8 @@ class AgiProject:
                 self.chunk.importCameras(path_bundler_file,  # noqa
                                          format=Metashape.CamerasFormatBundler,
                                          progress=progress_callback)
-
+                self.agi_pbar.set_postfix_str("- Finished -")
+                self.agi_pbar.close()
 
         self.doc.save()
 
@@ -1281,6 +1332,9 @@ class AgiProject:
             progress_callback = self._create_progress_bar("Align Cameras")
             arguments["progress"] = progress_callback
             self.chunk.alignCameras(**arguments)
+            self.agi_pbar.set_postfix_str("- Finished -")
+            self.agi_pbar.close()
+
         self.doc.save()
 
         # check if cameras are aligned
@@ -1455,20 +1509,43 @@ class AgiProject:
         ortho_old_rel, _ = self.ortho_old_rel
         ortho_new, ortho_new_transform = self.ortho_new
 
+        # check if we have already a rotation cached
+        rotation_georef = None
+        if self.cache_params["use_cache"] and self.cache_params["use_rotation"]:
+            pth_rot_file = os.path.join(self.data_fld, "georef", "rotation.txt")
+            if os.path.exists(pth_rot_file):
+                try:
+                    with open(pth_rot_file, "r") as f:
+                        val = float(f.read())
+                        if not np.isnan(val):
+                            rotation_georef = val
+                            print("[INFO] Using cached rotation: {}".format(rotation_georef))
+                except (Exception,):
+                    print("[WARNING] Could not read rotation from cache.")
+
         # georeference the relative ortho
         arguments = self.function_params["georef_ortho_params"]
         if self.debug:
             arguments["debug"] = True
             arguments["debug_folder"] = os.path.join(self.debug_fld, "georef_ortho")
+        arguments["data_folder"] = georef_data_folder
         tpl = go.georef_ortho(relative_ortho=ortho_old_rel,
                               absolute_ortho=ortho_new,
                               absolute_transform=ortho_new_transform,
+                              input_rotation=rotation_georef,
                               **arguments)
 
         # extract values from return object
         transform_georef = tpl[0]
         bounds_georef = tpl[1]
         rotation_georef = tpl[2]
+
+        if self.cache_params["use_cache"] and self.cache_params["save_rotation"]:
+            pth_fld = os.path.join(self.data_fld, "georef")
+            os.makedirs(pth_fld, exist_ok=True)
+            pth_rot_file = os.path.join(pth_fld, "rotation.txt")
+            with open(pth_rot_file, "w") as f:
+                f.write(f"{rotation_georef:.6f}")
 
         # adapt the bounds for rema
         bounds_georef = ab.adapt_bounds(bounds_georef,
@@ -1493,45 +1570,41 @@ class AgiProject:
         if self.debug:
             arguments["debug"] = True
             arguments["debug_folder"] = os.path.join(self.debug_fld, "gcps")
-        tps, conf = None, None
-        while True:
-            tpl = fg.find_gcps(ortho_old_rel, ortho_new,
-                                dem_old_rel, dem_new,
-                                rotation_georef,
-                                ortho_new_transform,
-                                georef_data_folder,
-                                self.project_params["resolution_relative"],
-                                self.dem_mask_old_rel, self.dem_mask_new,
-                                existing_tps=tps, existing_conf=conf,
-                                **arguments)
-            # extract values from return object
-            gcps = tpl[0]
-            tps, conf = tpl[1], tpl[2]
+        arguments["data_folder"] = georef_data_folder
+        if self.project_params["dem_mask"]["use_slope"]:
+            arguments["slope"] = self.slope_new
+            arguments["start_slope"] = self.project_params["dem_mask"]["slope_min"]
+            arguments["end_slope"] = self.project_params["dem_mask"]["slope_max"]
+            arguments["slope_step"] = self.project_params["dem_mask"]["slope_step"]
+        arguments["no_data_val"] = self.project_params["no_data_val"]
+        arguments["min_gcps"] = self.project_params["gcps"]["min_gcps"]
+        gcps = fg2.find_gcps(ortho_old_rel, ortho_new,
+                            dem_old_rel, dem_new,
+                            rotation_georef,
+                            ortho_new_transform,
+                            self.project_params["resolution_relative"],
+                            mask_rel=self.dem_mask_old_rel,
+                            mask_rock=self.rock_mask,
+                            **arguments)
 
-            print("[INFO] Found {} GCPs.".format(gcps.shape[0]))
+        print("[INFO] Found {} GCPs.".format(gcps.shape[0]))
 
-            # check for minimum amount of gcps
-            if gcps.shape[0] >= self.project_params["gcps"]["min_gcps"]:
-                break
-
-            # increase allowed slope
-            self.gcp_slope = self.gcp_slope + 5
-
-            # check if we reached the maximum slope
-            if self.gcp_slope > self.max_slope:
-                raise SfMError("Not enough GCPs found. Please check the input data.")
-
-            # reset the new mask
-            self._dem_mask_new = None
+        if self.project_params["gcps"]["accuracy_m"]["z"] == "auto":
+            base_z_acc = 1
+            slope_factor = 3
+            slope_rad = np.deg2rad(gcps['slope'])
+            dynamic_z = base_z_acc + slope_factor * np.tan(slope_rad)
+            gcps['accuracy_z'] = dynamic_z
 
         # set expected accuracy of the markers in px and m
-        self.chunk.marker_location_accuracy = self.project_params["gcps"]["accuracy_m"]
         self.chunk.marker_projection_accuracy = self.project_params["gcps"]["accuracy_px"]
 
         # add gcps as markers
         arguments = self.function_params["add_markers_params"]
+        arguments["accuracy_dict"] = self.project_params["gcps"]["accuracy_m"]
+        print(arguments)
         am.add_markers(self.chunk, gcps,
-                       self.project_params["epsg_code"],
+                       epsg_code=self.project_params["epsg_code"],
                        **arguments)
 
         # set complete project to absolute coordinates

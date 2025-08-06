@@ -4,16 +4,9 @@ import os
 import glob
 import numpy as np
 
-project_path = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
-output_fld = os.path.join(project_path, "output")
-
-# get path for the dem of our project
-pattern = os.path.join(output_fld, f"{project_name}_dem_absolute_*.tif")
-lst_dem_c = glob.glob(pattern)
-if len(lst_dem_c) == 0:
-    print("No corrected dem found")
-    exit()
-path_corrected_dem = lst_dem_c[0]
+path_corrected_dem = "/data/ATM/data_1/papers/paper_sfm/finished_dems_corrected2/crane_glacier_dem_corrected.tif"
+glac_name = project_name.split("_")[0].capitalize()
+pth_ryan_dem = f"/data/ATM/data_1/ryan_data/hist_dems/North_and_Barrows_2024_DEM_{glac_name}_1968.tif"
 
 # load our dem
 import src.load.load_image as li
@@ -22,7 +15,6 @@ dem_corrected[dem_corrected == -9999] = np.nan  # set nodata to nan
 
 # load dem of ryan
 glac_name = project_name.split("_")[0].capitalize()
-pth_ryan_dem = f"/data/ATM/data_1/ryan_data/hist_dems/North_and_Barrows_2024_DEM_{glac_name}_1968.tif"
 dem_ryan, transform_ryan = li.load_image(pth_ryan_dem, return_transform=True)
 dem_ryan[dem_ryan == -32767] = np.nan  # set nodata to nan
 
@@ -72,6 +64,37 @@ reproject(
     dst_crs="EPSG:3031",
     resampling=Resampling.bilinear
 )
+
+# 4. Estimate horizontal shift via 2D cross-correlation
+# remove mean and mask nan
+A = dem_corrected_crop.copy()
+B = dem_ryan_resampled.copy()
+mask = ~np.isnan(A) & ~np.isnan(B)
+A[~mask] = 0
+B[~mask] = 0
+A -= np.nanmean(A)
+B -= np.nanmean(B)
+
+from scipy.signal import fftconvolve
+
+corr = fftconvolve(A, B[::-1, ::-1], mode='same')
+iy, ix = np.unravel_index(np.nanargmax(corr), corr.shape)
+dy = iy - A.shape[0]//2  # row shift
+dx = ix - A.shape[1]//2  # col shift
+print(f"Estimated shift: dx={dx} px, dy={dy} px")
+
+# 5. Apply pixel shift to Ryan DEM
+# shift in numpy (roll) or adjust transform
+ryan_shifted = np.roll(dem_ryan_resampled, shift=(int(dy), int(dx)), axis=(0, 1))
+# set newly rolled-in edges to nan
+if dy > 0:
+    ryan_shifted[:int(dy), :] = np.nan
+elif dy < 0:
+    ryan_shifted[int(dy):, :] = np.nan
+if dx > 0:
+    ryan_shifted[:, :int(dx)] = np.nan
+elif dx < 0:
+    ryan_shifted[:, int(dx):] = np.nan
 
 
 # Create valid mask and calculate difference

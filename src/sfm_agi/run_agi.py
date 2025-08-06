@@ -39,7 +39,7 @@ import src.load.load_rema as lr
 import src.load.load_rock_mask as lrm
 import src.load.load_transform as lt
 import src.load.load_satellite as ls
-import src.other.misc.compress_tif_files as cotf
+import src.other.misc.compress_tif_file as cotf
 import src.pointclouds.remove_outliers as ro
 import src.sfm_agi.other.create_tps_frame as ctf
 import src.sfm_agi.snippets.add_gcp_markers as agm

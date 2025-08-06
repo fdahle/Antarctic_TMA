@@ -272,13 +272,15 @@ def display_images(images: np.ndarray | list[np.ndarray],
 
                 # plot each line with its corresponding color
                 for line, color in zip(image_lines, line_colors):
+                    if len(line) == 1:
+                        line = line[0]  # Unpack single line tuple if needed
                     try:
                         ax.plot([line[0], line[2]], [line[1], line[3]],
                             color=_normalize_color(color),
                             linewidth=style_config['line_width'],
                             zorder=5)
-                    except:
-                        continue
+                    except Exception as e:
+                        raise e
 
         # Optionally draw bounding boxes on the image
         if bounding_boxes and idx < len(bounding_boxes):

@@ -23,7 +23,8 @@ TWEAK_VALS = [-20, 30, 10]
 
 def extract_fid_mark(image: np.ndarray, key: str,
                      subset_bounds: tuple[int, int, int, int],
-                     display: bool = False) -> Optional[tuple[int, int]]:
+                     display: bool = False,
+                     debug_display: bool = False) -> Optional[tuple[int, int]]:
     """
     Extracts a fiducial mark from a given image, based on the specified key.
     This function applies a series of image processing steps (e.g., blurring, thresholding,
@@ -70,6 +71,9 @@ def extract_fid_mark(image: np.ndarray, key: str,
     # extract the subset from the image
     subset = image[min_y:max_y, min_x:max_x]
 
+    if debug_display:
+        di.display_images([subset])
+
     # blur (to make the binarize easier) and binarize the subset (based on otsu, so the binarize is based on
     # the values in the subset
     subset_blurred = cv2.GaussianBlur(subset, (5, 5), 0)
@@ -78,6 +82,9 @@ def extract_fid_mark(image: np.ndarray, key: str,
 
     # apply canny edge detection
     subset_canny_edge = cv2.Canny(subset_binarized, 100, 100)
+
+    if debug_display:
+        di.display_images([subset_canny_edge])
 
     """the following part is to extract lines from the images"""
 
@@ -92,6 +99,10 @@ def extract_fid_mark(image: np.ndarray, key: str,
     # no lines found :/
     if all_lines is None:
         return None
+
+    if debug_display:
+        style_config = {"line_width": 2}
+        di.display_images([subset_canny_edge], lines=[all_lines], style_config=style_config)
 
     # this list will save the lines with correct orientation
     correct_lines = []
@@ -134,6 +145,10 @@ def extract_fid_mark(image: np.ndarray, key: str,
     # no line was found -> skip
     if mid_line is None:
         return None
+
+    if debug_display:
+        style_config={"line_width": 2}
+        di.display_images([subset_canny_edge], lines=[[mid_line]], style_config=style_config)
 
     """having the lines, it is possible to extract the fid-marks itself"""
 
@@ -214,83 +229,100 @@ def extract_fid_mark(image: np.ndarray, key: str,
         # get this smallest subset in which we think the fid-mark is
         fid_subset = image[min_y_sm:max_y_sm, min_x_sm:max_x_sm]
 
+        if debug_display:
+            di.display_images([fid_subset])
+
         # blur this subset
         fid_subset_blurred = cv2.GaussianBlur(fid_subset, (5, 5), 0)
 
-        # get pixel value that is most common (=background color)
-        ind = np.bincount(fid_subset_blurred.flatten()).argmax()
-        thresh_val = ind + 10
+        if debug_display:
+            di.display_images([fid_subset_blurred])
 
-        # threshold
-        ret, fid_th = cv2.threshold(fid_subset_blurred, thresh_val, 255, cv2.THRESH_BINARY)
 
-        # erode and dilate
-        kernel = np.ones((3, 3), np.uint8)
-        eroded = cv2.erode(fid_th, kernel, iterations=1)
-        dilated = cv2.dilate(eroded, kernel, iterations=1)
+        # --- Try Hough Circle Detection ---
+        fid_mark_local = None
+        circles = cv2.HoughCircles(fid_subset_blurred,
+                                   cv2.HOUGH_GRADIENT,
+                                   dp=1.2,
+                                   minDist=20,
+                                   param1=50,
+                                   param2=15,
+                                   minRadius=3,
+                                   maxRadius=15)
 
-        # find contours
-        contours, hierarchy = cv2.findContours(dilated, 1, 2)
+        if circles is not None:
+            # Take the circle closest to the center of the subset
+            circles = np.squeeze(circles, axis=0)
+            min_distance = float('inf')
+            mid_x_local = fid_subset.shape[1] / 2
+            mid_y_local = fid_subset.shape[0] / 2
 
-        all_marks = []
-        for elem in contours:
-            m = cv2.moments(elem)
+            for x, y, r in circles:
+                if key in ["n", "s"]:
+                    distance = abs(x - mid_x_local)
+                else:
+                    distance = abs(y - mid_y_local)
 
-            # get size
-            size = m["m00"]
+                if distance < min_distance:
+                    min_distance = distance
+                    fid_mark_local = (x, y)
 
-            # invalid contour
-            if size == 0:
-                continue
+            if fid_mark_local is not None:
+                # Convert local fid mark to absolute image coordinates
+                fid_mark = (int(fid_mark_local[0] + min_x_sm), int(fid_mark_local[1] + min_y_sm))
+                break  # Hough succeeded → no need to check moments
 
-            # position
-            c_x = int(m["m10"] / m["m00"])
-            c_y = int(m["m01"] / m["m00"])
+        # --- Fallback: use Moments if no circle found ---
+        if fid_mark_local is None:
+            # Threshold
+            ind = np.bincount(fid_subset_blurred.flatten()).argmax()
+            thresh_val = ind + 10
+            ret, fid_th = cv2.threshold(fid_subset_blurred, thresh_val, 255, cv2.THRESH_BINARY)
 
-            fid_mark_min_size = 8
-            fid_mark_max_size = 100
+            # Erode and dilate
+            kernel = np.ones((3, 3), np.uint8)
+            eroded = cv2.erode(fid_th, kernel, iterations=1)
+            dilated = cv2.dilate(eroded, kernel, iterations=1)
 
-            # everything too big or too small is probably not a circle -> but save the rest
-            if fid_mark_min_size < size < fid_mark_max_size:
-                all_marks.append([c_x, c_y])
+            # Contours
+            contours, hierarchy = cv2.findContours(dilated, 1, 2)
 
-        # if no fid-marks are found: continue
-        if len(all_marks) == 0:
-            continue
+            all_marks = []
+            for elem in contours:
+                m = cv2.moments(elem)
+                size = m["m00"]
 
-        # if more than one mark is found take the one closest to the middle-line
-        min_distance = 2000000
-        mid_mark = None
+                if size == 0:
+                    continue
 
-        # get the middle of the image
-        mid_of_image_x = int(dilated.shape[1] / 2)
-        mid_of_image_y = int(dilated.shape[0] / 2)
+                c_x = int(m["m10"] / m["m00"])
+                c_y = int(m["m01"] / m["m00"])
 
-        for mark in all_marks:
+                if 8 < size < 100:
+                    all_marks.append([c_x, c_y])
 
-            # calculate distance
-            distance = None
-            if key in ["n", "s"]:
-                distance = np.abs(mid_of_image_x - mark[0])
-            elif key in ["e", "w"]:
-                distance = np.abs(mid_of_image_y - mark[1])
+            if len(all_marks) > 0:
+                mid_of_image_x = int(dilated.shape[1] / 2)
+                mid_of_image_y = int(dilated.shape[0] / 2)
 
-            # check distance
-            if distance < min_distance:
-                mid_mark = mark
+                min_distance = float('inf')
+                fid_mark_local = None
 
-        # no mark could fulfill the requirement
-        if mid_mark is None:
-            continue
+                for mark in all_marks:
+                    if key in ["n", "s"]:
+                        distance = abs(mid_of_image_x - mark[0])
+                    else:
+                        distance = abs(mid_of_image_y - mark[1])
 
-        # make the mark absolute
-        mid_mark[0] = mid_mark[0] + min_x_sm
-        mid_mark[1] = mid_mark[1] + min_y_sm
+                    if distance < min_distance:
+                        fid_mark_local = mark
 
-        # hurray we found a mark
-        if mid_mark is not None:
-            fid_mark = tuple(mid_mark)
-            break
+                if fid_mark_local is not None:
+                    fid_mark = (fid_mark_local[0] + min_x_sm, fid_mark_local[1] + min_y_sm)
+                    break
+
+    if debug_display:
+        di.display_images([fid_subset], points=[[fid_mark_local]])
 
     if display and fid_mark is not None:
         fid_mark_subset_x = fid_mark[0] - min_x
@@ -298,3 +330,30 @@ def extract_fid_mark(image: np.ndarray, key: str,
         di.display_images(subset, points=[[(fid_mark_subset_x, fid_mark_subset_y)]])
 
     return fid_mark
+
+if __name__ == "__main__":
+
+    img_id = "CA033631L0063"
+    sub_direction = "n"
+    display = True
+
+    # load the image
+    import src.load.load_image as li
+    img = li.load_image(img_id)
+
+    # get the subset bounds for the fid mark extraction
+    import src.base.connect_to_database as ctd
+    conn = ctd.establish_connection()
+    sql_string = f"SELECT subset_width, subset_height, subset_{sub_direction}_x, subset_{sub_direction}_y FROM images_fid_points"
+    sql_string += f" WHERE image_id = '{img_id}'"
+    data = ctd.execute_sql(sql_string, conn)
+
+    min_x = int(data.iloc[0]["subset_" + sub_direction + "_x"])
+    min_y = int(data.iloc[0]["subset_" + sub_direction + "_y"])
+    max_x = int(min_x + data.iloc[0]["subset_width"])
+    max_y = int(min_y + data.iloc[0]["subset_height"])
+
+    bounds = (min_x, min_y, max_x, max_y)
+    mark = extract_fid_mark(img, 'n', bounds, display=display, debug_display=display)
+
+    print(f"Extracted fiducial mark: {mark}")

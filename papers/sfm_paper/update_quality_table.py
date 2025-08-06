@@ -14,15 +14,20 @@ import src.sfm_agi.snippets.get_project_quality as gpc
 PATH_PROJECTS_FOLDER = "/data/ATM/data_1/sfm/agi_projects"
 
 conn = ctd.establish_connection()
+update_project = False
 
 def update_quality_table(project_name, conn=None):
 
     print("Update quality table for", project_name)
 
+
     # get old dem path
     output_dir = os.path.join(PATH_PROJECTS_FOLDER, project_name, "output")
     path_old_dem = os.path.join(output_dir, project_name + "_dem_absolute.tif")
-    pattern = os.path.join(output_dir, f"{project_name}_dem_absolute_*.tif")
+    output_dir_corr = "/data/ATM/data_1/papers/paper_sfm/finished_dems_corrected2/"
+
+    pattern = os.path.join(output_dir_corr, f"{project_name}_dem_corrected.tif")
+    print(pattern)
     lst_dem_c = glob.glob(pattern)
     if len(lst_dem_c) == 0:
         print("No corrected dem found")
@@ -83,17 +88,18 @@ def update_quality_table(project_name, conn=None):
     print("  ", quality_slope_corrected)
 
     # load the project and get the chunk
-    project_dir = os.path.join(PATH_PROJECTS_FOLDER, project_name)
-    project_psx_path = os.path.join(project_dir, f"{project_name}.psx")
+    if update_project:
+        project_dir = os.path.join(PATH_PROJECTS_FOLDER, project_name)
+        project_psx_path = os.path.join(project_dir, f"{project_name}.psx")
 
-    doc = Metashape.Document(read_only=True)  # noqa
-    doc.open(project_psx_path, ignore_lock=True)
-    chunk = doc.chunks[0]
+        doc = Metashape.Document(read_only=True)  # noqa
+        doc.open(project_psx_path, ignore_lock=True)
+        chunk = doc.chunks[0]
 
-    # get nr and quality of gcps
-    project_dict = gpc.get_project_quality(chunk)
-    print("  Project Quality")
-    print("  ", project_dict)
+        # get nr and quality of gcps
+        project_dict = gpc.get_project_quality(chunk)
+        print("  Project Quality")
+        print("  ", project_dict)
 
     # Mapping of quality keys to SQL columns per quality type
     quality_prefix_map = {
@@ -117,11 +123,12 @@ def update_quality_table(project_name, conn=None):
         "correlation": "corr"
     }
 
-    sql_string = f"UPDATE sfm_projects2 SET project_name='{project_name}', "
+    sql_string = f"UPDATE sfm_projects3 SET project_name='{project_name}', "
 
-    for key in project_dict.keys():
-        value = project_dict[key]
-        sql_string += f"{key}={value}, "
+    if update_project:
+        for key in project_dict.keys():
+            value = project_dict[key]
+            sql_string += f"{key}={value}, "
 
     for prefix, quality in quality_prefix_map.items():
         for key, column_suffix in key_map.items():
@@ -160,10 +167,12 @@ def get_all_finished():
 if __name__ == "__main__":
     finished_projects = get_all_finished()
 
-    for idx, row in finished_projects.iterrows():
+    from tqdm import tqdm
+
+    for idx, row in tqdm(finished_projects.iterrows(), total=len(finished_projects)):
         project_name = row['project']
 
-        if project_name != 'getman_ice_piedmont':
+        if project_name != "northeast_glacier":
             continue
 
         update_quality_table(project_name, conn=conn)

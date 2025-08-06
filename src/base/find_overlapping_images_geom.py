@@ -55,7 +55,6 @@ def find_overlapping_images_geom(
     # Initialize the dictionary with all image_ids as keys and empty lists as values
     overlap_dict = {image_id: [] for image_id in image_ids}
 
-
     # Iterate through each polygon and compare it with the subsequent polygons only
     for i, poly1 in enumerate(footprints_list):
 

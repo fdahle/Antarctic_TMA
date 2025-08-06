@@ -5,6 +5,8 @@ import src.base.connect_to_database as ctd
 
 PATH_PROJECTS_FOLDER = "/data/ATM/data_1/sfm/agi_projects"
 
+uncorr_projects = [
+]
 
 def get_all_finished():
 
@@ -34,16 +36,35 @@ def get_data_from_table(project_name, conn=None):
     if conn is None:
         conn = ctd.establish_connection()
 
-    sql_string = (f"SELECT nr_images, st_area(area) / 1000000 as area, "
-                  f"nr_markers, marker_errors_px, marker_errors_m, "
-                  f"c_all_diff_abs_median, c_mask_diff_abs_median, c_slope_diff_abs_median, "
-                  f"c_all_rmse, c_mask_rmse, c_slope_rmse, "
-                  f"c_mask_mad, c_all_mad, c_slope_mad "
-                  f"FROM sfm_projects2 WHERE project_name='{project_name}' "
+    if project_name in uncorr_projects:
+        print("USE UNCORRECTED DEMS FOR", project_name)
+        sql_string = (f"SELECT nr_images, st_area(area) / 1000000 as area, "
+                      f"marker_errors_px, marker_errors_m, "
+                      f"all_diff_abs_median, mask_diff_abs_median, slope_diff_abs_median, "
+                      f"all_rmse, mask_rmse, slope_rmse, "
+                      f"mask_mad, all_mad, slope_mad "
+                      f"FROM sfm_projects2 WHERE project_name='{project_name}' "
+                      f"AND status='finished' "
+                      f"ORDER BY date_time DESC LIMIT 1"
+                     )
+    else:
+        sql_string = (f"SELECT nr_images, st_area(area) / 1000000 as area, "
+                  f"marker_errors_px, marker_errors_m, "
+                  f"c_all_diff_abs_median, c_mask_diff_abs_median, "
+                  f"c_all_rmse, c_mask_rmse, "
+                  f"c_mask_mad, c_all_mad "
+                  f"FROM sfm_projects3 WHERE project_name='{project_name}' "
                   f"AND status='finished' "
                   f"ORDER BY date_time DESC LIMIT 1"
                  )
     sql_data = ctd.execute_sql(sql_string, conn)
+
+    # set column names
+    sql_data.columns = [
+        "nr_images", "area", "marker_errors_px", "marker_errors_m",
+        "c_all_diff_abs_median", "c_mask_diff_abs_median",
+        "c_all_rmse", "c_mask_rmse",
+        "c_mask_mad", "c_all_mad"]
 
     if sql_data.shape[0] == 0:
         print("No data found for project", project_name)
@@ -76,18 +97,14 @@ if __name__ == "__main__":
         "project",
         "area",
         "nr_images",
-        "nr_markers",
         "marker_errors_px",
         "marker_errors_m",
         "c_all_diff_abs_median",
         "c_mask_diff_abs_median",
-        "c_slope_diff_abs_median",
         "c_all_rmse",
         "c_mask_rmse",
-        "c_slope_rmse",
         "c_all_mad",
         "c_mask_mad",
-        "c_slope_mad",
     ]
 
     # Reorder DataFrame columns
@@ -95,7 +112,6 @@ if __name__ == "__main__":
 
     # Cast num_images to int
     full_df["nr_images"] = full_df["nr_images"].astype(int)
-    full_df["nr_markers"] = full_df["nr_markers"].astype(int)
 
     # convert nan values to 0
     full_df.fillna(0, inplace=True)
@@ -107,13 +123,10 @@ if __name__ == "__main__":
         "marker_errors_m",
         "c_all_diff_abs_median",
         "c_mask_diff_abs_median",
-        "c_slope_diff_abs_median",
         "c_all_rmse",
         "c_mask_rmse",
-        "c_slope_rmse",
         "c_all_mad",
         "c_mask_mad",
-        "c_slope_mad",
     ]
     for col in float_cols:
         if col == "marker_errors_px":

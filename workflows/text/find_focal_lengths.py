@@ -6,7 +6,7 @@ import src.base.connect_to_database as ctd
 import src.text.find_focal_length as ffl
 
 # variables
-overwrite = False
+overwrite = True
 
 
 def find_focal_lengths():
@@ -42,14 +42,19 @@ def find_focal_lengths():
         text = row['text_content']
 
         # extract the focal length from the text
-        focal_length = ffl.find_focal_length(text)
+        # focal_length = ffl.find_focal_length(text)
+        print(text)
+        focal_length = ffl.find_focal_length(text, method="text")
 
         if focal_length is None:
             continue
 
         # update the database
+        #sql_string = f"UPDATE images_extracted SET " \
+        #             f"focal_length='{focal_length}', focal_length_estimated=FALSE" \
+        #             f" WHERE image_id='{image_id}'"
         sql_string = f"UPDATE images_extracted SET " \
-                     f"focal_length='{focal_length}', focal_length_estimated=FALSE" \
+                     f"focal_length_text='{focal_length}'" \
                      f" WHERE image_id='{image_id}'"
 
         ctd.execute_sql(sql_string, conn)

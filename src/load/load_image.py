@@ -14,6 +14,7 @@ from typing import Union
 # constant for default image path
 DEFAULT_IMAGE_FLD = "/data/ATM/data_1/aerial/TMA/downloaded"
 BACKUP_IMAGE_FLD = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
+BACKUP2_IMAGE_FLD = "/mnt/Webdrive/staff-umbrella/vrlabarchive01/felix"
 
 def load_image(image_id: str | bytes,
                image_path: str | None = None, image_type: str = "tif",

@@ -521,8 +521,8 @@ def _lines2height(lines_tip: list[tuple[int, int, int, int]],
 
     height = 10000 + reading_short + reading_long
 
-    # it is likely that a height below 18000 is above 20000
-    if height < 18000:
+    # it is likely that a height below 8000 is above 10000
+    if height < 8000:
         height += 10000
 
     if debug_show_pointer:

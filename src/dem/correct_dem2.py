@@ -4,14 +4,11 @@ import xdem
 
 # Local imports
 import src.base.resize_image as ri
-import src.display.display_images as di
 
-debug_show = False
 
 def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                 historic_ortho=None, modern_ortho=None,
                 mask=None, adapt_mask=False,
-                fallback=True,
                 max_slope=None, no_data_val=-9999, print_values=True):
 
     # check if the DEMs have the same shape
@@ -45,14 +42,14 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                                      crs=3031, nodata=np.nan)
 
     # calculate the difference between the two DEMs
-    #print("Calc diff before")
+    print("Calc diff before")
     diff_before = modern_dem - historic_dem
 
-    if debug_show:
-        di.display_images([historic_dem.data, modern_dem.data, diff_before.data])
+    import src.display.display_images as di
+    #di.display_images([historic_dem.data, modern_dem.data, diff_before.data])
 
     # calculate the slope of the modern DEM
-    #print("Calculating slope")
+    print("Calculating slope")
     slope = xdem.terrain.slope(modern_dem)
 
     # init the deramp & Nuth Kaab classes
@@ -71,7 +68,6 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
 
             # create a mask for the stable ground
             if mask is not None:
-
                 inlier_mask = mask & slope_mask
             else:
                 inlier_mask = slope_mask
@@ -88,61 +84,52 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
 
                 # get median height
                 threshold_height = np.nanmedian(valid_heights)
-                #print("Threshold height", threshold_height)
+                print("Threshold height", threshold_height)
 
                 # update mask to only keep values above threshold
                 inlier_mask &= (modern_data > threshold_height)
 
-            if np.sum(inlier_mask) < 10:
-                print("'inlier_mask' has too few inliers.", np.sum(inlier_mask), np.sum(mask), np.sum(slope_mask))
-                max_slope = max_slope + 5
-                if max_slope == 90:
-                    raise ValueError("Max slope reached 90. Coreg failed.")
-                continue
+            #import src.display.display_images as di
+            #di.display_images([historic_dem.data, modern_dem.data],
+            #                  overlays=[inlier_mask, inlier_mask])
 
-            if debug_show:
-                di.display_images([historic_dem.data, modern_dem.data],
-                                 overlays=[inlier_mask, inlier_mask])
+            # find coords of your inliers
+            ys, xs = np.where(inlier_mask)
+            minx, maxx = xs.min(), xs.max()
+            miny, maxy = ys.min(), ys.max()
 
-            #print("Fit deramp")
-            #print(modern_dem.shape, historic_dem.shape, inlier_mask.shape)
-            #print(np.sum(inlier_mask))
-            deramp.fit(modern_dem, historic_dem, inlier_mask, verbose=True)
+            # crop arrays & transforms
+            h_crop = historic_dem.data[miny:maxy, minx:maxx]
+            m_crop = modern_dem.data[miny:maxy, minx:maxx]
+            t_crop = hist_transform * Affine.translation(minx, miny)
 
-            #print("Apply deramp")
-            aligned_dem = deramp.apply(historic_dem)
+            # wrap into xdem.DEM
+            h_dem_crop = xdem.DEM.from_array(h_crop, t_crop, crs=historic_dem.crs)
+            m_dem_crop = xdem.DEM.from_array(m_crop, modern_dem.transform, crs=modern_dem.crs)
+            h_dem_crop.nodata = historic_dem.nodata
+            m_dem_crop.nodata = modern_dem.nodata
 
-            # fit the co-registration
-            #print("Fit Nuth Kääb")
-            nuth_kaab.fit(modern_dem, aligned_dem, inlier_mask, verbose=True)
+            deramp.fit(m_dem_crop, h_dem_crop, np.ones_like(h_crop, bool))
+            aligned_crop = deramp.apply(h_dem_crop)
+            nuth_kaab.fit(m_dem_crop, aligned_crop, np.ones_like(h_crop, bool))
 
             # apply the co-registration
-            #print("Apply Nuth Kääb")
+            print("Apply Nuth Kääb")
+            aligned_dem = deramp.apply(historic_dem)
             aligned_dem = nuth_kaab.apply(aligned_dem)
             aligned_matrix = nuth_kaab.to_matrix()  # noqa
 
             # get the difference after the co-registration
-            #print("Calc diff")
+            print("Calc diff")
             diff_after = modern_dem - aligned_dem
 
-            if np.abs(np.nanmin(diff_after.data)) > 10000 or \
-                    np.abs(np.nanmax(diff_after.data)) > 10000:
-                print("USE MEDIAN INSTEAD", np.nanmin(diff_after.data), np.nanmax(diff_after.data))
-                median_offset = np.nanmedian(modern_dem.data[inlier_mask] - historic_dem.data[inlier_mask])
-                print("Median offset", median_offset)
-                aligned_dem = historic_dem + median_offset
-                diff_after = modern_dem - aligned_dem  # recalculate for printing
-                aligned_matrix = np.eye(4)
-                break
-            else:
-                break
+            break
 
         except ValueError as e:
 
-            if "Less than 10 different cells exist" in str(e) or \
-                    "'inlier_mask' had no inliers." in str(e):
+            if "Less than 10 different cells exist" in str(e):
                 max_slope = max_slope + 5
-                #print(f"Coreg failed. Max slope increased to {max_slope}")
+                print(f"Coreg failed. Max slope increased to {max_slope}")
             else:
                 raise e
             if max_slope == 90:
@@ -204,8 +191,8 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
         hist_transform.f + aligned_matrix[1, 3],
     )
 
-    #print(hist_transform)
-    #print(aligned_transform)
+    print(hist_transform)
+    print(aligned_transform)
 
     if print_values:
         avg_before = np.ma.mean(diff_before.data)
@@ -246,11 +233,10 @@ def correct_dem(historic_dem, modern_dem, hist_transform, modern_transform,
                   f"median = {inliers_med_after:.2f}, "
                   f"NMAD = {inliers_nmad_after:.2f}")
 
-        output_arr = aligned_dem.data
-        if debug_show:
-            output_arr[input_historic_dem == no_data_val] = no_data_val
-            output_arr[np.isnan(output_arr)] = no_data_val
-            di.display_images([historic_dem.data, modern_dem.data, output_arr])
+    output_arr = aligned_dem.data
+    output_arr[input_historic_dem == no_data_val] = no_data_val
+    output_arr[np.isnan(output_arr)] = no_data_val
+    #di.display_images([historic_dem.data, modern_dem.data, output_arr])
 
     return output_arr, aligned_transform, max_slope
 
@@ -308,27 +294,21 @@ if __name__ == "__main__":
     ]
     for project_name in glaciers:
 
-        if project_name != "northeast_glacier":
-            continue
-
-        print("START COREG FOR", project_name)
-
         import os
         project_folder = f"/data/ATM/data_1/sfm/agi_projects/{project_name}"
         output_fld = os.path.join(project_folder, "output")
         path_hist_dem = os.path.join(output_fld, project_name + "_dem_absolute.tif")
-        path_hist_ortho = os.path.join(output_fld, project_name + "_ortho_absolute.tif")
 
         import src.load.load_image as li
         dem_abs, transform_abs = li.load_image(path_hist_dem,
                                                return_transform=True)
-        ortho_abs = li.load_image(path_hist_ortho)
         old_shape = dem_abs.shape
 
         import src.base.calc_bounds as cb
         bounds = cb.calc_bounds(transform_abs, dem_abs.shape)
 
         import src.load.load_rema as lr
+        print(bounds)
         dem_modern, transform_rema = lr.load_rema(bounds,
                                                   zoom_level=10,
                                                   auto_download=True,
@@ -337,10 +317,6 @@ if __name__ == "__main__":
         # resize the old dem to the modern dem shape
         import src.base.resize_image as rei
         dem_abs_resized = rei.resize_image(dem_abs, dem_modern.shape)
-        ortho_abs_resized = rei.resize_image(ortho_abs, dem_modern.shape)
-        dem_abs_resized[ortho_abs_resized == 255] = -9999
-
-        dem_modern[dem_modern == -9999] = np.nan
 
         # update the transform as well
         from affine import Affine
@@ -354,35 +330,21 @@ if __name__ == "__main__":
             transform_abs.f  # Original y-offset
         )
 
-        #import src.load.load_rock_mask as lrm
-        #mask_resolution = 10
-        #rock_mask = lrm.load_rock_mask(bounds, mask_resolution, mask_buffer=0)
-        #print(dem_abs_resized.shape, dem_modern.shape)
-        #print(transform_abs, transform_rema)
-        rock_mask = np.zeros_like(dem_abs_resized)
-        rock_mask[ortho_abs_resized < 100] = 1
-        rock_mask[dem_abs_resized < 150] = 0  # remove ocean areas
-        # convert rockmask to bool
-        rock_mask = rock_mask.astype(bool)
-        rock_mask[ortho_abs_resized == 255] = 0  # remove no data values in ortho abs
-        rock_mask[dem_abs_resized == -9999] = 0  # remove no data values in dem abs
-
-        # buffer the mask with 5 pixels
-        from scipy.ndimage import binary_dilation
-        rock_mask = binary_dilation(rock_mask, iterations=5).astype(np.uint8)
+        import src.load.load_rock_mask as lrm
+        mask_resolution = 10
+        rock_mask = lrm.load_rock_mask(bounds, mask_resolution, mask_buffer=10)
+        print(dem_abs_resized.shape, dem_modern.shape)
+        print(transform_abs, transform_rema)
 
         try:
             dem_corrected, transform_corrected, new_max_slope = correct_dem(dem_abs_resized, dem_modern,
                                            transform_abs_resized, transform_rema,
                                            mask=rock_mask,
-                                           adapt_mask=False,
-                                           max_slope=40)
-        except Exception as e:
-            print(e)
-            print("!!!!")
-            print("COREG FAILED FOR", project_name)
-            print("!!!!")
-            continue
+                                           adapt_mask=True,
+                                           max_slope=20)
+        except:
+            print("CORRECTION FAILED FOR ", project_name)
+            input()
 
         # resize back to the original shape
         dem_corrected = rei.resize_image(dem_corrected, old_shape)
@@ -400,9 +362,6 @@ if __name__ == "__main__":
         # adapt output path
         output_fld = "/data/ATM/data_1/papers/paper_sfm/finished_dems_corrected2/"
         output_path_dem_corr = output_fld + project_name + "_dem_corrected.tif"
-
-        dem_corrected[dem_corrected < 0] = -9999
-        dem_abs_resized[ortho_abs_resized == 255] = -9999
 
         import src.export.export_tiff as eti
         eti.export_tiff(dem_corrected, output_path_dem_corr,

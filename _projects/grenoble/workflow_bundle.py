@@ -2,9 +2,13 @@ import os
 import numpy as np
 import src.sfm_agi2.snippets.create_bundler as cb
 
-tp_folder = "/data/ATM/grenoble_project/projects/iceland/intermediate/aerial_images/tie_points"
-img_folder = "/data/ATM/grenoble_project/projects/iceland/input/aerial_images/preprocessed_images/images"
-bundler_folder = "/data/ATM/grenoble_project/projects/iceland/intermediate/aerial_images/bundler"
+project = "casa_grande"
+img_type = "aerial_images"
+processing_type = "preprocessed"
+
+tp_folder = f"/data/ATM/grenoble_project/{project}/intermediate/{img_type}/tie_points"
+img_folder = f"/data/ATM/grenoble_project/{project}/input/{img_type}/{processing_type}_images/images"
+bundler_folder = f"/data/ATM/grenoble_project/{project}/intermediate/{img_type}/bundler"
 
 tp_dict = {}
 conf_dict = {}

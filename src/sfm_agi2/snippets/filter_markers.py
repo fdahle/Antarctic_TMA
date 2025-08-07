@@ -7,6 +7,7 @@ from src.sfm_agi2.SfMError import SfMError
 
 
 def filter_markers(chunk: Metashape.Chunk,
+                   marker_lbl: str = 'gcp',
                    min_markers: int = 3,
                    max_error_px: int = 1, max_error_m: int = 25) -> None:
     """
@@ -38,7 +39,10 @@ def filter_markers(chunk: Metashape.Chunk,
         marker_errors_m = {}
 
         # get number of enabled markers
-        nr_markers = len([m for m in chunk.markers if m.enabled])
+        enabled_markers = [m for m in chunk.markers if m.enabled and marker_lbl in m.label]
+        nr_markers = len(enabled_markers)
+
+        print(f"Number of enabled markers: {nr_markers}")
 
         # stop the loop
         if nr_markers <= min_markers:
@@ -47,10 +51,7 @@ def filter_markers(chunk: Metashape.Chunk,
             break
 
         # iterate all markers
-        for marker in chunk.markers:
-
-            if 'gcp' not in marker.label:
-                continue
+        for marker in enabled_markers:
 
             if marker.position is None:
                 continue
@@ -65,6 +66,9 @@ def filter_markers(chunk: Metashape.Chunk,
             # save errors to dict
             marker_errors_px[marker.label] = marker_error_px
             marker_errors_m[marker.label] = marker_error_m
+
+        if len(marker_errors_px) == 0:
+            raise SfMError("No markers found in chunk with label '{}'".format(marker_lbl))
 
         # get the marker with the highest error in px
         max_error_px_marker_name = max(marker_errors_px, key=marker_errors_px.get)

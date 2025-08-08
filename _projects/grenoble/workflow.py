@@ -2,6 +2,7 @@
 site = "iceland"  # can be either iceland or casa_grande
 dataset = "aerial"  # can be aerial, pc or mc
 image_type = "preprocessed"  # can be preprocessed or raw
+use_extrinsics = True
 use_calib_info = True
 use_gcps = True
 use_coreg = False
@@ -23,23 +24,44 @@ elif site == "iceland":
     epsg_code = 32627  # UTM zone 27N
 
 # create project_name based on settings
-project_name = f"project"
+project_name = f"fdahle"
+
+if site == "casa_grande":
+    project_name += "_CG"
+elif site == "iceland":
+    project_name += "_Il"
+
+if dataset == "aerial":
+    project_name += "_AI"
+elif dataset == "pc":
+    project_name += "_PC"
+elif dataset == "mc":
+    project_name += "_MC"
+
+if image_type == "preprocessed":
+    project_name += "_PP"
+elif image_type == "raw":
+    project_name += "_RA"
+
 if use_calib_info:
-    project_name += "_CY_1"
+    project_name += "_CY"
 else:
-    project_name += "_CY_0"
+    project_name += "_CN"
+
 if use_gcps:
-    project_name += "_GCP_1"
+    project_name += "_GY"
 else:
-    project_name += "_GCP_0"
+    project_name += "_GN"
+
 if use_coreg:
-    project_name += "_COREG_1"
+    project_name += "_PY"
 else:
-    project_name += "_COREG_0"
+    project_name += "_PN"
+
 if use_multi_temp_ba:
-    project_name += "_MTBA_1"
+    project_name += "_MY"
 else:
-    project_name += "_MTBA_0"
+    project_name += "_MN"
 
 project_psx_path = intermediate_fld + "/" + project_name + ".psx"
 project_files_path = intermediate_fld + "/" + project_name + ".files"
@@ -115,6 +137,7 @@ import src.base.rotate_points as rp
 
 # define saving folder for tie points
 tp_folder = os.path.join(intermediate_fld, "tie_points")
+os.makedirs(tp_folder, exist_ok=True)
 
 # find the overlapping images
 overlapping_images = foig.find_overlapping_images_geom(lst_image_names, polygons,
@@ -196,7 +219,8 @@ import warnings
 
 # define path to the bundler folder
 bundler_folder = os.path.join(intermediate_fld, "bundler")
-bundler_pth = os.path.join(bundler_folder, f"bundler_{min_overlap*10}.out")
+os.makedirs(bundler_folder, exist_ok=True)
+bundler_pth = os.path.join(bundler_folder, f"bundler_{int(min_overlap*10)}.out")
 
 if tps_updated and os.path.exists(bundler_pth):
     os.remove(bundler_pth)
@@ -255,6 +279,8 @@ else:
         conf_dict[img_pair] = conf
 
     cb.create_bundler(img_folder, bundler_folder, tp_dict, conf_dict,)
+    # rename the bundler file to include the overlap
+    os.rename(os.path.join(bundler_folder, "bundler.out"), bundler_pth)
 
 #%% Create the project
 import Metashape
@@ -268,6 +294,10 @@ chunk = doc.addChunk()
 # add the images to the chunk
 chunk.addPhotos(lst_image_paths, strip_extensions=True)
 
+# add the extrinsics to the cameras
+if use_extrinsics:
+
+
 # create a metashape mask object
 if mask_path is not None:
     mask255 = mask.astype(np.uint8)*255
@@ -278,7 +308,7 @@ if mask_path is not None:
 
     # set mask for every image
     for camera in chunk.cameras:
-        camera_mask = mask_obj
+        camera.mask = mask_obj
 
 #%% add existing internal
 if use_calib_info:
@@ -300,6 +330,9 @@ if use_calib_info:
     else:
         fiducials = None
 
+    # convert mm to pixel
+    mm2px = lambda v: v / intrinsics['pixel_pitch']  # convert mm to pixel
+
     # iterate all cameras in the chunk
     for camera in chunk.cameras:
 
@@ -313,41 +346,54 @@ if use_calib_info:
         camera.sensor.height = camera.photo.image().height
         camera.sensor.width = camera.photo.image().width
 
-        camera.sensor.calibration.cx = intrinsics['principal_point_x_mm']
-        camera.sensor.calibration.cy = intrinsics['principal_point_y_mm']
+        camera.sensor.calibration.f = mm2px(camera.sensor.focal_length)
+        camera.sensor.calibration.cx = mm2px(intrinsics['principal_point_x_mm'])
+        camera.sensor.calibration.cy = mm2px(intrinsics['principal_point_y_mm'])
 
-        # if applicable, set the fiducials
-        if fiducials is not None:
+    # if applicable, set the fiducials
+    if fiducials is not None:
 
-            # TODO : PRINCIPAL POINT
+        # get a sensor from any camera
+        sensor = chunk.sensors[0]
 
-            # iterate over all positions
-            for pos in ["corner_top_left", "corner_top_right", "corner_bottom_left", "corner_bottom_right"]:
+        fid_map  = { }
+        # iterate over all positions
+        for pos in ["corner_top_left", "corner_top_right", "corner_bottom_left", "corner_bottom_right"]:
 
-                f = chunk.addMarker()
-                f.type= Metashape.Marker.Type.Fiducial
-                f.sensor = camera.sensor
-                f.label = camera.label + "_" + pos
+            f = chunk.addMarker()
+            f.type= Metashape.Marker.Type.Fiducial
+            f.sensor = sensor
+            f.label = f"fid_{pos}"
 
-                # Set fiducial coordinates in mm (relative to film frame center)
-                f.reference.location = Metashape.Vector([
-                    intrinsics[f"{pos}_x_mm"],
-                    -intrinsics[f"{pos}_y_mm"],
-                    1  # third value is usually 1mm, standard for fiducials
-                ])
+            # Set fiducial coordinates in mm (relative to film frame center)
+            f.reference.location = Metashape.Vector([
+                intrinsics[f"{pos}_x_mm"],
+                -intrinsics[f"{pos}_y_mm"],
+                1  # third value is usually 1mm, standard for fiducials
+            ])
+            fid_map[pos] = f
 
+        for camera in chunk.cameras:
+
+            row = fiducials.loc[fiducials['image_id'] == camera.label + ".tif"]
+
+            if row.empty:
+                print(f"Warning: No fiducial data found for camera {camera.label}. Skipping.")
+                continue
+
+            for pos, f in fid_map.items():
                 # Set fiducial projection in pixel coordinates
                 f.projections[camera] = Metashape.Marker.Projection(
                     Metashape.Vector([
-                        fiducials.loc[fiducials['image_id'] == camera.label + ".tif", f"{pos}_x"].values[0],  # x_pix
-                        fiducials.loc[fiducials['image_id'] == camera.label + ".tif", f"{pos}_y"].values[0]   # y_pix
+                        row[f"{pos}_x"].values[0],  # x_pix
+                        row[f"{pos}_y"].values[0]   # y_pix
                     ]),
                     True  # 'True' indicates the projection is enabled
                 )
     doc.save()
 
 #%% load the bundler file
-bundler_pth = os.path.join(bundler_folder, f"bundler_{min_overlap*10}.out")
+bundler_pth = os.path.join(bundler_folder, f"bundler_{int(min_overlap*10)}.out")
 chunk.importCameras(bundler_pth, format=Metashape.CamerasFormatBundler)
 doc.save()
 
@@ -398,7 +444,8 @@ chunk.buildPointCloud(source_data=Metashape.DepthMapsData, point_colors=True, po
 doc.save()
 chunk.buildDem()
 doc.save()
-chunk.buildOrthomosaic(surface_data=Metashape.DataSource.ModelData, blending_mode=Metashape.BlendingMode.MosaicBlending)
+chunk.buildOrthomosaic(surface_data=Metashape.DataSource.ElevationData,
+                       blending_mode=Metashape.BlendingMode.MosaicBlending)
 doc.save()
 
 #%% export the products

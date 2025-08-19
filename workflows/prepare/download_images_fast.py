@@ -12,6 +12,7 @@ import src.other.misc.compress_tif_file as ctf
 # Constants
 PATH_DOWNLOAD_FLD = "/media/fdahle/d3f2d1f5-52c3-4464-9142-3ad7ab1ec06d/data_1/aerial/TMA/downloaded"
 PATH_FINAL_FLD = "/mnt/Webdrive/staff-umbrella/vrlabarchive01/felix"
+PATH_TEMP_FLD = "/data/ATM/temp"
 USGS_URL = "http://data.pgc.umn.edu/aerial/usgs/tma/photos/high"
 MAX_WORKERS = 8  # Adjust for safety against server bans
 
@@ -75,19 +76,29 @@ def download_image_from_usgs(image_id: str,
         print(f"Download failed for {image_id}: {e}")
         return False
 
+import glob
+def list_existing_tifs_recursive(*roots) -> set[str]:
+    """Return basenames (no .tif) of all .tif files under given roots, recursively."""
+    names = set()
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for p in glob.iglob(os.path.join(root, "**", "*.tif"), recursive=True):
+            names.add(os.path.splitext(os.path.basename(p))[0])
+    return names
+
 
 if __name__ == "__main__":
     # Load shapefile and construct image IDs
     import src.load.load_shape_data as lsd
     pth_photos = "/data/ATM/data_1/shapefiles/TMA_Photocenters/TMA_pts_20100927.shp"
     df = lsd.load_shape_data(pth_photos)
+    print("Shapefile loaded with", len(df), "entries.")
 
-    # List existing .tif files in both folders to avoid redundant downloads
-    existing_files = set(
-        f[:-4] for f in os.listdir(PATH_DOWNLOAD_FLD) if f.endswith(".tif")
-    ) | set(
-        f[:-4] for f in os.listdir(PATH_FINAL_FLD) if f.endswith(".tif")
-    )
+    existing = list_existing_tifs_recursive(PATH_DOWNLOAD_FLD,
+                                            PATH_TEMP_FLD, PATH_FINAL_FLD)
+
+    print(len(existing), "existing images found.")
 
     mapping = {'L': '31L', 'V': '32V', 'R': '33R'}
     image_ids = [
@@ -97,7 +108,7 @@ if __name__ == "__main__":
     ]
 
     # Filter out already downloaded files
-    image_ids = [img_id for img_id in image_ids if img_id not in existing_files]
+    image_ids = [img_id for img_id in image_ids if img_id not in existing]
 
     import random
     random.shuffle(image_ids)

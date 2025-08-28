@@ -36,6 +36,11 @@ def download_image_from_usgs(image_id: str,
 
     url = f"{url_image}/{tma}/{tma}{direction}/{tma}{direction}{roll}.tif.gz"
 
+    # sometimes images are stored with 00 instead of 31, 32, 33
+    direction = direction.replace('31', '00').replace('32', '00').replace('33', '00')
+    fallback_url = f"{url_image}/{tma}/{tma}{direction}/{tma}{direction}{roll}.tif.gz"
+    candidate_urls = [url, fallback_url]
+
     final_path = os.path.join(final_folder, f"{image_id}.tif")
     if not overwrite and os.path.isfile(final_path):
         if verbose:
@@ -50,28 +55,39 @@ def download_image_from_usgs(image_id: str,
             gz_path = os.path.join(tmpdir, f"{image_id}.tif.gz")
             img_path = os.path.join(tmpdir, f"{image_id}.tif")
 
-            with session.get(url, stream=True, timeout=60) as r:
-                r.raise_for_status()
-                with open(gz_path, 'wb') as f:
-                    shutil.copyfileobj(r.raw, f)
+            downloaded = False
+            for url in candidate_urls:
+                with session.get(url, stream=True, timeout=60) as r:
+                    if r.status_code == 404:
+                        continue
 
-            # Decompress .gz
-            with gzip.open(gz_path, 'rb') as f_in, open(img_path, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
+                    r.raise_for_status()
+                    with open(gz_path, 'wb') as f:
+                        shutil.copyfileobj(r.raw, f)
+                    downloaded = True
+                    break
 
-            # Compress .tif
-            status = ctf.compress_tif_file(img_path, compression_method='lzw', quality=100)
-            if not status:
-                print(f"Compression failed for {image_id}.")
+            if downloaded:
+                # Decompress .gz
+                with gzip.open(gz_path, 'rb') as f_in, open(img_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+
+                # Compress .tif
+                status = ctf.compress_tif_file(img_path, compression_method='lzw', quality=100)
+                if not status:
+                    print(f"Compression failed for {image_id}.")
+                    return False
+
+                # Move to final destination
+                shutil.move(img_path, final_path)
+
+                if verbose:
+                    print(f"{image_id} downloaded and moved successfully.")
+                return True
+            else:
+                if verbose:
+                    print(f"Image {image_id} not found at any URL.")
                 return False
-
-            # Move to final destination
-            shutil.move(img_path, final_path)
-
-        if verbose:
-            print(f"{image_id} downloaded and moved successfully.")
-        return True
-
     except Exception as e:
         print(f"Download failed for {image_id}: {e}")
         return False
@@ -113,11 +129,14 @@ if __name__ == "__main__":
     import random
     random.shuffle(image_ids)
 
+    def download_worker(image_id):
+        session = requests.Session()
+        return download_image_from_usgs(image_id, session, overwrite=False, verbose=True)
+
     session = requests.Session()
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [
-            executor.submit(download_image_from_usgs, image_id, session)
-            for image_id in image_ids
-        ]
-        for _ in tqdm(as_completed(futures), total=len(futures)):
+        futures = [executor.submit(download_worker, image_id) for image_id in image_ids]
+
+        # Process results with progress bar
+        for _ in tqdm(as_completed(futures), total=len(futures), desc="Downloading"):
             pass

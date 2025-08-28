@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 
 # experiment parameters
-site = "casa_grande"  # can be either iceland or casa_grande
-dataset = "pc"  # can be aerial, pc or mc
+site = "iceland"  # can be either iceland or casa_grande
+dataset = "aerial"  # can be aerial, pc or mc
 image_type = "preprocessed"  # can be preprocessed or raw
 absolute_bounds = "auto"  # with auto defined by the input shape file
 absolute_bounds_epsg = 4326
@@ -17,10 +17,10 @@ use_multi_temp_ba = False
 overwrite = True
 resume = False
 steps = {
-    "load_data": False,
-    "match_images": False,
-    "add_data": False,
-    "update_cameras": False,
+    "load_data": True,
+    "match_images": True,
+    "add_data": True,
+    "update_cameras": True,
     "create_products": True,
     "export_products": True
 }
@@ -28,7 +28,6 @@ steps = {
 # camera parameters
 use_film_camera = False
 fixed_calibration = False
-sensor2zero = False  # set sensor height and width to 0, otherwise use the image size
 
 # matching parameters
 min_overlap = 0.2  # minimum overlap to consider images for overlapping
@@ -42,6 +41,9 @@ resolution = 2  # resolution of the output products in meters
 # set path for the intermediate and final results
 intermediate_fld = f"/data/ATM/grenoble_project/{site}/intermediate/{dataset}_{image_type}"
 output_fld = f"/data/ATM/grenoble_project/{site}/output/{dataset}_{image_type}"
+
+if overwrite and resume:
+    raise ValueError("Cannot set both overwrite and resume to True. Please set one of them to False.")
 
 # set epsg code based on the site
 if site == "casa_grande":
@@ -65,11 +67,12 @@ transformer = pyproj.Transformer.from_crs("EPSG:4326", f"EPSG:{epsg_code}", alwa
 
 #%% create project_name based on settings
 project_name = f"fdahle"
+suffix = None
 
 if site == "casa_grande":
     project_name += "_CG"
 elif site == "iceland":
-    project_name += "_Il"
+    project_name += "_IL"
 else:
     raise ValueError(f"Unknown site: {site}. Please set a valid site (casa_grande or iceland).")
 
@@ -108,6 +111,9 @@ if use_multi_temp_ba:
     project_name += "_MY"
 else:
     project_name += "_MN"
+
+if suffix is not None:
+    project_name += f"_{suffix}"
 
 #%% create the project paths
 project_psx_path = intermediate_fld + "/" + project_name + ".psx"
@@ -489,7 +495,7 @@ if steps["add_data"]:
                 if "pixel_pitch" in intrinsics:
                     camera.sensor.pixel_size = (intrinsics['pixel_pitch'], intrinsics['pixel_pitch'])
 
-                if sensor2zero:
+                if use_film_camera:
                     camera.sensor.height = 0
                     camera.sensor.width = 0
                 else:
@@ -620,19 +626,18 @@ if steps["create_products"]:
     # create region based on the absolute bounds
     region = Metashape.BBox(min=(Metashape.Vector(absolute_bounds[:2])), max=(Metashape.Vector(absolute_bounds[2:])))
 
-    #chunk.buildDepthMaps(filter_mode=Metashape.FilterMode.AggressiveFiltering)
-    #doc.save()
-    #chunk.buildModel(source_data=Metashape.DepthMapsData, surface_type=Metashape.SurfaceType.Arbitrary,
-    #                 face_count=Metashape.FaceCount.HighFaceCount, interpolation=Metashape.EnabledInterpolation)
-    #doc.save()
-    #chunk.buildPointCloud(source_data=Metashape.DepthMapsData, point_colors=True, point_confidence=True)
-    #doc.save()
+    chunk.buildDepthMaps(filter_mode=Metashape.FilterMode.AggressiveFiltering)
+    doc.save()
+    chunk.buildModel(source_data=Metashape.DepthMapsData, surface_type=Metashape.SurfaceType.Arbitrary,
+                     face_count=Metashape.FaceCount.HighFaceCount, interpolation=Metashape.EnabledInterpolation)
+    doc.save()
+    chunk.buildPointCloud(source_data=Metashape.DepthMapsData, point_colors=True, point_confidence=True)
+    doc.save()
     print(f"Chunk crs: {chunk.crs}")
     print(f"Chunk region size: {chunk.region.size}")
     print(f"Chunk region center: {chunk.region.center}")
     print(f"Chunk region rotation: {chunk.region.rot}")
     print(f"Chunk transform: {chunk.transform.matrix}")
-    print("Pointcloud Meta", chunk.point_cloud.meta)
     chunk.buildDem(resolution=resolution, projection=proj_utm, region=region)
     doc.save()
     chunk.buildOrthomosaic(surface_data=Metashape.DataSource.ElevationData,
@@ -660,7 +665,6 @@ if steps["export_products"]:
                        format=Metashape.RasterFormat.RasterFormatTiles,
                        image_format=Metashape.ImageFormat.ImageFormatTIFF,
                        projection=proj_wgs84, nodata_value=-32767,
-                       resolution=resolution,
                        save_alpha=False, image_compression=compression)
 
     # export Ortho
@@ -668,7 +672,6 @@ if steps["export_products"]:
                        format=Metashape.RasterFormat.RasterFormatTiles,
                        image_format=Metashape.ImageFormat.ImageFormatTIFF,
                        projection=proj_wgs84, nodata_value=-32767,
-                       resolution=resolution,
                        save_alpha=False, image_compression=compression)
 
     # export dense point cloud
@@ -685,6 +688,8 @@ if steps["export_products"]:
     intr_rows = []
     extr_rows = []
 
+    T = chunk.transform.matrix
+
     for camera in chunk.cameras:
 
         # get name of the image
@@ -699,11 +704,9 @@ if steps["export_products"]:
         intr_rows.append([img_name, focal_length, cx, cy, k1, k2, k3, p1, p2])
 
         # get extrinsics
-        x, y, z = camera.reference.location
-
+        x, y, z = chunk.crs.project(T.mulp(camera.center))
         # convert to lon/lat/alt
         lon, lat = transformer_back.transform(x, y)
-
         extr_rows.append([img_name, lon, lat, z])
 
     # build dataframes
@@ -712,5 +715,7 @@ if steps["export_products"]:
     extrinsics = pd.DataFrame(extr_rows, columns=['image_file_name', 'lon', 'lat', 'alt'])
 
     # export intrinsics and extrinsics
+    print("Export Intrinsics: path = ", intrinsics_path)
     intrinsics.to_csv(intrinsics_path, index=False)
+    print("Export Extrinsics: path = ", extrinsics_path)
     extrinsics.to_csv(extrinsics_path, index=False)

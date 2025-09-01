@@ -1675,7 +1675,7 @@ class AgiProject:
             self.chunk.buildPointCloud(**arguments)
             self.doc.save()
 
-        # export point cloud
+        # exint cloud
         arguments = self.agi_params["exportPointCloudAbsolute"]
         arguments['path'] = self.pth_pc_abs
         arguments['crs'] = Metashape.CoordinateSystem(f"EPSG::{self.project_params['epsg_code']}")  # noqa

@@ -9,7 +9,7 @@ from typing import Optional
 import src.display.display_images as di
 
 # Constants
-DETECTOR_PATH = "/data/ATM/data_1/machine_learning/dlib/subsets"
+DETECTOR_PATH = "/data/dlib/subsets"
 MODEL_NAME = "detector"
 FID_TYPE = 1
 CROP_FACTOR = 0.1
